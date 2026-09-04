@@ -1,0 +1,26 @@
+budgets:
+- 5000
+p_values:
+- 0.0
+- 0.3
+- 0.5
+- 0.7
+- 0.85
+- 0.95
+- 1.0
+seeds:
+- 0
+- 1
+- 2
+- 3
+- 4
+- 5
+- 6
+- 7
+- 8
+- 9
+agents_dir: results/agents
+out: results/offline_eval_v2_5000.csv
+n_episodes: 1000
+eval_start_seed: 777001
+eval_tiebreak_seed: 777002
