@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+build/
+dist/
+.eggs/
+
+# raw saved agent tensors -- regenerate with scripts/regenerate_agents.py
+# (see CONTRIBUTING.md, "what gets versioned")
+results/agents/**/*.npz
+
+# matplotlib / notebook scratch output
+notebooks/.ipynb_checkpoints/
+*.ipynb_checkpoints/
+scratch/
+*.scratch.png
+
+# editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# virtual environments
+.venv/
+venv/
+env/
+
+# pytest
+.pytest_cache/
