@@ -1,0 +1,7 @@
+budget: 5000
+p_values: [0.0, 0.3, 0.5, 0.7, 0.85, 0.95, 1.0]
+seeds: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+alpha: 0.1
+gamma: 0.95
+agents_dir: results/agents
+out: results/offline_sweep_5000.csv

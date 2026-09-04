@@ -1,0 +1,56 @@
+Columns of this sweep -- definitions and state sets used.
+
+budget=50000 transitions, alpha=0.1 (Dirichlet prior), p in [0.0, 0.3, 0.5, 0.7, 0.85, 0.95, 1.0], seeds in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].
+
+frac_visited_reachable: fraction of (s,a) pairs visited during
+  collection, among REACHABLE pairs (non-terminal states -- walls,
+  goals and terminal traps excluded from the denominator). 1.0 =
+  complete coverage of what is observable, regardless of layout.
+
+policy_agreement_reachable: fraction of REACHABLE (non-terminal)
+  states where the agent's greedy policy (under T_hat/R_hat)
+  matches the oracle policy computed on the TRUE tensor at
+  p_train (not p=0) -- measures the quality of the learned model,
+  independently of the transfer to p=0. Does not reach 1.0 even at
+  convergence: some states have tied actions in Q*, broken
+  arbitrarily by argmax (see validate() for an explicit check).
+
+value_gap_mean: max_a Q - mean_a Q, averaged over states.
+value_gap_second_mean: max_a Q - second max_a Q, averaged over states --
+  near 0 signals a near-tie between the two best actions
+  (arbitrary tie-break), regardless of the remaining actions.
+
+tv_visited / tv_all: average total-variation distance between T_hat and
+  the true tensor at p_train, respectively restricted to visited (s,a)
+  pairs and over all pairs (including unvisited ones, where T_hat is
+  only the Dirichlet prior -- tv_all is structurally higher and not
+  comparable across layouts).
+
+mean_trap_distance / trap_min_distance_mean: Manhattan distance to the
+  nearest trap, averaged over all steps, vs. average of the minimum
+  reached per episode -- distinguishes avoiding (minimum always large)
+  from skirting without falling in (minimum small despite a high
+  average).
+
+frac_goal / frac_trap / frac_truncated: outcome of each evaluation
+  episode (mutually exclusive, sums to 1). A return_mean of -1.00 on
+  this layout can be a pure truncation (frac_truncated=1, no terminal
+  state ever reached) or a quick fall into a trap (frac_trap=1) --
+  two very different phenotypes that the return alone conflates.
+
+n_truncated / n_with_cycle / fraction_with_cycle / mean_cycle_length:
+  cycle detection on the tail of TRUNCATED episodes only (an episode
+  that reaches a goal/trap does not "go in circles"). Period 2 =
+  in-place oscillation (the only way to express "staying still" with
+  4 actions). Explicit nan/0 if n_truncated=0 -- never an imputed value.
+
+distinct_states_mean / distinct_states_normalized: average number of
+  distinct states visited per episode, raw and normalised by the
+  number of reachable states (same convention as frac_visited_reachable).
+
+return_mean / success_rate / etc.: evaluated at p=0, learning
+  disabled, planner frozen (phase 2 of the protocol).
+
+oracle_return: mean return of the oracle policy at p=0 on this layout,
+  identical for every row -- a normalisation reference, not a
+  per-agent measure.
