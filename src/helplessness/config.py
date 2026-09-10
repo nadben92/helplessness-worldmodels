@@ -1,4 +1,5 @@
-"""Typed configs for experiment runners.
+"""Typed configs for experiment runners, plus config composition for the
+zone/dynamics/appearance family (see compose() below).
 
 One dataclass per experiment family, with defaults equal to the values that
 were previously hard-coded in each script's argparse defaults. A runner
@@ -10,6 +11,7 @@ CONTRIBUTING.md).
 
 from __future__ import annotations
 
+import copy
 import dataclasses
 from pathlib import Path
 
@@ -17,6 +19,68 @@ import yaml
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+CONFIGS_DIR = REPO_ROOT / "configs"
+
+# Dotted paths, within the composed config tree, that a config.compose()
+# caller may never override -- see compose() below. A path is frozen if it
+# equals one of these or is nested under one (e.g. "zones.reference.dynamics.p"
+# is frozen because "zones.reference" is). Kept as one explicit manifest,
+# not a naming convention: whether a block is frozen must never depend on
+# guessing from its name.
+FROZEN_BLOCKS = ("zones.reference", "themes.test_pool")
+
+
+class FrozenConfigError(ValueError):
+    """Raised when an override targets a path under FROZEN_BLOCKS."""
+
+
+def _is_frozen_path(path: str) -> bool:
+    return any(path == f or path.startswith(f + ".") for f in FROZEN_BLOCKS)
+
+
+def _reject_frozen_overrides(overrides: dict, prefix: str = "") -> None:
+    for key, value in overrides.items():
+        path = f"{prefix}.{key}" if prefix else str(key)
+        if _is_frozen_path(path):
+            raise FrozenConfigError(
+                f"'{path}' belongs to a frozen block ({', '.join(FROZEN_BLOCKS)}) -- not overridable. "
+                "Edit the shared block itself if it genuinely needs to change (and re-check every "
+                "config that references it), never override it locally."
+            )
+        if isinstance(value, dict):
+            _reject_frozen_overrides(value, path)
+
+
+def _deep_merge(base: dict, overrides: dict) -> dict:
+    for key, value in overrides.items():
+        if isinstance(value, dict) and isinstance(base.get(key), dict):
+            _deep_merge(base[key], value)
+        else:
+            base[key] = value
+    return base
+
+
+def compose(blocks: dict, overrides: dict) -> dict:
+    """Merges `overrides` into `blocks` (already-loaded shared config
+    blocks, e.g. {"zones": {...}, "themes": {...}}), returning a new,
+    fully-resolved plain dict -- no block references remain in the output,
+    only literal values, so the result can be dumped whole into a run
+    directory and read back six weeks later without resolving anything
+    (see the results-naming convention in CLAUDE.md).
+
+    Raises FrozenConfigError before merging anything if `overrides` touches
+    a path under FROZEN_BLOCKS (e.g. "zones.reference...") -- two configs
+    that both claim to use the reference zone must actually get the same
+    one; a silent per-experiment override would break that guarantee."""
+    _reject_frozen_overrides(overrides)
+    return _deep_merge(copy.deepcopy(blocks), overrides)
+
+
+def load_yaml_block(relative_path: str) -> dict:
+    """Loads one shared YAML block from configs/<relative_path> (repo-root
+    configs/, not an experiment's own configs/ subdirectory)."""
+    with open(CONFIGS_DIR / relative_path) as f:
+        return yaml.safe_load(f) or {}
 
 
 def resolve_path(path: str) -> str:

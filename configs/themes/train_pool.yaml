@@ -1,0 +1,4 @@
+# Not frozen: the training pool boundary is a consequence of
+# TEST_THEME_SEED_START (see test_pool.yaml), not an independent choice,
+# but individual experiments are free to sample fewer than the full range.
+seed_range: [0, 900000000]

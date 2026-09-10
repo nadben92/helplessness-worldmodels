@@ -1,0 +1,7 @@
+# FROZEN (see helplessness.config.FROZEN_BLOCKS -- "themes.test_pool").
+# Must match helplessness.envs.appearance.themes.TEST_THEME_SEED_START
+# exactly (this file documents/exposes it for config composition; the
+# Python constant is the actual source of truth enforced by
+# is_test_theme()/sample_test_theme() -- see tests/envs/appearance/test_themes.py
+# for the round-trip check).
+seed_range: [900000000, 2147483646]

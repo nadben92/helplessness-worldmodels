@@ -1,0 +1,16 @@
+# FROZEN (see helplessness.config.FROZEN_BLOCKS -- "zones.reference").
+# Edit only alongside helplessness.envs.zones.reference_zone(), which is
+# the actual source of truth for these values; this file exists so an
+# experiment config can include the reference zone's parameters by
+# reference (helplessness.config.compose()) instead of retyping them, and
+# so compose() can refuse a local override that would silently diverge it
+# from every other experiment using the same reference zone.
+#
+# anchor is deliberately NOT here: it is a per-experiment parameter (grid
+# size varies across experiments -- see CLAUDE.md), supplied separately
+# when placing this zone in a given ZoneLayout.
+dynamics:
+  type: ControllableDeterministic
+appearance:
+  category: reference
+pattern_shape: [2, 2]
