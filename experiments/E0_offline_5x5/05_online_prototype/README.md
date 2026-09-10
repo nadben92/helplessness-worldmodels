@@ -1,21 +1,27 @@
-# Online experiment
+# Online prototype (E0, 5x5) -- not a numbered paper experiment
 
-Separate from `experiments/` (the offline pipeline, protocol A) and from
-every offline result -- see the root `CLAUDE.md` for the scientific
-question and `CONTRIBUTING.md` for the src/ vs experiments/ split this
-package follows (imports shared primitives from `helplessness.*`, never
-copy-pastes them).
+This is where the online model-based agent (periodic replanning, Phase-1/2
+recovery protocol) was built and validated, on the legacy 5x5 GridWorld,
+while the actual zoned/torus environment (E1+) didn't exist yet. **The
+library code is what carries over** -- `helplessness.agents.online`
+(agent, loop, recovery mechanics) -- imported here, not copy-pasted. This
+directory is the GridWorld-specific glue and CLI on top of it, kept as a
+reproducible reference, not as E2 itself: E2 reruns this protocol on the
+new environment when it exists.
 
 The online agent's policy determines the data it collects: a periodically
 replanned (full value iteration, never a sampled Dyna-Q backup), tabular
-model-based agent. See `agent.py` (model + policy) and `loop.py` (the
-training loop, plus the Phase-1 burn-in below).
+model-based agent. See `helplessness.agents.online.agent` (model + policy)
+and `.loop` (the training loop, plus the Phase-1 burn-in below).
 
 ## Status
 
-Step 1 (5-action GridWorld) and step 2 (the online agent and loop) are
-implemented and tested; step 3 (the two-phase protocol and recovery 2x2)
-awaits approval before running the full sweep.
+The agent, loop, and Phase-1/2 recovery protocol are implemented and
+tested (see `tests/agents/online/` and `tests/agents/test_base.py` at the
+repo root). A 3-seed validation subset of the recovery protocol has been
+run (p_train=0.95 vs naive, all four conditions) -- see
+`results/online/recovery_summary.csv`. The full 10-seed x 2-budget sweep
+was never run: superseded by the move to the zoned environment.
 
 ## The Phase-1 burn-in
 
@@ -29,8 +35,9 @@ proportionally -- a self-reinforcing avoidance, not a rate problem.
 
 Mechanism: the default layout's two routes to the goal both pass through a
 cell adjacent to a trap. The Dirichlet prior restricted to geographically
-reachable successors (required by the task -- see `agent.geographic_support`)
-is necessarily per-state, not per-action, so an untried *safe* action from a
+reachable successors (required by the task -- see
+`helplessness.agents.online.agent.geographic_support`) is necessarily
+per-state, not per-action, so an untried *safe* action from a
 trap-adjacent cell inherits the same pessimism as the actual unsafe one,
 until that specific action is sampled. At epsilon=0.1, with that cell
 visited only rarely once the greedy policy starts avoiding it, the
@@ -60,13 +67,15 @@ matter: behaviour alone never settles the question.
 
 ## Running
 
-From the repo root (needed for `from online.* import ...` and the installed
-`helplessness` package to resolve):
+From this directory (same convention as every other experiment under
+`experiments/E0_offline_5x5/`):
 
 ```
-python -m online.train --p-train 0.0 --seed 1
+python train.py --p-train 0.0 --seed 1
+python train.py --seed 1 --naive
+python recovery.py --p-train 0.95 --seeds 0 1 2 --budgets 50000
 ```
 
-Writes `results/online/train_validation.csv` plus an adjacent
-`.config.yaml` (resolved config, seed, git commit hash) -- see
-`helplessness.config.OnlineTrainConfig`.
+Writes `results/online/phase1.csv` / `results/online/recovery.csv` plus
+adjacent `.config.yaml` files (resolved config, seed, git commit hash) --
+see `helplessness.config.OnlineTrainConfig` / `RecoveryConfig`.

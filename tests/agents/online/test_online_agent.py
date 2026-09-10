@@ -1,4 +1,4 @@
-"""Tests for online.agent: the restricted-support Dirichlet prior, online
+"""Tests for helplessness.agents.online.agent: the restricted-support Dirichlet prior, online
 terminal discovery, and the optional constant-step-size update mode.
 """
 
@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from helplessness.envs.legacy.gridworld import GridWorld
-from online.agent import OnlineTabularAgent, geographic_support
+from helplessness.agents.online.agent import OnlineTabularAgent, geographic_support
 
 
 def test_geographic_support_is_neighbours_plus_self():
@@ -80,7 +80,7 @@ def test_eta_update_mode_moves_towards_observed_successor():
 
 
 def _trained_agent(seed=0, n_transitions=3000):
-    from online.loop import train_online_with_burnin
+    from helplessness.agents.online.loop import train_online_with_burnin
 
     env = GridWorld(p=0.0, seed=seed, n_actions=5, step_reward=-1.0, goal_reward=100.0, trap_reward=-100.0)
     env.seed_dynamics(seed)

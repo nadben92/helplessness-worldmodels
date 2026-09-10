@@ -1,15 +1,20 @@
-"""Phase-2 recovery protocol (CLAUDE.md online task, steps 3-4): loads a
-Phase-1 snapshot (online/train.py), runs each of the four recovery
-conditions (A/B/C/D = counts intact/rescaled x epsilon 0.1/1.0) for
-n_phase2_steps transitions at p=0, learning on, with periodic out-of-loop
-evaluation.
+"""Phase-2 recovery protocol on the E0 (5x5) environment -- see README.md in
+this directory: PROTOTYPE, not a numbered paper experiment (see train.py's
+docstring). Loads a Phase-1 snapshot (train.py), runs each of the four
+recovery conditions (A/B/C/D = counts intact/rescaled x epsilon 0.1/1.0)
+for n_phase2_steps transitions at p=0, learning on, with periodic
+out-of-loop evaluation.
 
-No burn-in here (see online.loop.train_online_with_burnin's docstring): the
-exploration deadlock that the Phase-1 burn-in works around is, in Phase 2,
-part of what is being measured -- an agent whose own policy never revisits
-the states that would disconfirm its belief is exactly the phenomenon under
-study (see CLAUDE.md, "Recovery" and Maier & Seligman's relearning
-criterion).
+The env-agnostic mechanics (RecoveryTracker, recovery_time) live in
+helplessness.agents.online.recovery -- this file supplies the GridWorld-
+specific glue (make_env, snapshot loading, the CLI, CSV output) on top.
+
+No burn-in here (see helplessness.agents.online.loop.train_online_with_burnin's
+docstring): the exploration deadlock that the Phase-1 burn-in works around
+is, in Phase 2, part of what is being measured -- an agent whose own policy
+never revisits the states that would disconfirm its belief is exactly the
+phenomenon under study (see CLAUDE.md, "Recovery" and Maier & Seligman's
+relearning criterion).
 
 Evaluation is out of loop by construction: RecoveryTracker's periodic check
 runs on a fresh GridWorld instance with a fixed eval seed, calling the
@@ -22,17 +27,17 @@ from __future__ import annotations
 import argparse
 import csv
 import os
-from collections import deque
 
 import numpy as np
 
+from helplessness.agents.online.agent import OnlineTabularAgent
+from helplessness.agents.online.loop import train_online
+from helplessness.agents.online.recovery import RecoveryTracker, recovery_time
 from helplessness.config import RecoveryConfig, dump_config, load_config, resolve_path
 from helplessness.envs.legacy.gridworld import GridWorld
 from helplessness.evaluation.rollout import evaluate
 from helplessness.planning.value_iteration import value_iteration
-from online.agent import OnlineTabularAgent
-from online.loop import train_online
-from online.train import git_commit_hash, snapshot_path
+from train import git_commit_hash, snapshot_path
 
 CONDITIONS = {
     "A": {"rescale": False, "epsilon": 0.1},
@@ -66,58 +71,6 @@ def compute_oracle_return(cfg: RecoveryConfig, n_episodes: int = 500, seed: int 
     return summary["return_mean"]
 
 
-class RecoveryTracker:
-    """train_online's on_transition callback for one recovery run: records
-    the periodic out-of-loop evaluation curve, plus sliding-window
-    mechanistic metrics (zero-sample (s,a) pairs, state-visitation entropy)
-    over the last `window` transitions."""
-
-    def __init__(self, agent: OnlineTabularAgent, cfg: RecoveryConfig, eval_seed: int, non_terminal_pairs: list):
-        self.agent = agent
-        self.cfg = cfg
-        self.eval_seed = eval_seed
-        self.non_terminal_pairs = non_terminal_pairs
-        self.window: deque = deque(maxlen=cfg.mechanistic_window)
-        self.rows: list[dict] = []
-
-    def __call__(self, t, s, a, r, s_next, terminated, truncated) -> None:
-        self.window.append((s, a))
-        if t % self.cfg.eval_every != 0:
-            return
-
-        eval_env = make_env(self.cfg, 0.0, self.eval_seed)
-        summary, _ = evaluate(eval_env, self.agent.policy, n_episodes=self.cfg.n_eval_episodes, seed=self.eval_seed)
-
-        visited = set(self.window)
-        zero_sample_pairs = sum(1 for pair in self.non_terminal_pairs if pair not in visited)
-
-        state_counts: dict[int, int] = {}
-        for s_win, _a_win in self.window:
-            state_counts[s_win] = state_counts.get(s_win, 0) + 1
-        counts = np.array(list(state_counts.values()), dtype=np.float64)
-        probs = counts / counts.sum()
-        state_entropy = float(-np.sum(probs * np.log2(probs)))
-
-        self.rows.append({
-            "t": t,
-            "return_mean": summary["return_mean"],
-            "success_rate": summary["success_rate"],
-            "zero_sample_pairs": zero_sample_pairs,
-            "state_entropy": state_entropy,
-        })
-
-
-def recovery_time(rows: list[dict], oracle_return: float, threshold: float = 0.95) -> float | None:
-    """First t at which mean return reaches threshold * oracle_return. None
-    (not a sentinel number) if the run never recovers within budget --
-    "never recovered" must not be silently coded as a large-but-finite time."""
-    target = threshold * oracle_return
-    for row in sorted(rows, key=lambda r: r["t"]):
-        if row["return_mean"] >= target:
-            return row["t"]
-    return None
-
-
 def run_condition(cfg: RecoveryConfig, snapshot_file: str, condition_name: str, seed: int) -> list[dict]:
     cond = CONDITIONS[condition_name]
     agent = OnlineTabularAgent.load(snapshot_file)
@@ -129,7 +82,16 @@ def run_condition(cfg: RecoveryConfig, snapshot_file: str, condition_name: str, 
     non_terminal = ~env.terminal_mask()
     non_terminal_pairs = [(s, a) for s in range(env.n_states) if non_terminal[s] for a in range(env.n_actions)]
 
-    tracker = RecoveryTracker(agent, cfg, eval_seed=seed + 9_000_000, non_terminal_pairs=non_terminal_pairs)
+    eval_seed = seed + 9_000_000
+    tracker = RecoveryTracker(
+        agent,
+        eval_env_factory=lambda: make_env(cfg, 0.0, eval_seed),
+        eval_every=cfg.eval_every,
+        n_eval_episodes=cfg.n_eval_episodes,
+        eval_seed=eval_seed,
+        non_terminal_pairs=non_terminal_pairs,
+        mechanistic_window=cfg.mechanistic_window,
+    )
     explore_rng = np.random.default_rng(seed + 6_000_000)
     tiebreak_rng = np.random.default_rng(seed + 7_000_000)
     train_online(

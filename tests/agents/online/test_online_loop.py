@@ -1,6 +1,6 @@
-"""Tests for online.loop.train_online: the four correctness requirements
+"""Tests for helplessness.agents.online.loop.train_online: the four correctness requirements
 from CLAUDE.md's online task (step 2) -- truncation vs termination, random
-tie-break, replan timing, and (indirectly, via online.agent) V=0 at
+tie-break, replan timing, and (indirectly, via helplessness.agents.online.agent) V=0 at
 terminals -- plus the near-optimal single-agent validation run.
 """
 
@@ -12,8 +12,8 @@ import pytest
 from helplessness.envs.legacy.gridworld import GridWorld
 from helplessness.evaluation.rollout import evaluate
 from helplessness.planning.value_iteration import value_iteration
-from online.agent import OnlineTabularAgent
-from online.loop import train_online, train_online_with_burnin
+from helplessness.agents.online.agent import OnlineTabularAgent
+from helplessness.agents.online.loop import train_online, train_online_with_burnin
 
 
 def test_truncation_never_marks_terminal():

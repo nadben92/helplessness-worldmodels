@@ -9,10 +9,11 @@ from __future__ import annotations
 
 import numpy as np
 
+from helplessness.agents.base import Agent
 from helplessness.planning.value_iteration import GAMMA, value_iteration
 
 
-class TabularModelBasedAgent:
+class TabularModelBasedAgent(Agent):
     """Tabular T_hat/R_hat with a Dirichlet prior, planning by value iteration.
 
     alpha_support: optional (n_states, n_states) boolean mask restricting
@@ -105,6 +106,10 @@ class TabularModelBasedAgent:
     def visited_mask(self) -> np.ndarray:
         """(S, A) boolean: (s,a) pairs observed at least once."""
         return self.N.sum(axis=2) > 0
+
+    def transition_distribution(self, s: int, a: int) -> np.ndarray:
+        """Agent.transition_distribution: a single row of T_hat."""
+        return self.T_hat[s, a]
 
     def plan(self, terminal: np.ndarray, gamma: float = GAMMA) -> None:
         """Value iteration on (T_hat, R_hat). Stores V, Q, policy."""

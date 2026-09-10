@@ -1,8 +1,8 @@
 """Online model-based agent: model construction plus a periodically-replanned
 policy. Not Dyna-Q -- no sampled backups on imagined transitions, only a
 complete value iteration on the current (T_hat, R_hat) every replan (see
-online/loop.py for the main loop, and CLAUDE.md for why full VI is affordable
-and preferable here).
+loop.py for the main loop, and CLAUDE.md for why full VI is affordable and
+preferable here).
 
 Wraps helplessness.agents.tabular.TabularModelBasedAgent (imported, not
 copy-pasted) for the counts/T_hat/R_hat estimator, using the alpha_support
@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from helplessness.agents.base import Agent
 from helplessness.agents.tabular import TabularModelBasedAgent
 from helplessness.evaluation.tiebreak import argmax_random_tie
 from helplessness.measures.belief import perceived_controllability
@@ -55,7 +56,7 @@ def geographic_support(env) -> np.ndarray:
     return row0
 
 
-class OnlineTabularAgent:
+class OnlineTabularAgent(Agent):
     """Owns the model estimator (via TabularModelBasedAgent) and the
     periodically-replanned greedy policy.
 
@@ -118,6 +119,11 @@ class OnlineTabularAgent:
     @property
     def visited_mask(self) -> np.ndarray:
         return self._model.visited_mask
+
+    def transition_distribution(self, s: int, a: int) -> np.ndarray:
+        """Agent.transition_distribution: a single row of T_hat (whichever
+        estimator is active -- counts or the eta-update mode)."""
+        return self.T_hat[s, a]
 
     def plan(self, tiebreak_rng: np.random.Generator) -> None:
         """Full value iteration on the current belief. The policy is

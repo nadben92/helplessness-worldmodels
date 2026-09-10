@@ -1,12 +1,17 @@
-"""Entry point for Phase-1 online training (see CLAUDE.md online task, steps
-2-3): trains a single OnlineTabularAgent, serialises it as a snapshot (so
+"""Entry point for Phase-1 online training on the E0 (5x5) environment --
+see README.md in this directory: this is a PROTOTYPE, not a numbered paper
+experiment. It exercises helplessness.agents.online (agent, loop, recovery)
+against the legacy GridWorld while E1-E2's actual environment doesn't exist
+yet; the library code it calls is what carries over.
+
+Trains a single OnlineTabularAgent, serialises it as a snapshot (so
 Phase 2 / recovery.py never retrains Phase 1 -- see CONTRIBUTING.md,
 "results and configs"), evaluates it greedily against the oracle, and writes
 one CSV row plus a config.yaml recording exactly what produced it (git
 commit hash, seed, resolved config) -- run.py in the offline experiments
 follow the same convention.
 
-Run from the repo root: `python -m online.train --p-train 0.0 --seed 1`
+Run from this directory: `python train.py --p-train 0.0 --seed 1`
 (or with --config for a full sweep config; --naive for the naive group).
 """
 
@@ -19,12 +24,12 @@ import subprocess
 
 import numpy as np
 
+from helplessness.agents.online.agent import OnlineTabularAgent
+from helplessness.agents.online.loop import train_online_with_burnin
 from helplessness.config import OnlineTrainConfig, dump_config, load_config, resolve_path
 from helplessness.envs.legacy.gridworld import GridWorld
 from helplessness.evaluation.rollout import evaluate
 from helplessness.planning.value_iteration import value_iteration
-from online.agent import OnlineTabularAgent
-from online.loop import train_online_with_burnin
 
 
 def git_commit_hash() -> str:

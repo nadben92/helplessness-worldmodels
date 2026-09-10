@@ -17,7 +17,7 @@ from typing import Callable
 import numpy as np
 
 from helplessness.agents.collect import collect
-from online.agent import OnlineTabularAgent
+from helplessness.agents.online.agent import OnlineTabularAgent
 
 
 def train_online(
