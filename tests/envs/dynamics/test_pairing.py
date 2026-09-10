@@ -1,5 +1,5 @@
-"""Tests for derive_control: uncontrollable -> ControllableDeterministic,
-controllable left untouched."""
+"""Tests for derive_control: uncontrollable -> controllable at the SAME
+noise level p, controllable left untouched."""
 
 from __future__ import annotations
 
@@ -17,9 +17,11 @@ def test_uncontrollable_deterministic_pairs_to_controllable_deterministic():
     assert isinstance(paired, ControllableDeterministic)
 
 
-def test_uncontrollable_noisy_pairs_to_controllable_deterministic():
-    paired = derive_control(UncontrollableNoisy())
-    assert isinstance(paired, ControllableDeterministic)
+def test_uncontrollable_noisy_pairs_to_controllable_noisy_at_the_same_p():
+    for p in (0.0, 0.15, 0.3, 0.7, 1.0):
+        paired = derive_control(UncontrollableNoisy(drift=(1, 0), p=p))
+        assert isinstance(paired, ControllableNoisy)
+        assert paired.p == p
 
 
 def test_controllable_specs_pass_through_unchanged():

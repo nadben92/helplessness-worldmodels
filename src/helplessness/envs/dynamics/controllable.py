@@ -30,9 +30,11 @@ class ControllableNoisy(DynamicsSpec):
     """With probability p, the executed action is replaced by a uniform
     draw over all n_actions, independently of the one chosen -- the same
     stochasticity model as the legacy GridWorld's p, generalised to a
-    torus. p=0 is ControllableDeterministic; p=1 is fully uncontrolled
-    (equivalent in outcome, not in name, to UncontrollableNoisy with a
-    uniform move distribution).
+    torus. p=0 is ControllableDeterministic; p=1 is fully uncontrolled in
+    outcome (though I(a;s'|s) computed here is about the ceiling under a
+    uniform action prior, not the same object as
+    UncontrollableNoisy.analytic_controllability(), which is 0 by
+    construction regardless of p -- see pairing.py for how the two relate).
     """
 
     def __init__(self, p: float):

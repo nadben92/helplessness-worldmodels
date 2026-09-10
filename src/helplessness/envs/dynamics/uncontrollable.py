@@ -1,5 +1,14 @@
 """Uncontrollable dynamics: the chosen action has no influence on the
 outcome at all -- I(a;s'|s) = 0 exactly, by construction, for both types.
+
+UncontrollableNoisy shares its mixture structure with ControllableNoisy on
+purpose: "with probability (1-p), the clean component; with probability p,
+a uniform random direction" -- the only difference is what plays the role
+of the clean component (a fixed drift here, the chosen action there). That
+shared shape is what lets pairing.derive_control map
+UncontrollableNoisy(drift, p) -> ControllableNoisy(p) and genuinely
+preserve p, rather than collapsing every uncontrollable zone to the same
+"how much randomness" bucket regardless of how noisy it actually was.
 """
 
 from __future__ import annotations
@@ -11,7 +20,9 @@ from helplessness.envs.dynamics.base import ACTIONS, N_ACTIONS, DynamicsSpec, _r
 
 class UncontrollableDeterministic(DynamicsSpec):
     """"Conveyor belt": a fixed displacement applied every step,
-    independent of the action -- the action is read and ignored."""
+    independent of the action -- the action is read and ignored.
+    Equivalent to UncontrollableNoisy(drift, p=0) (tested directly), but
+    kept as its own type since it needs no noise parameter at all."""
 
     def __init__(self, drift: tuple[int, int]):
         self.drift = (int(drift[0]), int(drift[1]))
@@ -29,29 +40,36 @@ class UncontrollableDeterministic(DynamicsSpec):
 
 
 class UncontrollableNoisy(DynamicsSpec):
-    """The executed displacement is drawn from move_probs, independent of
-    the chosen action -- move_probs defaults to uniform over the 5
-    directions (equivalent in outcome, though not in the agent's own
-    belief about why, to ControllableNoisy(p=1))."""
+    """With probability (1-p), the fixed `drift` displacement applies
+    (like UncontrollableDeterministic); with probability p, a uniform
+    random direction applies instead, independent of the action either
+    way. p=0 is exactly UncontrollableDeterministic(drift); p=1 is a pure
+    random walk regardless of drift.
 
-    def __init__(self, move_probs: np.ndarray | None = None):
-        if move_probs is None:
-            move_probs = np.full(len(ACTIONS), 1.0 / len(ACTIONS))
-        move_probs = np.asarray(move_probs, dtype=np.float64)
-        if move_probs.shape != (len(ACTIONS),):
-            raise ValueError(f"move_probs must have shape ({len(ACTIONS)},), got {move_probs.shape}")
-        if not np.isclose(move_probs.sum(), 1.0):
-            raise ValueError(f"move_probs must sum to 1, got {move_probs.sum()}")
-        self.move_probs = move_probs
+    The action never appears in transition_row() at all -- I(a;s'|s) = 0
+    exactly, for every p, not just approximately for large p.
+    """
+
+    def __init__(self, drift: tuple[int, int], p: float):
+        if not 0.0 <= p <= 1.0:
+            raise ValueError(f"p must be in [0, 1], got {p}")
+        self.drift = (int(drift[0]), int(drift[1]))
+        self.p = float(p)
 
     def transition_row(self, rc, a, grid_shape) -> np.ndarray:
         n_states = grid_shape[0] * grid_shape[1]
+        n_actions = len(ACTIONS)
         row = np.zeros(n_states)
-        for direction, prob in enumerate(self.move_probs):
-            if prob > 0.0:
-                dr, dc = ACTIONS[direction]
-                s_next = _rc_to_s(_wrap((rc[0] + dr, rc[1] + dc), grid_shape), grid_shape)
-                row[s_next] += prob
+
+        dr, dc = self.drift
+        drift_s = _rc_to_s(_wrap((rc[0] + dr, rc[1] + dc), grid_shape), grid_shape)
+        row[drift_s] += 1.0 - self.p
+
+        for direction in range(n_actions):
+            dr2, dc2 = ACTIONS[direction]
+            s2 = _rc_to_s(_wrap((rc[0] + dr2, rc[1] + dc2), grid_shape), grid_shape)
+            row[s2] += self.p / n_actions
+
         return row
 
     def analytic_controllability(self, n_actions: int = N_ACTIONS) -> float:

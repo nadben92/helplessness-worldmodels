@@ -50,13 +50,16 @@ def _numeric_controllability(spec, grid_shape=GRID_SHAPE, n_actions=N_ACTIONS) -
         ControllableNoisy(p=1.0),
         UncontrollableDeterministic(drift=(1, 0)),
         UncontrollableDeterministic(drift=(0, -1)),
-        UncontrollableNoisy(),
-        UncontrollableNoisy(move_probs=np.array([0.4, 0.3, 0.1, 0.1, 0.1])),
+        UncontrollableNoisy(drift=(1, 0), p=0.0),
+        UncontrollableNoisy(drift=(1, 0), p=0.3),
+        UncontrollableNoisy(drift=(0, -1), p=0.7),
+        UncontrollableNoisy(drift=(1, 1), p=1.0),
     ],
     ids=[
         "controllable_det", "controllable_noisy_p0", "controllable_noisy_p0.3",
         "controllable_noisy_p0.7", "controllable_noisy_p1", "uncontrollable_det_drift(1,0)",
-        "uncontrollable_det_drift(0,-1)", "uncontrollable_noisy_uniform", "uncontrollable_noisy_skewed",
+        "uncontrollable_det_drift(0,-1)", "uncontrollable_noisy_p0", "uncontrollable_noisy_p0.3",
+        "uncontrollable_noisy_p0.7", "uncontrollable_noisy_p1",
     ],
 )
 def test_analytic_matches_numeric(spec):
@@ -70,13 +73,30 @@ def test_transition_rows_sum_to_one_and_are_nonnegative():
         ControllableDeterministic(),
         ControllableNoisy(p=0.4),
         UncontrollableDeterministic(drift=(1, 1)),
-        UncontrollableNoisy(),
+        UncontrollableNoisy(drift=(1, 1), p=0.4),
     ]
     for spec in specs:
         for a in range(N_ACTIONS):
             row = spec.transition_row((2, 3), a, GRID_SHAPE)
             assert row.min() >= 0.0
             assert row.sum() == pytest.approx(1.0)
+
+
+def test_uncontrollable_noisy_p0_equals_uncontrollable_deterministic():
+    drift = (1, 1)
+    noisy = UncontrollableNoisy(drift=drift, p=0.0)
+    det = UncontrollableDeterministic(drift=drift)
+    for a in range(N_ACTIONS):
+        assert np.allclose(noisy.transition_row((2, 3), a, GRID_SHAPE), det.transition_row((2, 3), a, GRID_SHAPE))
+
+
+def test_uncontrollable_noisy_action_never_affects_the_row():
+    """I(a;s'|s) = 0 must hold structurally, not just on average: the row
+    itself must be identical for every action, at any p."""
+    spec = UncontrollableNoisy(drift=(1, 0), p=0.4)
+    rows = [spec.transition_row((2, 3), a, GRID_SHAPE) for a in range(N_ACTIONS)]
+    for row in rows[1:]:
+        assert np.allclose(row, rows[0])
 
 
 def test_torus_wraps_at_borders():

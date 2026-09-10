@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import numpy as np
 import pytest
 
 from helplessness.envs.dynamics.controllable import ControllableDeterministic, ControllableNoisy
@@ -27,10 +26,11 @@ def test_uncontrollable_deterministic_from_config():
     assert spec.drift == (1, 0)
 
 
-def test_uncontrollable_noisy_from_config_with_explicit_move_probs():
-    spec = dynamics_from_config({"type": "UncontrollableNoisy", "move_probs": [0.4, 0.3, 0.1, 0.1, 0.1]})
+def test_uncontrollable_noisy_from_config():
+    spec = dynamics_from_config({"type": "UncontrollableNoisy", "drift": [1, 0], "p": 0.3})
     assert isinstance(spec, UncontrollableNoisy)
-    assert np.allclose(spec.move_probs, [0.4, 0.3, 0.1, 0.1, 0.1])
+    assert spec.drift == (1, 0)
+    assert spec.p == 0.3
 
 
 def test_unknown_type_raises():
