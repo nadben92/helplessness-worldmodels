@@ -2,76 +2,72 @@
 
 ## Research question
 
-This project studies the behavioural phenotypes of **perceived
-uncontrollability** in a model-based reinforcement learning agent. An agent
-is trained in environments with varying **controllability** -- the mutual
-information between its actions and the resulting state transitions -- and
-then evaluated, with learning disabled, in a fully controllable ("healthy")
-environment. Because the agent is model-based, its transition belief `T_hat`
-and reward belief `R_hat` are structurally separate, which makes perceived
-controllability directly readable from the belief and, as it turns out,
-directly editable. The long-term aim (see `CLAUDE.md`) is to train a neural
-world model, extract the same phenotypes from its trajectories, and
-causally intervene on its latent representation to identify what produces
-them; this repository is the tabular rehearsal of that pipeline, in a
-setting simple enough to verify every step against ground truth first.
+When an agent learns that some region of its environment is beyond its
+control, according to what geometry does that belief propagate to regions
+that actually are controllable? The project studies this in a model-based
+reinforcement learning agent, where a transition belief `T_hat` and a
+reward belief `R_hat` are structurally separate -- which makes perceived
+controllability (measured as `I(action ; next_state | state)`) directly
+readable from the belief, and, as it turns out, directly editable. Work
+progresses from a tabular agent on a small gridworld, to a tabular agent on
+a richer environment with heterogeneous, zone-level controllability, to a
+neural world model on the same environment rendered as pixels, ending in
+causal intervention on the world model's latent representation.
 
-## Paradigm
+See `CLAUDE.md` for the code-level conventions and invariants, and `docs/`
+for what each experiment (E0 through E6) tests and its current status.
 
-The design is a **yoked-control** paradigm in the sense of Maier & Seligman:
-agents trained under different levels of environmental noise receive
-statistically identical sensorimotor experience (verified empirically, see
-`reports/week1_offline_report.md`) -- only the action-outcome contingency
-differs. This isolates the causal pathway from *belief about control* to
-*behaviour*, without confounding it with differences in exposure. Passivity
-is treated as the default; what is measured is the acquisition (and, via
-intervention, the manipulation) of the detection of control.
+## Repository structure
 
-## Current status
+```
+src/helplessness/
+  envs/          Environments. legacy/gridworld.py is the frozen 5x5 (E0).
+                 zones.py, dynamics/, appearance/, observation/, torus_env.py
+                 are the zone-based family (E1 onwards): dynamics and
+                 appearance are independent per zone, torus topology, an
+                 interchangeable tabular/pixel observation backend.
+  agents/        tabular.py (counts + value iteration), online/ (periodic
+                 replanning + the Phase-1/2 recovery protocol), worldmodel/
+                 (reserved, E3+). base.py declares the one thing every
+                 agent must expose: transition_distribution().
+  measures/      I(a;s'|s) -- one implementation, used everywhere.
+  interventions/ Causal manipulation of a transition belief.
+  planning/, evaluation/, config.py, runs.py
+configs/         Shared YAML blocks (zones, themes, dynamics presets) for
+                 experiments to compose, some of them frozen (see CLAUDE.md).
+experiments/     One directory per experiment; orchestration only.
+docs/            One file per experiment: what it tests, its config, its status.
+results/         Run outputs -- see "where results land" below.
+reports/         Write-ups and figures. Start with week1_offline_report.md.
+tests/           Mirrors src/.
+```
 
-**Week 1 of 6 months.** The offline phase (Phase 1: training under tunable
-controllability; Phase 2: evaluation in the healthy environment; Phase 3:
-component swaps to localise the phenotype in the belief) is complete,
-including two causal interventions on the learned transition belief and
-their comparison. See `reports/week1_offline_report.md` for the full
-writeup. Next: an online model-based agent, to test the actual definitional
-criterion of learned helplessness -- failure to *relearn* that control has
-returned, which the offline design cannot probe by construction.
-
-## Install and reproduce
+## Running an experiment
 
 ```bash
 pip install -e .
-python scripts/regenerate_agents.py   # trains and saves the tabular agents (a few minutes)
+pytest
 ```
 
-That reproduces the offline sweep at both transition budgets
-(`results/offline_sweep_5000.csv`, `results/offline_sweep_50000.csv`) and
-the saved agents every other experiment depends on. From there, each
-directory under `experiments/` is independently runnable -- see its
-`README.md` for the exact commands and what it depends on. `pytest` from
-the repo root runs the full test suite, including the model/simulation
-agreement test that guarantees the environment's exact transition tensor
-stays consistent with its step-by-step dynamics.
+E0 (offline, 5x5 -- done):
 
-## Where things are
+```bash
+python scripts/regenerate_agents.py   # trains and saves the tabular agents
+make sweep swaps intervention rescue  # or: cd experiments/E0_offline_5x5/<phase> && python run.py --config config.yaml
+```
 
-- `reports/` -- findings. Start with `week1_offline_report.md`.
-- `experiments/` -- what was run to produce those findings: one directory
-  per experiment, each with its own runner, config, and README stating what
-  was tested and what came out.
-- `src/helplessness/` -- the reusable library (environment, agents,
-  planner, metrics, interventions, evaluation) that every experiment is
-  built from. See `CONTRIBUTING.md` for the rule that keeps this directory
-  from rotting into the experiments that use it.
-- `CLAUDE.md` -- the scientific context and the invariants that must never
-  be broken (Markov structure, terminated/truncated handling, RNG
-  separation, and so on).
+Each experiment directory has its own `README.md` with exact commands and
+dependencies between phases. An experiment built on the zone/dynamics/
+appearance family composes its config via `helplessness.config.compose()`
+and writes results under the naming convention in `CLAUDE.md`.
 
-## A note on stability
+## Where results land
 
-This is research code from an ongoing internship. Interfaces will change as
-the project moves from the tabular offline phase into an online agent and,
-later, a neural world model -- pin a commit or tag (`v0.1-offline` marks the
-end of the phase this README describes) if you need something that won't
-move under you.
+E0 (`experiments/E0_offline_5x5/`): `results/<name>.csv` plus an adjacent
+`<name>.csv.config.yaml` recording exactly what produced it. Raw agent
+tensors (`results/agents/`) are regenerable, not versioned.
+
+E1 onwards: `results/<experiment_id>/<run_name>/`, one self-contained
+directory per run (`config.yaml`, `meta.yaml`, metrics, `checkpoints/`,
+`artifacts/`) -- see `CLAUDE.md`, "results and run naming", for the exact
+convention and what `run_name` encodes.
