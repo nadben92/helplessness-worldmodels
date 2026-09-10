@@ -139,3 +139,69 @@ class RescueDiagnosticsConfig:
     seeds: list[int] = dataclasses.field(default_factory=lambda: list(range(10)))
     agents_dir: str = "results/agents"
     out: str = "results/lam_policy_change_counts.csv"
+
+
+@dataclasses.dataclass
+class OnlineTrainConfig:
+    """Config for the online experiment (online/train.py), separate from
+    every offline dataclass above -- see online/README.md. n_actions=5
+    (stay enabled), step_cost/trap_cost/goal_reward are exposed here rather
+    than hard-coded so the step-cost/trap-cost ratio can become a swept axis
+    later (see CLAUDE.md roadmap) without touching GridWorld again.
+
+    burn_in_steps: uniform-random preamble (see online.loop.train_online_with_
+    burnin) applied identically to every p_train condition in Phase 1 only,
+    counted against n_steps rather than added on top. Never applied to Phase
+    2 (recovery) -- see that module's docstring for why."""
+
+    n_steps: int = 50_000
+    p_train: float = 0.0
+    epsilon: float = 0.1
+    burn_in_steps: int = 2_000
+    alpha: float = 0.1
+    gamma: float = 0.95
+    replan_every: int = 500
+    seed: int = 0
+    n_actions: int = 5
+    step_cost: float = 1.0
+    trap_cost: float = 100.0
+    goal_reward: float = 100.0
+    use_eta_update: bool = False
+    eta: float = 0.1
+    agents_dir: str = "results/online/snapshots"
+    out: str = "results/online/phase1.csv"
+
+
+@dataclasses.dataclass
+class RecoveryConfig:
+    """Config for the Phase-2 recovery protocol (online/recovery.py, CLAUDE.md
+    online task step 3-4). Loads Phase-1 snapshots written by online/train.py
+    under agents_dir (must match OnlineTrainConfig.agents_dir / .out for the
+    same run) -- never retrains Phase 1.
+
+    p_train_values: the "inescapable" groups. "naive" (fresh agent, phase 1
+    skipped) is always added as an extra group -- not listed here, since it
+    has no p_train and no budget dependence (see CLAUDE.md: it must get
+    exactly n_phase2_steps like everyone else, no extra budget).
+
+    The four recovery conditions (A/B/C/D = counts intact/rescaled x
+    epsilon 0.1/1.0) are fixed by the protocol, not configurable here.
+    """
+
+    p_train_values: list[float] = dataclasses.field(default_factory=lambda: [0.0, 0.85, 0.95, 1.0])
+    seeds: list[int] = dataclasses.field(default_factory=lambda: list(range(10)))
+    phase1_budgets: list[int] = dataclasses.field(default_factory=lambda: [5_000, 50_000])
+    n_phase2_steps: int = 20_000
+    n_cap: float = 5_000.0
+    replan_every: int = 500
+    eval_every: int = 200
+    n_eval_episodes: int = 100
+    mechanistic_window: int = 2_000
+    alpha: float = 0.1
+    gamma: float = 0.95
+    n_actions: int = 5
+    step_cost: float = 1.0
+    trap_cost: float = 100.0
+    goal_reward: float = 100.0
+    agents_dir: str = "results/online/snapshots"
+    out: str = "results/online/recovery.csv"
