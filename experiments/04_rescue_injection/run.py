@@ -24,8 +24,8 @@ from helplessness.evaluation.offline_support import agent_path, behavioral_row
 from helplessness.evaluation.rollout import draw_start_states, evaluate
 from helplessness.evaluation.tiebreak import argmax_random_tie
 from helplessness.interventions.controllability_dial import structure_injection
-from helplessness.metrics.belief import perceived_controllability
-from helplessness.metrics.controllability import value_gap, value_gap_second
+from helplessness.measures.belief import perceived_controllability
+from helplessness.measures.controllability import value_gap, value_gap_second
 from helplessness.planning.value_iteration import GAMMA, value_iteration
 
 FIELDNAMES = [

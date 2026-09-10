@@ -16,7 +16,7 @@ from __future__ import annotations
 import numpy as np
 
 from helplessness.envs.base import Env
-from helplessness.metrics.controllability import controllability_from_tensor
+from helplessness.measures.controllability import controllability_from_tensor
 
 # actions: 0 = up, 1 = right, 2 = down, 3 = left, 4 = stay
 ACTIONS = ((-1, 0), (0, 1), (1, 0), (0, -1), (0, 0))

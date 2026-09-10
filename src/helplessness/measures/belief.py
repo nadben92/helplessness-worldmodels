@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from helplessness.metrics.controllability import controllability_from_tensor
+from helplessness.measures.controllability import controllability_from_tensor
 
 
 def perceived_controllability(T_hat: np.ndarray, terminal: np.ndarray) -> float:

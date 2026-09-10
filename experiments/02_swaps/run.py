@@ -30,7 +30,7 @@ from helplessness.envs.gridworld import N_ACTIONS, GridWorld
 from helplessness.evaluation.offline_support import agent_path
 from helplessness.evaluation.rollout import evaluate
 from helplessness.interventions.swaps import CONDITIONS, swap_matrix
-from helplessness.metrics.behavioural import (
+from helplessness.measures.behavioural import (
     cycle_stats,
     distinct_states_per_episode,
     latency_to_goal,

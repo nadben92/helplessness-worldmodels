@@ -40,7 +40,7 @@ from helplessness.evaluation.offline_support import (
     shared_context,
     write_sweep_readme,
 )
-from helplessness.metrics.belief import coverage, model_error
+from helplessness.measures.belief import coverage, model_error
 
 
 # ----------------------------------------------------------------------

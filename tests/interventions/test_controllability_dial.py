@@ -15,7 +15,7 @@ from helplessness.interventions.controllability_dial import (
     p_effective,
     structure_injection,
 )
-from helplessness.metrics.controllability import controllability_from_tensor
+from helplessness.measures.controllability import controllability_from_tensor
 
 
 @pytest.fixture

@@ -1,4 +1,4 @@
-from helplessness.metrics.behavioural import (
+from helplessness.measures.behavioural import (
     cycle_stats,
     distinct_states_per_episode,
     latency_to_goal,
@@ -7,8 +7,8 @@ from helplessness.metrics.behavioural import (
     perseveration,
     policy_entropy,
 )
-from helplessness.metrics.belief import coverage, model_error, perceived_controllability
-from helplessness.metrics.controllability import controllability_from_tensor, value_gap, value_gap_second
+from helplessness.measures.belief import coverage, model_error, perceived_controllability
+from helplessness.measures.controllability import controllability_from_tensor, value_gap, value_gap_second
 
 __all__ = [
     "controllability_from_tensor",

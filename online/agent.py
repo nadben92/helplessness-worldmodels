@@ -24,7 +24,7 @@ import numpy as np
 
 from helplessness.agents.tabular import TabularModelBasedAgent
 from helplessness.evaluation.tiebreak import argmax_random_tie
-from helplessness.metrics.belief import perceived_controllability
+from helplessness.measures.belief import perceived_controllability
 from helplessness.planning.value_iteration import GAMMA, value_iteration
 
 

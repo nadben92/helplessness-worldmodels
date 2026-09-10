@@ -20,7 +20,7 @@ import numpy as np
 
 from helplessness.envs.gridworld import N_ACTIONS, GridWorld
 from helplessness.evaluation.rollout import evaluate
-from helplessness.metrics.behavioural import (
+from helplessness.measures.behavioural import (
     cycle_stats,
     distinct_states_per_episode,
     latency_to_goal,
@@ -29,8 +29,8 @@ from helplessness.metrics.behavioural import (
     perseveration,
     policy_entropy,
 )
-from helplessness.metrics.belief import coverage, model_error, perceived_controllability
-from helplessness.metrics.controllability import value_gap, value_gap_second
+from helplessness.measures.belief import coverage, model_error, perceived_controllability
+from helplessness.measures.controllability import value_gap, value_gap_second
 from helplessness.planning.value_iteration import GAMMA, value_iteration
 
 OFFLINE_METRICS_FIELDNAMES = [

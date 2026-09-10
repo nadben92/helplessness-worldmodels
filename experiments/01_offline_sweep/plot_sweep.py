@@ -20,7 +20,7 @@ import numpy as np
 
 from helplessness.config import resolve_path
 from helplessness.envs.gridworld import GridWorld
-from helplessness.metrics.controllability import (
+from helplessness.measures.controllability import (
     controllability_from_tensor,
     value_gap,
     value_gap_second,
