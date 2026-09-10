@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-OFFLINE_SWEEP_DIR = REPO_ROOT / "experiments" / "01_offline_sweep"
+OFFLINE_SWEEP_DIR = REPO_ROOT / "experiments" / "E0_offline_5x5" / "01_offline_sweep"
 
 CONFIGS = ["sweep_5000.yaml", "sweep_50000.yaml"]
 
