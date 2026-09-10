@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from helplessness.config import resolve_path
-from helplessness.envs.gridworld import GridWorld
+from helplessness.envs.legacy.gridworld import GridWorld
 from helplessness.measures.controllability import (
     controllability_from_tensor,
     value_gap,

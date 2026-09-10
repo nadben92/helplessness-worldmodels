@@ -26,7 +26,7 @@ except ImportError:  # fallback without scipy
 
 from helplessness.agents.tabular import TabularModelBasedAgent
 from helplessness.config import SwapsConfig, dump_config, load_config, resolve_path
-from helplessness.envs.gridworld import N_ACTIONS, GridWorld
+from helplessness.envs.legacy.gridworld import N_ACTIONS, GridWorld
 from helplessness.evaluation.offline_support import agent_path
 from helplessness.evaluation.rollout import evaluate
 from helplessness.interventions.swaps import CONDITIONS, swap_matrix

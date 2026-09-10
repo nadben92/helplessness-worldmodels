@@ -31,7 +31,7 @@ import numpy as np
 from helplessness.agents.collect import collect, uniform_policy
 from helplessness.agents.tabular import TabularModelBasedAgent
 from helplessness.config import OfflineSweepConfig, dump_config, load_config, resolve_path
-from helplessness.envs.gridworld import N_ACTIONS, GridWorld
+from helplessness.envs.legacy.gridworld import N_ACTIONS, GridWorld
 from helplessness.evaluation.offline_support import (
     OFFLINE_METRICS_FIELDNAMES,
     agent_metrics_row,

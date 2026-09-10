@@ -56,7 +56,7 @@ import numpy as np
 
 from helplessness.agents.tabular import TabularModelBasedAgent
 from helplessness.config import EvalV2Config, dump_config, load_config, resolve_path
-from helplessness.envs.gridworld import GridWorld
+from helplessness.envs.legacy.gridworld import GridWorld
 from helplessness.evaluation.offline_support import agent_path, behavioral_row
 from helplessness.evaluation.rollout import draw_start_states, evaluate
 from helplessness.evaluation.tiebreak import argmax_random_tie

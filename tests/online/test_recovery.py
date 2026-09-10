@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from helplessness.config import RecoveryConfig
-from helplessness.envs.gridworld import GridWorld
+from helplessness.envs.legacy.gridworld import GridWorld
 from online.agent import OnlineTabularAgent
 from online.loop import train_online_with_burnin
 from online.recovery import RecoveryTracker, run_condition, recovery_time

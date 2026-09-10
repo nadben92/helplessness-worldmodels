@@ -9,7 +9,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from helplessness.envs.gridworld import GridWorld
+from helplessness.envs.legacy.gridworld import GridWorld
 from helplessness.evaluation.rollout import evaluate
 from helplessness.planning.value_iteration import value_iteration
 from online.agent import OnlineTabularAgent

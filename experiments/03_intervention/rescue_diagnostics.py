@@ -22,7 +22,7 @@ import numpy as np
 
 from helplessness.agents.tabular import TabularModelBasedAgent
 from helplessness.config import RescueDiagnosticsConfig, dump_config, load_config, resolve_path
-from helplessness.envs.gridworld import GridWorld
+from helplessness.envs.legacy.gridworld import GridWorld
 from helplessness.evaluation.offline_support import agent_path
 from helplessness.interventions.controllability_dial import clip_diagnostics, controllability_dial
 from helplessness.planning.value_iteration import GAMMA, value_iteration

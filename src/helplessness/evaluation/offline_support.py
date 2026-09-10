@@ -18,7 +18,7 @@ import os
 
 import numpy as np
 
-from helplessness.envs.gridworld import N_ACTIONS, GridWorld
+from helplessness.envs.legacy.gridworld import N_ACTIONS, GridWorld
 from helplessness.evaluation.rollout import evaluate
 from helplessness.measures.behavioural import (
     cycle_stats,

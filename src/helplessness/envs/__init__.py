@@ -1,5 +1,5 @@
 from helplessness.envs.base import Env
-from helplessness.envs.gridworld import (
+from helplessness.envs.legacy.gridworld import (
     ACTION_NAMES,
     ACTIONS,
     ALLOWED_CHARS,

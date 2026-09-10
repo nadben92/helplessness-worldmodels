@@ -7,7 +7,7 @@ import pytest
 
 from helplessness.agents.collect import collect, uniform_policy
 from helplessness.agents.tabular import TabularModelBasedAgent
-from helplessness.envs.gridworld import GridWorld
+from helplessness.envs.legacy.gridworld import GridWorld
 from helplessness.planning.value_iteration import value_iteration
 
 

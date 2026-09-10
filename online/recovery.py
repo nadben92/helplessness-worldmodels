@@ -27,7 +27,7 @@ from collections import deque
 import numpy as np
 
 from helplessness.config import RecoveryConfig, dump_config, load_config, resolve_path
-from helplessness.envs.gridworld import GridWorld
+from helplessness.envs.legacy.gridworld import GridWorld
 from helplessness.evaluation.rollout import evaluate
 from helplessness.planning.value_iteration import value_iteration
 from online.agent import OnlineTabularAgent

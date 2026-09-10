@@ -8,7 +8,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from helplessness.envs.gridworld import N_ACTIONS, GridWorld
+from helplessness.envs.legacy.gridworld import N_ACTIONS, GridWorld
 
 
 def test_default_n_actions_is_unchanged():

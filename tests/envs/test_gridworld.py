@@ -1,11 +1,11 @@
-"""Consistency tests for helplessness.envs.gridworld."""
+"""Consistency tests for helplessness.envs.legacy.gridworld."""
 
 from __future__ import annotations
 
 import numpy as np
 import pytest
 
-from helplessness.envs.gridworld import N_ACTIONS, GridWorld
+from helplessness.envs.legacy.gridworld import N_ACTIONS, GridWorld
 
 
 # ----------------------------------------------------------------------
