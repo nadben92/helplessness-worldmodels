@@ -29,7 +29,7 @@ intervention, the manipulation) of the detection of control.
 
 ## Current status
 
-**Week 1 of 6.** The offline phase (Phase 1: training under tunable
+**Week 1 of 6 months.** The offline phase (Phase 1: training under tunable
 controllability; Phase 2: evaluation in the healthy environment; Phase 3:
 component swaps to localise the phenotype in the belief) is complete,
 including two causal interventions on the learned transition belief and

@@ -244,7 +244,7 @@ Also outstanding from this phase: robustness across layouts (the margin peak in 
 
 ## Appendix — reproducibility
 
-Code and results at *(repo link)*. Everything is regenerable from saved agents without retraining: `T̂` and `R̂` are serialised per (budget, p_train, seed).
+Code and results at https://github.com/nadben92/helplessness-worldmodels. Everything is regenerable from saved agents without retraining: `T̂` and `R̂` are serialised per (budget, p_train, seed).
 
 - p ∈ {0, 0.3, 0.5, 0.7, 0.85, 0.95, 1.0}, 10 seeds per condition, budgets 5k and 50k
 - Separate RNGs for environment dynamics, collection, and evaluation
