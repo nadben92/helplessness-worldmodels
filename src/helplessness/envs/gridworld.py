@@ -1,9 +1,10 @@
 """GridWorld with tunable controllability.
 
-The agent moves cell by cell (4 actions). At each step, with probability p,
-the executed action is drawn uniformly among the 4 directions, independently
-of the chosen action. The probability of executing the intended action is
-therefore (1 - p) + p/4, and p = 1 corresponds to a random walk where the
+The agent moves cell by cell, over 4 directions plus an optional 5th "stay"
+action (see n_actions below). At each step, with probability p, the executed
+action is drawn uniformly among the n_actions available, independently of the
+chosen action. The probability of executing the intended action is therefore
+(1 - p) + p/n_actions, and p = 1 corresponds to a random walk where the
 action has no effect at all.
 
 Gymnasium-compatible API (reset -> (obs, info), step -> (obs, r, terminated, truncated, info))
@@ -17,10 +18,13 @@ import numpy as np
 from helplessness.envs.base import Env
 from helplessness.metrics.controllability import controllability_from_tensor
 
-# actions: 0 = up, 1 = right, 2 = down, 3 = left
-ACTIONS = ((-1, 0), (0, 1), (1, 0), (0, -1))
-ACTION_NAMES = ("up", "right", "down", "left")
-N_ACTIONS = 4
+# actions: 0 = up, 1 = right, 2 = down, 3 = left, 4 = stay
+ACTIONS = ((-1, 0), (0, 1), (1, 0), (0, -1), (0, 0))
+ACTION_NAMES = ("up", "right", "down", "left", "stay")
+N_ACTIONS = 4  # default action count (4 directions); kept for backward
+# compatibility with existing call sites (offline experiments/tests) that
+# import this module constant instead of reading env.n_actions. Pass
+# n_actions=5 to GridWorld's constructor to enable the "stay" action.
 
 # Default layout. S = start, G = terminal reward, T = trap,
 # # = wall, . = empty cell.
@@ -58,6 +62,7 @@ class GridWorld(Env):
         terminal_traps: bool = True,
         obs_mode: str = "index",  # "index" | "onehot" | "grid"
         seed: int | None = None,
+        n_actions: int = N_ACTIONS,
     ):
         self.grid = np.array(
             [list(row) for row in layout.strip().splitlines()], dtype="<U1"
@@ -71,6 +76,10 @@ class GridWorld(Env):
                 f"unknown characters in layout: {sorted(unknown)} "
                 f"(allowed characters: {sorted(ALLOWED_CHARS)})"
             )
+
+        if n_actions not in (4, 5):
+            raise ValueError(f"n_actions must be 4 (no stay) or 5 (with stay), got {n_actions}")
+        self.n_actions = n_actions
 
         self.p = float(p)
         self.step_reward = step_reward
@@ -147,9 +156,10 @@ class GridWorld(Env):
         self._dynamics_rng = np.random.default_rng(seed)
 
     def _sample_effective_action(self, a: int) -> int:
-        """With probability p, the action is replaced by a uniform draw over the 4."""
+        """With probability p, the action is replaced by a uniform draw over
+        the n_actions available (4, or 5 if "stay" is enabled)."""
         if self._dynamics_rng.random() < self.p:
-            return int(self._dynamics_rng.integers(N_ACTIONS))
+            return int(self._dynamics_rng.integers(self.n_actions))
         return int(a)
 
     def reset(self, seed: int | None = None, start_state: int | None = None):
@@ -187,7 +197,7 @@ class GridWorld(Env):
         world ends at max_steps, a behavioural artefact indistinguishable
         from the helplessness phenotype under study.
         """
-        if not 0 <= int(action) < N_ACTIONS:
+        if not 0 <= int(action) < self.n_actions:
             raise ValueError(f"invalid action: {action}")
 
         a_eff = self._sample_effective_action(int(action))
@@ -223,15 +233,15 @@ class GridWorld(Env):
         revisitable cells).
         """
         p = self.p if p is None else float(p)
-        P = np.zeros((self.n_states, N_ACTIONS, self.n_states), dtype=np.float64)
+        P = np.zeros((self.n_states, self.n_actions, self.n_states), dtype=np.float64)
         for s in range(self.n_states):
             rc = self.s_to_rc(s)
             if self.walls[rc] or self.goals[rc] or (self.traps[rc] and self.terminal_traps):
                 P[s, :, s] = 1.0
                 continue
-            for a in range(N_ACTIONS):
-                for a_eff in range(N_ACTIONS):
-                    prob = p / N_ACTIONS + (1.0 - p) * (a_eff == a)
+            for a in range(self.n_actions):
+                for a_eff in range(self.n_actions):
+                    prob = p / self.n_actions + (1.0 - p) * (a_eff == a)
                     if prob > 0.0:
                         P[s, a, self.rc_to_s(self._move(rc, a_eff))] += prob
         return P
