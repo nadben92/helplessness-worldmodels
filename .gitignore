@@ -10,6 +10,7 @@ dist/
 # raw saved agent tensors -- regenerate with scripts/regenerate_agents.py
 # (see CONTRIBUTING.md, "what gets versioned")
 results/agents/**/*.npz
+results/online/snapshots/**/*.npz
 
 # matplotlib / notebook scratch output
 notebooks/.ipynb_checkpoints/
