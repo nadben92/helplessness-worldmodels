@@ -7,10 +7,12 @@ build/
 dist/
 .eggs/
 
-# raw saved agent tensors -- regenerate with scripts/regenerate_agents.py
-# (see CONTRIBUTING.md, "what gets versioned")
+# raw saved agent tensors and world-model checkpoints -- regenerable, not
+# versioned (see CONTRIBUTING.md, "what gets versioned")
 results/agents/**/*.npz
 results/online/snapshots/**/*.npz
+results/**/snapshots/**/*.npz
+results/**/checkpoints/**
 
 # matplotlib / notebook scratch output
 notebooks/.ipynb_checkpoints/
