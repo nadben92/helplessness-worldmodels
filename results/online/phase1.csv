@@ -1,0 +1,4 @@
+p_train,seed,n_steps,return_mean,success_rate,truncation_rate,oracle_return_mean,oracle_success_rate,git_commit
+0.95,0,50000,-100.0,0.0,1.0,92.0,1.0,8f17c3ee2acee8a7e91577d18e9e59b01be54c95
+0.95,1,50000,-100.0,0.0,1.0,92.0,1.0,8f17c3ee2acee8a7e91577d18e9e59b01be54c95
+0.95,2,50000,-100.0,0.0,1.0,92.0,1.0,8f17c3ee2acee8a7e91577d18e9e59b01be54c95

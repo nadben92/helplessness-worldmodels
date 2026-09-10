@@ -1,0 +1,16 @@
+n_steps: 50000
+p_train: 0.95
+epsilon: 0.1
+burn_in_steps: 2000
+alpha: 0.1
+gamma: 0.95
+replan_every: 500
+seed: 2
+n_actions: 5
+step_cost: 1.0
+trap_cost: 100.0
+goal_reward: 100.0
+use_eta_update: false
+eta: 0.1
+agents_dir: results/online/snapshots
+out: results/online/phase1.csv
