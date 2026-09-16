@@ -1,0 +1,91 @@
+Etape B report
+
+===============
+
+Delta at n=10 (interior region, exp env), per zone -- mean and per-seed values:
+
+  uncontrollable_deterministic: mean=0.0000, seeds=[0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000]
+  controllable_noisy: mean=0.4296, seeds=[0.1063, 0.3598, 0.8689, 0.2081, 0.5269, 0.4488, 0.6372, 0.3328, 0.8377, 0.4300, 0.4926, 0.3600, 0.3562, 0.1474, 0.2270, 0.6421, 0.6299, 0.2432, 0.3889, 0.3483]
+  controllable_deterministic: mean=0.0000, seeds=[0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000]
+  uncontrollable_noisy: mean=0.2765, seeds=[0.0000, 0.7375, 0.2621, 0.7091, 0.0000, 0.5054, 0.4850, 0.6446, 0.0000, 0.0000, 0.2507, 0.4780, 0.0000, 0.0000, 0.2511, 0.2454, 0.0000, 0.0000, 0.2511, 0.7104]
+
+Bias cancellation in b (zone=uncontrollable_noisy, n=10): Ihat bias = +0.1628 bits, its reference's (paired control) bias = +0.2023 bits, residual error in b (|observed - predicted|) = 0.0395 bits -- a cancellation factor of ~4.6x (average raw bias divided by the residual that survives in b). This is what figure 2 (b_vs_n.png) exists to establish: the paired design's shared support/conditional-entropy makes the two sides' estimation biases nearly equal, so most of each one's own bias cancels in the subtraction.
+
+Delta vs L1 reading (unit-free, no crossing-point claim -- see delta_and_l1_vs_n.png):
+
+Delta and L1 are in different units (Delta: value, up to ~50; L1: probability mass, bounded by 2) --
+any apparent 'crossing' between their raw curves is a function of R's scale and is not reported here.
+
+Both deterministic zones (uncontrollable_deterministic, controllable_deterministic) have
+Delta == 0 at EVERY tested budget including n=10, trivially: a deterministic transition is
+exact from a single sample, so the greedy policy is already correct from n=1. This is not a
+'decision needs no information' finding about the task -- it is an exactness property of
+deterministic dynamics, already covered by the n=1-exactness tolerance.
+
+controllable_noisy:
+    n=   10  Delta=0.4296  L1=0.2235
+    n=   30  Delta=0.3572  L1=0.1345
+    n=  100  Delta=0.0951  L1=0.0744
+    n=  300  Delta=0.0074  L1=0.0428
+    n= 1000  Delta=0.0000  L1=0.0230
+  Delta reaches 0 at n=1000, where L1 is still 0.0230 -- 1.0x its final (n=1000) value of 0.0230. Deciding well needs less information than modelling well: the policy is already correct while the model is still far from converged, stated as a ratio within L1's own units, not against Delta's.
+
+uncontrollable_noisy:
+    n=   10  Delta=0.2765  L1=0.2270
+    n=   30  Delta=0.0122  L1=0.1362
+    n=  100  Delta=0.0000  L1=0.0751
+    n=  300  Delta=0.0000  L1=0.0430
+    n= 1000  Delta=0.0000  L1=0.0233
+  Delta reaches 0 at n=100, where L1 is still 0.0751 -- 3.2x its final (n=1000) value of 0.0233. Deciding well needs less information than modelling well: the policy is already correct while the model is still far from converged, stated as a ratio within L1's own units, not against Delta's.
+
+
+HEADLINE DELIVERABLE
+
+---------------------
+
+HEADLINE: smallest detectable |b| where H0: b=0 is actually true (controllable zones,
+bootstrap null -- the unconditional, fresh-dataset precision estimate; see module docstring),
+mean p95 over seeds, reported per zone (never pooled/averaged across zones):
+
+zone                          n=10        n=30        n=100       n=300       n=1000      
+controllable_noisy            0.10167     0.07441     0.04460     0.02710     0.01545     
+controllable_deterministic    0.00000     0.00000     0.00000     0.00000     0.00000     
+
+  controllable_noisy: log-log slope = -0.415, 95% CI [-0.479, -0.352] (consistent with ordinary estimator sampling noise around a non-zero true value (~1/sqrt(n))).
+    -0.5 is OUTSIDE the 95% CI (fit is shallower than -0.5) -- with 20 seeds already averaged into each point, this looks like a real, resolvable difference, not sampling noise.
+    Refit excluding n=10 (leftmost point, most likely outside the 1/sqrt(n) asymptotic regime, and most heavily weighted in a log-log fit): slope = -0.449, 95% CI [-0.478, -0.419].
+    Still excludes -0.5 (moved from -0.415 toward -0.449, i.e. partially toward -0.5, but not far enough): dropping n=10 is a real but partial contributor, not the whole story.
+    Checked and RULED OUT: (a) resampling noise in the p95 estimate itself (n_permutations=500 vs 5000 at n_budget=1000, 10 vs 5 replicates each: mean p95 0.01847 vs 0.01830, well within the sampling sd of both estimates -- 0.00044 shrinking to 0.00014, matching the ~sqrt(10x) reduction pure sampling noise predicts, not a bias); (b) aggregation of heterogeneous per-state rates (if states individually scaled at -0.5 but with different amplitudes, averaging them would NOT itself produce a shallower exponent -- a linear combination of same-exponent power laws is exactly that same exponent, amplitude-averaged. Tested directly: per-state slopes, 5 seeds averaged, 25 states -- mean -0.407, median -0.411, range [-0.484,-0.349], NONE reaching -0.5, and the zone-aggregate slope computed the same way (-0.408) is essentially IDENTICAL to the per-state mean, not shallower than it. If aggregation were the cause the aggregate would be shallower than the typical state; it isn't -- the shallow scaling is a per-state property, not an averaging artifact. See permutation_null.py::per_state_i_under_bootstrap_batch and test_per_state_slopes_are_not_shallower_than_the_zone_aggregate.)
+    UNRESOLVED: three candidate causes checked (n=10 pre-asymptotic: partial contributor; permutation-count bias: ruled out; state-aggregation artifact: ruled out). The residual gap between the n=10-excluded slope and -0.5 has no confirmed explanation -- stated plainly rather than offered an untested mechanism.
+  controllable_deterministic: DEGENERATE (exact at every n) -- excluded from the scaling fit below, not pooled with live zones.
+
+Observed b (mean +/- across-seed sd) in these same TRUE-H0 zones -- should be small but non-zero:
+
+  controllable_noisy: n=10: +0.00498 (sd=0.05631), n=30: +0.01420 (sd=0.03298), n=100: -0.00418 (sd=0.01548), n=300: -0.00124 (sd=0.01078), n=1000: -0.00032 (sd=0.00642)
+  controllable_deterministic: n=10: +0.00000 (sd=0.00000), n=30: +0.00000 (sd=0.00000), n=100: +0.00000 (sd=0.00000), n=300: +0.00000 (sd=0.00000), n=1000: +0.00000 (sd=0.00000)
+
+
+
+Smallest detectable |b| in the UNCONTROLLABLE zones (bootstrap null), mean p95 over seeds --
+H0: b=0 is FALSE here (the real, predicted effect is large: -log2(5) or -1.6529 bits), so this
+null is inflated by that real effect and is the WRONG number to cite for detectability. Kept
+for reference, labelled as such -- see the headline table below instead.
+
+zone                          n=10        n=30        n=100       n=300       n=1000      
+uncontrollable_deterministic  2.32193     2.32193     2.32193     2.32193     2.32193     
+uncontrollable_noisy          1.77480     1.71134     1.67618     1.66730     1.65940     
+
+
+
+Recommended n for E2/E3 (fitted 1/sqrt(n) curve WITH a safety margin, not the raw crossing):
+
+Sanity check: the OLD (unmargined, 1-sigma) recommendation was n=30. Counted directly from the real 20-seed data, 3/20 seeds (15%) have |b_observed - b_predicted| >= 0.03 bits for uncontrollable_noisy AT n=30 -- a real, non-trivial failure rate, confirming the raw crossing point is not a reliable tolerance budget (the theoretical 50% at the EXACT crossing does not apply verbatim at n=30, which is already somewhat past it, but the qualitative point holds).
+
+  uncontrollable_deterministic across-seed sd of b: n=10: 0.0000, n=30: 0.0000, n=100: 0.0000, n=300: 0.0000, n=1000: 0.0000 -- fitted A (sd = A/sqrt(n)): 0.0000, crosses 0.03 bits with 2-sigma: n~=0, 3-sigma: n~=0
+  uncontrollable_noisy across-seed sd of b: n=10: 0.0301, n=30: 0.0222, n=100: 0.0101, n=300: 0.0078, n=1000: 0.0056 -- fitted A (sd = A/sqrt(n)): 0.1229, crosses 0.03 bits with 2-sigma: n~=67, 3-sigma: n~=151
+
+  2-sigma margin: fitted crossing ~67 -> smallest tested budget n=100 (actual out-of-tolerance rate there: 0/20 = 0%)
+  3-sigma margin: fitted crossing ~151 -> smallest tested budget n=300 (actual out-of-tolerance rate there: 0/20 = 0%)
+
+RECOMMENDED: n=100 for E2/E3, using a 2-sigma safety margin (the budget at which the fitted curve PLUS 2 standard deviations falls below the 0.03-bit tolerance, not the budget where the typical run merely equals it). The more conservative 3-sigma margin gives n=300; use that instead if E2/E3's own tolerance for occasional excursions is tighter than this recommendation assumes.
+This is a precision recommendation for the two zones with a known non-zero predicted effect. It should be revisited against the controllable-zone detectability headline above (measured where H0: b=0 is actually true) before treating it as final for E2/E3 -- detectability there is the complementary question this recommendation does not, by itself, answer.

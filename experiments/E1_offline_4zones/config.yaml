@@ -1,0 +1,20 @@
+# E1's own config block, composed on top of configs/zones/e1_4zones.yaml
+# via helplessness.config.compose(). Zone geometry + dynamics-type
+# assignment is versioned next to the experiment that uses it, per
+# CLAUDE.md's "Adding an experiment" step 3 (dump the fully-resolved
+# config, never the pre-composition pieces).
+experiment_id: E1_offline_4zones
+zones_block: zones/e1_4zones.yaml
+step_reward: -1.0
+
+# Arbitrated from the Etape A calibration sweep (artifacts/recommendation.txt)
+# -- frozen for Etape B onward. See docs/E1_offline_4zones.md for the
+# reasoning: direction is unambiguous (18/18 away_from_goal combinations
+# produce a real interior well, 0/18 toward_goal do); gamma=0.9 is where the
+# interior well is deepest (NW gap -16.72, vs -13.74 at 0.8 and -14.37 at
+# 0.95) while keeping interior V_exp clearly positive at R=50 (8.97, vs
+# -0.12 at gamma=0.8) and the accumulated step cost 1/(1-gamma)=10
+# meaningful against R (20% of R=50, vs a cosmetic 5% for gamma=0.8,R=100).
+direction: away_from_goal
+gamma: 0.9
+goal_reward: 50

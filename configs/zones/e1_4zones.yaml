@@ -1,0 +1,40 @@
+# E1's 4-zone, 12x12 torus geometry -- data only, no dynamics-type
+# assignment logic here (that lives in experiments/E1_offline_4zones/env.py,
+# since drift direction is a swept parameter in Etape A and cannot be a
+# frozen literal in this file). See docs/E1_offline_4zones.md.
+#
+# 12 = 1 + 5 + 1 + 5: corridor rows/cols at 0 and 6, four 5x5 blocks in the
+# remaining rows/cols {1..5} and {7..11}. Goal at the corridor intersection
+# (0, 0). Corner assignment is diagonal (see docs/E1_offline_4zones.md for
+# the reasoning): NW and SE hold the two uncontrollable zones (their exact
+# dynamics types/params are resolved in env.py, not here), NE and SW hold
+# the two already-controllable zones.
+grid_shape: [12, 12]
+goal: [0, 0]
+corridor:
+  rows: [0, 6]
+  cols: [0, 6]
+  appearance: corridor
+blocks:
+  nw:
+    rows: [1, 5]
+    cols: [1, 5]
+    dynamics_type: UncontrollableDeterministic
+    appearance: uncontrollable_deterministic
+  ne:
+    rows: [1, 5]
+    cols: [7, 11]
+    dynamics_type: ControllableNoisy
+    p: 0.125  # epsilon=0.1 in the spec's own parameterization -- see docs/E1_offline_4zones.md
+    appearance: controllable_noisy
+  sw:
+    rows: [7, 11]
+    cols: [1, 5]
+    dynamics_type: ControllableDeterministic
+    appearance: controllable_deterministic
+  se:
+    rows: [7, 11]
+    cols: [7, 11]
+    dynamics_type: UncontrollableNoisy
+    p: 0.125  # same epsilon=0.1 mapping as ne, preserved by derive_control's pairing
+    appearance: uncontrollable_noisy

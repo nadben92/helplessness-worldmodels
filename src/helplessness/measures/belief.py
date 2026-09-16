@@ -32,10 +32,20 @@ def coverage(visited_mask: np.ndarray, terminal: np.ndarray) -> float:
     return float(visited_mask[reachable].mean())
 
 
+def l1_error_per_pair(T_hat: np.ndarray, T_true: np.ndarray) -> np.ndarray:
+    """||T_hat(.|s,a) - T_true(.|s,a)||_1, one value per (s,a) pair --
+    the primitive model_error() below aggregates globally (visited/all),
+    and E1's per-zone L1(s,a) fidelity reporting aggregates by indexing
+    this same array with a zone mask, rather than a second, ad hoc
+    |T_hat - T_true| computation in experiment code."""
+    return np.abs(T_hat - T_true).sum(axis=2)  # (S, A)
+
+
 def model_error(
     T_hat: np.ndarray, T_true: np.ndarray, visited_mask: np.ndarray
 ) -> tuple[float, float]:
-    """Average total-variation distance per (s,a) pair.
+    """Average total-variation distance per (s,a) pair -- half of
+    l1_error_per_pair()'s L1 norm.
 
     Returns (tv_visited, tv_all): the first restricted to the (s,a) pairs
     actually observed (visited_mask, shape (S,A)), the second over all
@@ -43,7 +53,7 @@ def model_error(
     and the error is structurally large without being informative about the
     quality of learning.
     """
-    tv = 0.5 * np.abs(T_hat - T_true).sum(axis=2)  # (S, A)
+    tv = 0.5 * l1_error_per_pair(T_hat, T_true)  # (S, A)
     tv_all = float(tv.mean())
     tv_visited = float(tv[visited_mask].mean()) if visited_mask.any() else float("nan")
     return tv_visited, tv_all
