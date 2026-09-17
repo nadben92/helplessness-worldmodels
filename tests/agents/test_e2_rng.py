@@ -79,6 +79,46 @@ def test_spawn_checkpoint_streams_result_independent_of_visiting_order():
     assert forward_2000 == backward_2000
 
 
+def test_spawn_streams_defaults_reproduce_plain_seed_entropy():
+    """alpha/epsilon omitted must reproduce the exact pre-existing
+    behaviour (the pilot's own usage, unaffected by this extension)."""
+    a = rng_mod.spawn_streams(0)
+    b = rng_mod.spawn_streams(0, alpha=None, epsilon=None)
+    for name in rng_mod.STREAM_NAMES:
+        assert a[name].random(5).tolist() == b[name].random(5).tolist()
+
+
+def test_spawn_streams_different_conditions_same_seed_are_independent():
+    a = rng_mod.spawn_streams(0, alpha=0.5, epsilon=0.1)
+    b = rng_mod.spawn_streams(0, alpha=1.0, epsilon=0.1)
+    c = rng_mod.spawn_streams(0, alpha=1.0, epsilon=1.0)
+    for name in rng_mod.STREAM_NAMES:
+        va, vb, vc = a[name].random(5).tolist(), b[name].random(5).tolist(), c[name].random(5).tolist()
+        assert va != vb
+        assert vb != vc
+        assert va != vc
+
+
+def test_spawn_streams_same_condition_deterministic():
+    a = rng_mod.spawn_streams(3, alpha=5.0, epsilon=0.1)
+    b = rng_mod.spawn_streams(3, alpha=5.0, epsilon=0.1)
+    for name in rng_mod.STREAM_NAMES:
+        assert a[name].random(5).tolist() == b[name].random(5).tolist()
+
+
+def test_spawn_checkpoint_streams_different_conditions_same_seed_and_step_independent():
+    a = rng_mod.spawn_checkpoint_streams(0, 1000, alpha=0.5, epsilon=0.1)
+    b = rng_mod.spawn_checkpoint_streams(0, 1000, alpha=1.0, epsilon=0.1)
+    assert a["matched_control"].random(5).tolist() != b["matched_control"].random(5).tolist()
+    assert a["reference"].random(5).tolist() != b["reference"].random(5).tolist()
+
+
+def test_spawn_checkpoint_streams_condition_defaults_reproduce_plain_entropy():
+    a = rng_mod.spawn_checkpoint_streams(0, 1000)
+    b = rng_mod.spawn_checkpoint_streams(0, 1000, alpha=None, epsilon=None)
+    assert a["matched_control"].random(5).tolist() == b["matched_control"].random(5).tolist()
+
+
 def test_spawn_checkpoint_streams_independent_from_spawn_streams():
     """The checkpoint-level matched_control/reference streams must not be
     the same object (or in lockstep with) spawn_streams(seed)'s own

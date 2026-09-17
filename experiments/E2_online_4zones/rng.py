@@ -29,17 +29,47 @@ STREAM_NAMES = (
 )
 
 
-def spawn_streams(seed: int) -> dict[str, np.random.Generator]:
+def _condition_entropy(seed: int, alpha: float | None, epsilon: float | None, extra: int | None = None) -> list[int]:
+    """Builds a SeedSequence entropy list from (seed[, alpha, epsilon,
+    extra]) -- alpha/epsilon are scaled to integers (x100, exact for the
+    sweep's own values: 0.5, 1, 5, 0.1, 1.0) rather than hashed as
+    strings, since a string hash would need to be stable across
+    processes/platforms (Python's builtin hash() is NOT, under hash
+    randomisation) -- an explicit numeric encoding sidesteps that
+    entirely and stays directly meaningful/debuggable. Omitting
+    alpha/epsilon (both None) reproduces the plain [seed] entropy exactly
+    -- existing callers (the pilot, which never varies alpha/epsilon
+    across conditions) are unaffected."""
+    entropy = [int(seed)]
+    if alpha is not None:
+        entropy.append(int(round(alpha * 100)))
+    if epsilon is not None:
+        entropy.append(int(round(epsilon * 100)))
+    if extra is not None:
+        entropy.append(int(extra))
+    return entropy
+
+
+def spawn_streams(seed: int, alpha: float | None = None, epsilon: float | None = None) -> dict[str, np.random.Generator]:
     """One np.random.Generator per name in STREAM_NAMES, all independently
-    derived from the single integer `seed`. Deterministic: the same seed
-    always produces the same 6 streams, in the same order (spawn() is
-    itself deterministic given the parent SeedSequence)."""
-    seed_seq = np.random.SeedSequence(seed)
+    derived from `seed` (and, for the sweep, the (alpha, epsilon)
+    condition -- see _condition_entropy). Deterministic: the same
+    arguments always produce the same 6 streams, in the same order
+    (spawn() is itself deterministic given the parent SeedSequence).
+
+    alpha/epsilon (default None) let the SAME seed index be reused
+    across multiple (alpha, epsilon) conditions in the sweep without any
+    two conditions' streams correlating -- each condition gets an
+    entirely separate SeedSequence root, not the pilot's single stream
+    advanced differently per condition."""
+    seed_seq = np.random.SeedSequence(_condition_entropy(seed, alpha, epsilon))
     children = seed_seq.spawn(len(STREAM_NAMES))
     return {name: np.random.default_rng(child) for name, child in zip(STREAM_NAMES, children)}
 
 
-def spawn_checkpoint_streams(seed: int, checkpoint_step: int) -> dict[str, np.random.Generator]:
+def spawn_checkpoint_streams(
+    seed: int, checkpoint_step: int, alpha: float | None = None, epsilon: float | None = None,
+) -> dict[str, np.random.Generator]:
     """matched_control + reference streams for ONE checkpoint of ONE seed
     -- the matched-counts control and the matched-counts reference must
     be RECOMPUTED at every checkpoint from N(t), each checkpoint getting
@@ -59,9 +89,14 @@ def spawn_checkpoint_streams(seed: int, checkpoint_step: int) -> dict[str, np.ra
     computed inside a larger parallel sweep. Keying directly on
     checkpoint_step (not a position/index into some checkpoint list)
     means the checkpoint schedule itself can change without perturbing
-    already-computed checkpoints' streams.
+    already-computed checkpoints' streams. alpha/epsilon (default None,
+    reproducing the pilot's plain [seed, checkpoint_step] entropy exactly)
+    let the sweep key a checkpoint's matched/reference draws on the full
+    (seed, checkpoint, alpha, epsilon) condition, so two DIFFERENT
+    conditions sharing the same seed index and checkpoint step never
+    draw the same matched/reference realisation.
     """
-    seed_seq = np.random.SeedSequence([int(seed), int(checkpoint_step)])
+    seed_seq = np.random.SeedSequence(_condition_entropy(seed, alpha, epsilon, extra=int(checkpoint_step)))
     child_matched, child_reference = seed_seq.spawn(2)
     return {
         "matched_control": np.random.default_rng(child_matched),
