@@ -68,6 +68,7 @@ def twin_from_counts(
 
     T_hat = _t_hat_from_counts(N, alpha, support)
     I_hat = controllability_per_state(T_hat)
+    I_star = controllability_per_state(P_true)
 
     N_ref = collect_matched(P_ref, N_target, reference_rng)
     T_ref = _t_hat_from_counts(N_ref, alpha, support)
@@ -99,6 +100,7 @@ def twin_from_counts(
     return {
         "T_hat": T_hat,
         "I_hat": I_hat,
+        "I_star": I_star,
         "I_ref": I_ref,
         "b": b,
         "v_pi_believed": V_believed,
