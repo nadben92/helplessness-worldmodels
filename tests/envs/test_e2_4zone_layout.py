@@ -6,37 +6,18 @@ identity reproduces E1 exactly, drift is recomputed per target quadrant
 
 from __future__ import annotations
 
-import importlib.util
-from pathlib import Path
-
 import numpy as np
 import pytest
 
-E1_ENV_PATH = Path(__file__).resolve().parents[2] / "experiments" / "E1_offline_4zones" / "env.py"
-E2_ENV_PATH = Path(__file__).resolve().parents[2] / "experiments" / "E2_online_4zones" / "env.py"
-
-
-def _load_module_from_path(unique_name: str, path: Path):
-    """Loads a module by file path under a UNIQUE name, bypassing
-    sys.modules entirely -- both E1 and E2 have an experiment-local module
-    literally called "env.py" (never importable as bare "env" alongside
-    each other: sys.modules caches by name regardless of sys.path, so a
-    plain `sys.path.insert(...); import env` here would silently return
-    whichever "env" module some OTHER test file happened to import first
-    in this pytest session, e.g. tests/envs/test_e1_4zone_layout.py's own
-    permanent sys.path.insert -- exactly the failure this caused once."""
-    spec = importlib.util.spec_from_file_location(unique_name, path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+from _experiment_loader import load_experiment_module
 
 
 def _import_e1_env():
-    return _load_module_from_path("_e1_env_for_e2_layout_test", E1_ENV_PATH)
+    return load_experiment_module("E1_offline_4zones", "env.py", "_e1_env_for_e2_layout_test")
 
 
 def _import_e2_env():
-    return _load_module_from_path("_e2_env_for_e2_layout_test", E2_ENV_PATH)
+    return load_experiment_module("E2_online_4zones", "env.py", "_e2_env_for_e2_layout_test")
 
 
 from helplessness.config import load_yaml_block  # noqa: E402

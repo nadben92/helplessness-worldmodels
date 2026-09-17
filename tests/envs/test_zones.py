@@ -179,15 +179,10 @@ def test_geographic_support_mask_matches_e1s_reexport():
     """experiments/E1_offline_4zones/estimation.py::geographic_alpha_support
     must remain a byte-identical re-export of this function -- E1 is frozen,
     see CLAUDE.md."""
-    import sys
-    from pathlib import Path
+    from _experiment_loader import load_experiment_module
 
-    e1_dir = str(Path(__file__).resolve().parents[2] / "experiments" / "E1_offline_4zones")
-    sys.path.insert(0, e1_dir)
-    try:
-        from estimation import geographic_alpha_support
-    finally:
-        sys.path.remove(e1_dir)
+    e1_estimation = load_experiment_module("E1_offline_4zones", "estimation.py", "_e1_estimation_for_zones_test")
+    geographic_alpha_support = e1_estimation.geographic_alpha_support
 
     grid_shape = (12, 12)
     assert np.array_equal(geographic_alpha_support(grid_shape), geographic_support_mask(grid_shape))
