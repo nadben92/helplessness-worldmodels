@@ -67,3 +67,32 @@ def policy_evaluation(policy, P, R, terminal, gamma: float = GAMMA, tol=1e-10, m
             break
         V = V_new
     return V
+
+
+def policy_evaluation_stochastic(policy_probs, P, R, terminal, gamma: float = GAMMA, tol=1e-10, max_iter=10_000):
+    """V^policy under P, for a STOCHASTIC policy (S, A) row-stochastic --
+    the mixed-action generalisation of policy_evaluation() above, needed
+    wherever the greedy policy itself is a uniform mixture over tied
+    actions (see evaluation.tiebreak.uniform_tie_policy_probs) rather than
+    a single action per state.
+
+    policy_probs[s] : distribution over actions at s, sums to 1.
+    P[s,a,s'], R[s'] reward on arrival. Same terminal-state convention as
+    policy_evaluation(): V[terminal] = 0, R still contributes on arrival
+    at a terminal state. Reduces exactly to policy_evaluation() when
+    policy_probs is one-hot per row (see
+    tests/planning/test_value_iteration.py's regression pin), so this is
+    a strict generalisation, not a second implementation of the same
+    thing under a different name.
+    """
+    policy_probs = np.asarray(policy_probs, dtype=np.float64)
+    P_pi = np.einsum("sa,sap->sp", policy_probs, P)  # (S, S): mixed transition row per state
+    V = np.zeros(P.shape[0])
+    for _ in range(max_iter):
+        V_new = P_pi @ (R + gamma * V * (~terminal))
+        V_new[terminal] = 0.0
+        if np.max(np.abs(V_new - V)) < tol:
+            V = V_new
+            break
+        V = V_new
+    return V
