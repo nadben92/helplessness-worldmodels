@@ -185,6 +185,40 @@ def test_policy_evaluation_stochastic_matches_e1_delta_when_no_ties(tmp_path):
     )
 
 
+def test_value_iteration_warm_start_converges_to_the_same_v_in_fewer_iterations():
+    """Contraction-mapping fact: the converged V must be identical
+    regardless of V_init, but a warm start close to the true fixed point
+    must need fewer iterations than a cold (zero) start -- the property
+    E2's online agent depends on for a large-budget run to be tractable
+    (see agents.py::OnlineTabularAgentKnownReward.plan())."""
+    rng = np.random.default_rng(8)
+    n_states, n_actions = 10, 4
+    P = rng.dirichlet(np.ones(n_states), size=(n_states, n_actions))
+    R = rng.normal(scale=5.0, size=n_states)
+    terminal = np.zeros(n_states, dtype=bool)
+    terminal[0] = True
+    gamma = 0.9
+
+    V_cold, _, n_iter_cold = value_iteration(P, R, terminal, gamma=gamma, return_n_iter=True)
+    # start from something close to the converged fixed point (a slightly
+    # perturbed copy), as a warm start after a handful of new counts would be
+    V_warm, _, n_iter_warm = value_iteration(
+        P, R, terminal, gamma=gamma, V_init=V_cold + 1e-4, return_n_iter=True,
+    )
+    assert V_warm == pytest.approx(V_cold, abs=1e-8)
+    assert n_iter_warm < n_iter_cold
+
+
+def test_value_iteration_return_n_iter_false_by_default_keeps_two_tuple():
+    """Backward compatibility: every existing 2-tuple-unpacking call site
+    (all of E1's measurement/calibration code) must be unaffected."""
+    P = np.array([[[1.0]]])
+    R = np.array([5.0])
+    terminal = np.array([False])
+    result = value_iteration(P, R, terminal, gamma=0.9)
+    assert len(result) == 2
+
+
 def test_terminal_state_gets_reward_on_arrival_but_no_further_bootstrap():
     """Same convention as value_iteration(): R contributes on arrival at a
     terminal state, but V[terminal] itself is forced to 0 (no bootstrapping

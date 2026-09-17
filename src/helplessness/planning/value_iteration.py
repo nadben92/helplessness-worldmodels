@@ -12,18 +12,32 @@ import numpy as np
 GAMMA = 0.95
 
 
-def value_iteration(P, R, terminal, gamma: float = GAMMA, tol=1e-10, max_iter=10_000):
-    """P[s,a,s'], R[s'] reward on arrival. Returns (V, greedy policy).
+def value_iteration(P, R, terminal, gamma: float = GAMMA, tol=1e-10, max_iter=10_000, V_init=None, return_n_iter=False):
+    """P[s,a,s'], R[s'] reward on arrival. Returns (V, greedy policy), or
+    (V, greedy policy, n_iter) if return_n_iter=True (additive, default
+    False -- every existing 2-tuple-unpacking call site is unaffected).
 
     Solves the infinite-horizon discounted Bellman equation exactly, with no
     notion of max_steps -- terminal must contain only genuinely absorbing
     states (see step()), never a truncation. This is the reference that any
     agent bootstrapping on V(s') on truncated=True must reproduce, rather
     than treating truncation as a terminal state.
+
+    V_init: optional warm start (defaults to zeros, matching every
+    existing caller's behaviour exactly). Value iteration is a contraction
+    mapping with a unique fixed point, so the CONVERGED V is identical
+    regardless of V_init -- only the number of iterations to reach it
+    changes (see tests/planning/test_value_iteration.py's regression pin).
+    Needed by E2's online agent (docs/E2_online_4zones.md: "demarree
+    depuis le V precedent"), where replanning from zero every time would
+    make a large-budget run computationally impractical for no accuracy
+    benefit.
     """
     n_states = P.shape[0]
-    V = np.zeros(n_states)
-    for _ in range(max_iter):
+    V = np.zeros(n_states) if V_init is None else np.array(V_init, dtype=np.float64, copy=True)
+    V[terminal] = 0.0
+    n_iter = 0
+    for n_iter in range(1, max_iter + 1):
         Q = np.einsum("sap,p->sa", P, R + gamma * V * (~terminal))
         V_new = Q.max(axis=1)
         V_new[terminal] = 0.0
@@ -32,6 +46,8 @@ def value_iteration(P, R, terminal, gamma: float = GAMMA, tol=1e-10, max_iter=10
             break
         V = V_new
     Q = np.einsum("sap,p->sa", P, R + gamma * V * (~terminal))
+    if return_n_iter:
+        return V, Q.argmax(axis=1), n_iter
     return V, Q.argmax(axis=1)
 
 

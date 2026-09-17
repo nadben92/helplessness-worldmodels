@@ -57,6 +57,7 @@ class OnlineTabularAgentKnownReward(Agent):
         self.V: np.ndarray | None = None
         self.Q: np.ndarray | None = None
         self.policy: np.ndarray | None = None  # collection policy: argmax_random_tie, see plan()
+        self.last_plan_n_iter: int | None = None  # value_iteration's iteration count at the last plan() call
 
     def observe(self, s: int, a: int, r: float, s_next: int, terminated: bool) -> None:
         """Records the transition for T_hat's counts. r/terminated are
@@ -103,9 +104,21 @@ class OnlineTabularAgentKnownReward(Agent):
         This is the ACTING policy only -- Delta's evaluation policy uses
         a different convention (uniform_tie_policy_probs +
         policy_evaluation_stochastic, see measurement.py), computed
-        separately from this method's Q, never from self.policy."""
+        separately from this method's Q, never from self.policy.
+
+        Warm-started from self.V (the previous plan's converged V, per
+        spec: "demarree depuis le V precedent") -- self.V is None only on
+        the very first call (planning on the prior), in which case
+        value_iteration falls back to its own zero-init. Warm-starting is
+        exact, not an approximation: value iteration is a contraction
+        mapping with a unique fixed point regardless of V_init, so the
+        CONVERGED V is unaffected -- only n_iter (self.last_plan_n_iter,
+        kept for the pilot's reporting requirement) drops once T_hat has
+        only changed by a handful of counts since the last replan."""
         T = self.T_hat
-        self.V, _ = value_iteration(T, self.R_true, self.terminal_true, gamma=self.gamma)
+        self.V, _, self.last_plan_n_iter = value_iteration(
+            T, self.R_true, self.terminal_true, gamma=self.gamma, V_init=self.V, return_n_iter=True,
+        )
         self.Q = np.einsum("sap,p->sa", T, self.R_true + self.gamma * self.V * (~self.terminal_true))
         self.policy = argmax_random_tie(self.Q, tiebreak_rng)
 
