@@ -41,7 +41,23 @@ def load_experiment_module(experiment_dir_name: str, module_filename: str, uniqu
     used for another loaded module in this process (a plain descriptive
     string is enough -- collisions raise cleanly by overwriting
     sys.modules[unique_name], never by silently returning the wrong
-    module, as long as callers pick distinguishable names)."""
+    module, as long as callers pick distinguishable names).
+
+    Also isolates the loaded module's OWN internal bare sibling imports
+    (e.g. experiments/E2_online_4zones/pilot.py does `import env as
+    e2_env` at its top level, matching the same bare-import convention
+    every experiment's own orchestration files already use, e.g. E1's
+    run_etape_b.py). Without this, such an import inside the module being
+    exec'd here would hit whatever some UNRELATED test file already
+    cached under that bare name (e.g. tests/envs/test_e1_4zone_layout.py
+    permanently caches sys.modules["env"] = E1's env.py at its own
+    top-level sys.path.insert) instead of resolving fresh via sys.path --
+    exactly the collision this whole module exists to prevent, but
+    inside the loaded file's own body rather than the caller's. Every
+    filename actually present in exp_dir is evicted from sys.modules for
+    the duration of exec_module() and restored exactly afterward, so this
+    call has zero side effects on the rest of the pytest session.
+    """
     exp_dir = EXPERIMENTS_DIR / experiment_dir_name
     path = exp_dir / module_filename
     spec = importlib.util.spec_from_file_location(unique_name, path)
@@ -52,9 +68,16 @@ def load_experiment_module(experiment_dir_name: str, module_filename: str, uniqu
     inserted = exp_dir_str not in sys.path
     if inserted:
         sys.path.insert(0, exp_dir_str)
+
+    sibling_stems = {p.stem for p in exp_dir.glob("*.py")}
+    evicted = {stem: sys.modules.pop(stem) for stem in sibling_stems if stem in sys.modules}
+
     try:
         spec.loader.exec_module(module)
     finally:
         if inserted:
             sys.path.remove(exp_dir_str)
+        for stem in sibling_stems:
+            sys.modules.pop(stem, None)  # drop whatever THIS call cached under that bare name
+        sys.modules.update(evicted)  # restore exactly what was there before this call
     return module
