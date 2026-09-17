@@ -17,8 +17,7 @@ every file in it is fully written.
 
 from __future__ import annotations
 
-import shutil
-
+import numpy as np
 import pytest
 
 from _experiment_loader import load_experiment_module
@@ -54,6 +53,76 @@ def test_episode_level_arrays_are_aligned_and_exclude_the_trailing_incomplete_ep
     assert len(arrays["episode_start_state"]) == n
     assert len(arrays["episode_truncated"]) == n
     assert arrays["episode_lengths"].sum() <= 3000  # completed episodes only, budget=3000
+
+
+def test_full_n_table_saved_per_checkpoint(isolated_sweep):
+    """The full (S, A, S) counts table must be persisted at every
+    checkpoint -- not just the aggregated per_pair N -- so T_hat/the
+    jumeau/a different alpha can be recomputed later without
+    regenerating the run."""
+    result = sweep_mod.run_condition_seed(CONDITION, 0, budget=3000, checkpoints=(1500, 3000))
+    arrays = result["arrays"]
+    assert arrays["checkpoint_steps"].tolist() == [1500, 3000]
+    for t in (1500, 3000):
+        N_t = arrays[f"N_checkpoint_{t}"]
+        assert N_t.shape == (sweep_mod.N_STATES, sweep_mod.N_ACTIONS, sweep_mod.N_STATES)
+        assert int(N_t.sum()) == t
+
+
+def test_n_start_is_a_subset_of_n_at_every_checkpoint(isolated_sweep):
+    """N_start[s,a] (departure-only counts) must never exceed N[s,a]
+    (all counts) for any pair, at any checkpoint -- departures are a
+    subset of total visits by construction."""
+    result = sweep_mod.run_condition_seed(CONDITION, 0, budget=3000, checkpoints=(1500, 3000))
+    arrays = result["arrays"]
+    for t in (1500, 3000):
+        N_pair = arrays[f"N_checkpoint_{t}"].sum(axis=2)
+        N_start = arrays[f"N_start_checkpoint_{t}"]
+        assert N_start.shape == (sweep_mod.N_STATES, sweep_mod.N_ACTIONS)
+        assert (N_start <= N_pair).all()
+        assert N_start.sum() > 0  # some departures must have occurred by t=1500
+
+
+def test_full_n_table_and_n_start_survive_write_and_load(isolated_sweep):
+    run_name, _, status = sweep_mod.run_and_save(CONDITION, 0)
+    assert status == "done"
+    final_dir = sweep_mod._final_dir(run_name)
+    with sweep_mod.np.load(final_dir / "arrays.npz") as loaded:
+        checkpoint_steps = loaded["checkpoint_steps"].tolist()
+        assert len(checkpoint_steps) > 0
+        for t in checkpoint_steps:
+            assert f"N_checkpoint_{t}" in loaded
+            assert f"N_start_checkpoint_{t}" in loaded
+            N_pair = loaded[f"N_checkpoint_{t}"].sum(axis=2)
+            assert (loaded[f"N_start_checkpoint_{t}"] <= N_pair).all()
+
+
+def test_log_trajectory_does_not_perturb_the_run_and_reconstructs_n_checkpoints(isolated_sweep):
+    """log_trajectory=True (used only for on-demand regeneration, see
+    README.md, never by the real sweep) must not change the run's own
+    RNG consumption or results -- the SAME (condition, seed_index) run,
+    with vs without trajectory logging, must produce bit-identical
+    N_checkpoints. Reconstructing N from the logged trajectory must
+    match those N_checkpoints exactly."""
+    from _experiment_loader import load_experiment_module
+
+    traj_mod = load_experiment_module("E2_online_4zones", "trajectory.py", "_e2_trajectory_for_sweep_test")
+
+    result_plain = sweep_mod.run_condition_seed(CONDITION, 0, budget=3000, checkpoints=(1500, 3000))
+    result_logged = sweep_mod.run_condition_seed(CONDITION, 0, budget=3000, checkpoints=(1500, 3000), log_trajectory=True)
+
+    for t in (1500, 3000):
+        assert np.array_equal(
+            result_plain["arrays"][f"N_checkpoint_{t}"], result_logged["arrays"][f"N_checkpoint_{t}"]
+        )
+
+    traj = result_logged["trajectory"]
+    for t in (1500, 3000):
+        N_log = traj_mod.reconstruct_N_from_trajectory(
+            traj["t"], traj["s"], traj["a"], traj["s_next"], up_to_t=t,
+            n_states=sweep_mod.N_STATES, n_actions=sweep_mod.N_ACTIONS,
+        )
+        assert np.array_equal(N_log.astype(np.int32), result_plain["arrays"][f"N_checkpoint_{t}"])
 
 
 def test_run_and_save_creates_the_final_directory_on_success(isolated_sweep):

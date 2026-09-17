@@ -75,12 +75,28 @@ RESULTS_ROOT = REPO_ROOT / "results"
 EXPERIMENT_ID = "E2_online_4zones_sweep"
 
 
-def run_condition_seed(condition: dict, seed_index: int, budget: int = BUDGET, checkpoints: tuple[int, ...] = CHECKPOINTS) -> dict:
+def run_condition_seed(
+    condition: dict, seed_index: int, budget: int = BUDGET, checkpoints: tuple[int, ...] = CHECKPOINTS,
+    log_trajectory: bool = False,
+) -> dict:
     """One (condition, seed) job: online training + full measurement
     chain (online + matched) at every checkpoint. Self-contained -- takes
     only (condition, seed_index), builds everything else from scratch, so
     it can run in any process, in any order, and a lone rerun reproduces
-    the exact same artifacts as inside the parallel pool."""
+    the exact same artifacts as inside the parallel pool.
+
+    log_trajectory=True (off by default -- the real sweep never sets it,
+    see README.md's "regenerating a full trajectory" section) additionally
+    builds and returns the full step-level (t, s, a, r, s_next, terminated,
+    truncated) record, exactly like pilot.py's own trajectory logging.
+    Kept in THIS function (not a separate duplicated setup) so the
+    trajectory-logged run is built from the identical env/agent/RNG-stream
+    construction the real sweep run used -- no risk of the two drifting
+    apart. Since every RNG stream is a pure function of
+    (seed_index, alpha, epsilon[, checkpoint]) (rng.py), calling this with
+    log_trajectory=True for a (condition, seed_index) already in the
+    sweep reproduces that exact run's trajectory bit-for-bit.
+    """
     alpha, epsilon, cond_key = condition["alpha"], condition["epsilon"], condition["key"]
     rotation = e2_env.rotation_for_seed_index(seed_index, SEEDS_PER_ROTATION)
     assignment = e2_env.quadrant_assignment_for_rotation(rotation)
@@ -104,12 +120,27 @@ def run_condition_seed(condition: dict, seed_index: int, budget: int = BUDGET, c
 
     checkpoint_set = set(checkpoints)
     N_checkpoints: dict[int, np.ndarray] = {}
+    N_start_checkpoints: dict[int, np.ndarray] = {}  # departure-only counts, snapshotted at each checkpoint
     episode_log: list[tuple[int, bool, bool]] = []  # (t, terminated, truncated)
     episode_start_states: list[int] = []  # one entry per episode, in order -- NOT a full step-level trajectory
     plan_n_iters: list[int] = []
     departure_counts = np.zeros(N_STATES, dtype=np.int64)
     departure_pair_counts = np.zeros((N_STATES, N_ACTIONS), dtype=np.int64)
     is_departure = [True]  # the very first transition of the run is a departure
+
+    traj = None
+    if log_trajectory:
+        traj = {
+            "t": np.zeros(budget, dtype=np.int32),
+            "episode_id": np.zeros(budget, dtype=np.int32),
+            "s": np.zeros(budget, dtype=np.uint16),
+            "a": np.zeros(budget, dtype=np.uint8),
+            "r": np.zeros(budget, dtype=np.float32),
+            "s_next": np.zeros(budget, dtype=np.uint16),
+            "terminated": np.zeros(budget, dtype=bool),
+            "truncated": np.zeros(budget, dtype=bool),
+        }
+        traj_episode_counter = [0]
 
     real_plan = ag.plan
 
@@ -127,8 +158,28 @@ def run_condition_seed(condition: dict, seed_index: int, budget: int = BUDGET, c
         is_departure[0] = terminated or truncated
         if terminated or truncated:
             episode_log.append((t, bool(terminated), bool(truncated)))
+        if traj is not None:
+            idx = t - 1
+            traj["t"][idx] = t
+            traj["episode_id"][idx] = traj_episode_counter[0]
+            traj["s"][idx] = s
+            traj["a"][idx] = a
+            traj["r"][idx] = r
+            traj["s_next"][idx] = s_next
+            traj["terminated"][idx] = terminated
+            traj["truncated"][idx] = truncated
+            if terminated or truncated:
+                traj_episode_counter[0] += 1
         if t in checkpoint_set:
+            # Full (S, A, S) table, captured directly off the live agent
+            # -- never recomputed -- so downstream analysis (T_hat, the
+            # jumeau, the twin pipeline) can be rerun on this exact data
+            # without regenerating the run. N_start is the SAME shape but
+            # restricted to (s, a) pairs where s was an episode's
+            # DEPARTURE state -- checks that the visitation floor comes
+            # from departures, not exploitation traffic through a state.
             N_checkpoints[t] = ag.N.copy()
+            N_start_checkpoints[t] = departure_pair_counts.copy()
 
     t0 = time.time()
     e2_loop.train_online_e2(
@@ -194,14 +245,28 @@ def run_condition_seed(condition: dict, seed_index: int, budget: int = BUDGET, c
     # n_episodes (episodes actually COMPLETED, with a real length) so it
     # aligns 1:1 with episode_lengths/episode_truncated_flags.
     episode_truncated_flags = np.array([tr for _, _, tr in episode_log], dtype=bool)
+    checkpoint_steps_sorted = sorted(N_checkpoints)
     arrays = {
         "departure_counts": departure_counts,
         "departure_pair_fraction": departure_fraction,
         "episode_lengths": np.array(lengths, dtype=np.int64),
         "episode_start_state": np.array(episode_start_states[:n_episodes], dtype=np.int64),
         "episode_truncated": episode_truncated_flags,
+        "checkpoint_steps": np.array(checkpoint_steps_sorted, dtype=np.int64),
+        # Full (S, A, S) counts table per checkpoint, int32 (a single
+        # deterministic pair's count can exceed uint16's 65535 ceiling at
+        # budget=1e6 -- int32 is comfortably safe) -- lets any downstream
+        # analysis (T_hat, the jumeau, a different alpha's twin) be rerun
+        # on this exact data without regenerating the run. N_start is the
+        # (S, A) subset of those same counts restricted to transitions
+        # that were an episode's DEPARTURE step, snapshotted the same way.
+        **{f"N_checkpoint_{t}": N_checkpoints[t].astype(np.int32) for t in checkpoint_steps_sorted},
+        **{f"N_start_checkpoint_{t}": N_start_checkpoints[t] for t in checkpoint_steps_sorted},
     }
-    return {"per_state_rows": per_state_rows, "per_pair_rows": per_pair_rows, "summary": summary, "arrays": arrays}
+    result = {"per_state_rows": per_state_rows, "per_pair_rows": per_pair_rows, "summary": summary, "arrays": arrays}
+    if traj is not None:
+        result["trajectory"] = traj
+    return result
 
 
 def _run_name(condition: dict, seed_index: int) -> str:
