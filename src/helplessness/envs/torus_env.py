@@ -20,9 +20,16 @@ No terminal states by default (terminal_mask() is all-False): the zone
 family is about controllability, not about goal/trap cells the way the
 legacy layout was, and reward is not yet a decided structure (see
 rewards/base.py) -- max_steps is a truncation-only stopping condition
-until a concrete task defines what "terminal" means here. If a future
-reward design introduces absorbing states, this is the method to extend
-(a pluggable TerminationFn analogous to RewardFn, not a hidden default).
+until a concrete task defines what "terminal" means here.
+
+terminal_states (optional constructor argument): the extension point the
+above anticipated -- a caller-supplied set of absorbing states, off by
+default so every pre-existing call site (E1's build_env(), and every test
+that constructs a TorusZonedEnv without it) keeps producing terminal_mask()
+all-False exactly as before. E2 onward passes the goal state here (paired
+with rewards.base.GoalReward) to get real terminated=True on arrival,
+distinct from truncated -- never inferred from reward_fn, which stays a
+generic callable with no special-cased return value.
 """
 
 from __future__ import annotations
@@ -47,6 +54,7 @@ class TorusZonedEnv(Env):
         max_steps: int = 100,
         seed: int | None = None,
         theme_seed: int = 0,
+        terminal_states: np.ndarray | list[int] | None = None,
     ):
         self.zone_layout = zone_layout
         self.grid_shape = zone_layout.grid_shape
@@ -59,6 +67,10 @@ class TorusZonedEnv(Env):
         self.start_position = (int(start_position[0]) % self.n_rows, int(start_position[1]) % self.n_cols)
         self.max_steps = max_steps
         self.theme_seed = theme_seed
+
+        self._terminal_mask = np.zeros(self.n_states, dtype=bool)
+        if terminal_states is not None:
+            self._terminal_mask[np.asarray(terminal_states, dtype=int)] = True
 
         self.seed_dynamics(seed)
         self.reset()
@@ -101,7 +113,7 @@ class TorusZonedEnv(Env):
         self.t += 1
 
         reward = float(self.reward_fn(s_next))
-        terminated = False  # see module docstring: no terminal states yet
+        terminated = bool(self._terminal_mask[s_next])  # see module docstring: terminal_states
         truncated = self.t >= self.max_steps
 
         info = {"state": s_next}
@@ -123,7 +135,7 @@ class TorusZonedEnv(Env):
         return _reward_vector(self.reward_fn, self.n_states)
 
     def terminal_mask(self) -> np.ndarray:
-        return np.zeros(self.n_states, dtype=bool)
+        return self._terminal_mask.copy()
 
     def controllability(self) -> float:
         return controllability_from_tensor(self.transition_tensor(), self.terminal_mask())
