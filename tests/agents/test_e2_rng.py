@@ -40,3 +40,50 @@ def test_spawn_streams_different_seeds_give_different_streams():
     b = rng_mod.spawn_streams(2)
     for name in rng_mod.STREAM_NAMES:
         assert a[name].random(5).tolist() != b[name].random(5).tolist()
+
+
+def test_spawn_checkpoint_streams_deterministic_given_seed_and_checkpoint():
+    a = rng_mod.spawn_checkpoint_streams(0, 1000)
+    b = rng_mod.spawn_checkpoint_streams(0, 1000)
+    assert a["matched_control"].random(5).tolist() == b["matched_control"].random(5).tolist()
+    assert a["reference"].random(5).tolist() == b["reference"].random(5).tolist()
+
+
+def test_spawn_checkpoint_streams_independent_across_checkpoints():
+    a = rng_mod.spawn_checkpoint_streams(0, 1000)
+    b = rng_mod.spawn_checkpoint_streams(0, 2000)
+    assert a["matched_control"].random(5).tolist() != b["matched_control"].random(5).tolist()
+    assert a["reference"].random(5).tolist() != b["reference"].random(5).tolist()
+
+
+def test_spawn_checkpoint_streams_independent_across_seeds():
+    a = rng_mod.spawn_checkpoint_streams(0, 1000)
+    b = rng_mod.spawn_checkpoint_streams(1, 1000)
+    assert a["matched_control"].random(5).tolist() != b["matched_control"].random(5).tolist()
+
+
+def test_spawn_checkpoint_streams_result_independent_of_visiting_order():
+    """The property the sweep's parallelisation depends on: computing
+    checkpoint 2000's streams does not require having first computed
+    checkpoint 1000's (unlike advancing one shared per-seed stream
+    checkpoint-by-checkpoint would) -- checking each checkpoint in
+    isolation, in either order, gives the same result."""
+    forward_1000 = rng_mod.spawn_checkpoint_streams(5, 1000)["matched_control"].random(3).tolist()
+    forward_2000 = rng_mod.spawn_checkpoint_streams(5, 2000)["matched_control"].random(3).tolist()
+
+    # recompute in the opposite order, fresh
+    backward_2000 = rng_mod.spawn_checkpoint_streams(5, 2000)["matched_control"].random(3).tolist()
+    backward_1000 = rng_mod.spawn_checkpoint_streams(5, 1000)["matched_control"].random(3).tolist()
+
+    assert forward_1000 == backward_1000
+    assert forward_2000 == backward_2000
+
+
+def test_spawn_checkpoint_streams_independent_from_spawn_streams():
+    """The checkpoint-level matched_control/reference streams must not be
+    the same object (or in lockstep with) spawn_streams(seed)'s own
+    matched_control/reference -- distinct entropy root entirely."""
+    main = rng_mod.spawn_streams(0)
+    checkpoint = rng_mod.spawn_checkpoint_streams(0, 1000)
+    assert main["matched_control"].random(5).tolist() != checkpoint["matched_control"].random(5).tolist()
+    assert main["reference"].random(5).tolist() != checkpoint["reference"].random(5).tolist()

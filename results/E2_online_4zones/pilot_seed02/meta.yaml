@@ -1,0 +1,11 @@
+seed: 2
+git_commit: 6dd53d68e15cf8093145f0bbc4e0ee2178074c7f
+started_at: '2026-09-17T12:42:42Z'
+status: done
+updated_at: '2026-09-17T12:42:42Z'
+alpha: 1.0
+epsilon: 0.1
+H: 36
+gamma: 0.9
+budget: 1000000
+elapsed_seconds: 295.5933828353882

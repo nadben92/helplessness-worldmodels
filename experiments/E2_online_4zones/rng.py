@@ -37,3 +37,33 @@ def spawn_streams(seed: int) -> dict[str, np.random.Generator]:
     seed_seq = np.random.SeedSequence(seed)
     children = seed_seq.spawn(len(STREAM_NAMES))
     return {name: np.random.default_rng(child) for name, child in zip(STREAM_NAMES, children)}
+
+
+def spawn_checkpoint_streams(seed: int, checkpoint_step: int) -> dict[str, np.random.Generator]:
+    """matched_control + reference streams for ONE checkpoint of ONE seed
+    -- the matched-counts control and the matched-counts reference must
+    be RECOMPUTED at every checkpoint from N(t), each checkpoint getting
+    its own independent draw (spec: "tirages independants par checkpoint
+    derives par spawn").
+
+    Entropy is the (seed, checkpoint_step) PAIR itself, not
+    spawn_streams(seed)'s own matched_control/reference streams advanced
+    checkpoint-by-checkpoint -- advancing a single shared stream would
+    make checkpoint k's draw depend on every checkpoint before it having
+    been visited in order, which breaks two things this design needs:
+    (1) a checkpoint's result must be independent of which OTHER
+    checkpoints were computed and in what order (needed to parallelise
+    the sweep per (seed, checkpoint) without the result depending on
+    execution order), and (2) rerunning a single seed alone must
+    reproduce byte-identical per-checkpoint artifacts to the same seed
+    computed inside a larger parallel sweep. Keying directly on
+    checkpoint_step (not a position/index into some checkpoint list)
+    means the checkpoint schedule itself can change without perturbing
+    already-computed checkpoints' streams.
+    """
+    seed_seq = np.random.SeedSequence([int(seed), int(checkpoint_step)])
+    child_matched, child_reference = seed_seq.spawn(2)
+    return {
+        "matched_control": np.random.default_rng(child_matched),
+        "reference": np.random.default_rng(child_reference),
+    }
