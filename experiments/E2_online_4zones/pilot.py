@@ -84,8 +84,10 @@ def run_one_seed(seed: int, budget: int = BUDGET, checkpoints: tuple[int, ...] =
     N_checkpoints: dict[int, np.ndarray] = {}
     V_checkpoints: dict[int, np.ndarray] = {}
     policy_checkpoints: dict[int, np.ndarray] = {}
+    last_replan_checkpoints: dict[int, int] = {}
     episode_log: list[tuple[int, bool]] = []  # (t_at_episode_end, success)
     plan_n_iters: list[int] = []
+    last_replan_step = [0]  # step of the most recently COMPLETED replan (0 = still the prior)
 
     # Full trajectory log, pre-allocated compact arrays (never a Python
     # list of tuples at this scale -- 1e6 rows).
@@ -125,9 +127,22 @@ def run_one_seed(seed: int, budget: int = BUDGET, checkpoints: tuple[int, ...] =
         if t in checkpoint_set:
             # Captured directly off the live agent object -- never
             # recomputed (see module docstring: non-circularity).
+            # last_replan_checkpoints[t] records the step of the replan
+            # that PRODUCED the V/policy just captured -- read BEFORE any
+            # replan this same transition might trigger below (agent.plan()
+            # runs in loop.py only after on_transition returns, so
+            # agent.V/policy here still reflect the PREVIOUS replan; V is
+            # legitimately stale relative to N_checkpoints[t] whenever
+            # last_replan_checkpoints[t] < t -- see docs/E2_online_4zones.md
+            # on why that is expected, not a bug, and how the jumeau
+            # comparison must account for it).
             N_checkpoints[t] = agent.N.copy()
             V_checkpoints[t] = agent.V.copy()
             policy_checkpoints[t] = agent.policy.copy()
+            last_replan_checkpoints[t] = last_replan_step[0]
+
+        if terminated or truncated:
+            last_replan_step[0] = t  # the replan about to happen (in loop.py, right after this call returns) will use data up to and including t
 
     t0 = time.time()
     e2_loop.train_online_e2(
@@ -145,6 +160,7 @@ def run_one_seed(seed: int, budget: int = BUDGET, checkpoints: tuple[int, ...] =
         "N_checkpoints": N_checkpoints,
         "V_checkpoints": V_checkpoints,
         "policy_checkpoints": policy_checkpoints,
+        "last_replan_checkpoints": last_replan_checkpoints,
         "episode_log": episode_log,
         "plan_n_iters": np.array(plan_n_iters, dtype=np.int64),
         "elapsed_seconds": elapsed,
@@ -168,6 +184,7 @@ def save_seed_results(result: dict, run_dir: Path) -> None:
         **{f"N_checkpoint_{t}": result["N_checkpoints"][t] for t in checkpoints_sorted},
         **{f"V_checkpoint_{t}": result["V_checkpoints"][t] for t in checkpoints_sorted},
         **{f"policy_checkpoint_{t}": result["policy_checkpoints"][t] for t in checkpoints_sorted},
+        last_replan_checkpoint=np.array([result["last_replan_checkpoints"][t] for t in checkpoints_sorted]),
         episode_t=np.array([t for t, _ in result["episode_log"]]),
         episode_success=np.array([s for _, s in result["episode_log"]]),
         plan_n_iters=result["plan_n_iters"],

@@ -47,6 +47,22 @@ def test_checkpoint_result_independent_of_total_budget():
     assert short_run["episode_log"] == [e for e in long_run["episode_log"] if e[0] <= 1000]
 
 
+def test_last_replan_checkpoint_matches_the_previous_episode_boundary():
+    """last_replan_checkpoints[t] must be the step of the LAST COMPLETED
+    replan strictly before t -- never t itself, even if t happens to be
+    an episode boundary (that replan hasn't happened yet at the moment
+    the checkpoint snapshot is taken, see pilot.py's on_transition
+    ordering)."""
+    budget = 800
+    result = pilot_mod.run_one_seed(seed=6, budget=budget, checkpoints=tuple(range(50, budget + 1, 50)))
+    episode_boundaries = sorted(t for t, _ in result["episode_log"])
+    for t, last_replan in result["last_replan_checkpoints"].items():
+        prior_boundaries = [b for b in episode_boundaries if b < t]
+        expected = max(prior_boundaries) if prior_boundaries else 0
+        assert last_replan == expected, f"t={t}: last_replan={last_replan}, expected={expected}"
+        assert last_replan < t or last_replan == 0
+
+
 def test_checkpoint_captures_live_agent_state_not_recomputed():
     """N_checkpoints/V_checkpoints/policy_checkpoints must be READ OFF
     the live agent object, not recomputed -- checked indirectly: at a
