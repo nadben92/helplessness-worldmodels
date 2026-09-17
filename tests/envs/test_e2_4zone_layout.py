@@ -26,6 +26,7 @@ from helplessness.planning.value_iteration import value_iteration  # noqa: E402
 
 CFG = load_yaml_block("zones/e1_4zones.yaml")
 DIRECTION = "away_from_goal"
+GRID_SHAPE = tuple(CFG["grid_shape"])
 
 
 def test_identity_quadrant_assignment_matches_rotation_zero():
@@ -182,6 +183,25 @@ def test_v_star_multiset_per_zone_type_is_identical_across_rotations(category):
         assert multisets[rotation] == pytest.approx(multisets[0], abs=1e-6), (
             f"category={category}: V* multiset at rotation {rotation} differs from rotation 0"
         )
+
+
+@pytest.mark.parametrize("rotation", [0, 1, 2, 3])
+def test_distance_to_goal_distribution_identical_across_the_four_blocks(rotation):
+    """spec: 'les distributions de distance au but sont identiques depuis
+    les quatre zones (symetrie du layout), pour chaque affectation
+    contre-balancee.' Purely geometric (envs.zones.assert_zone_symmetry
+    checks masks only, never dynamics), so this holds by construction
+    for every quadrant_assignment -- block MASKS never move, only which
+    dynamics type occupies them -- confirmed directly rather than assumed."""
+    from helplessness.envs.zones import assert_zone_symmetry
+
+    e2_env = _import_e2_env()
+    assignment = e2_env.quadrant_assignment_for_rotation(rotation)
+    layout = e2_env.build_layout(CFG, DIRECTION, quadrant_assignment=assignment)
+    goal_rc = tuple(CFG["goal"])
+    blocks = [z for z in layout.zones if z.appearance.category != "corridor"]
+    assert len(blocks) == 4
+    assert_zone_symmetry(blocks, GRID_SHAPE, goal_rc)  # must not raise
 
 
 @pytest.mark.parametrize("rotation", [0, 1, 2, 3])
