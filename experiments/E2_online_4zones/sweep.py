@@ -105,6 +105,7 @@ def run_condition_seed(condition: dict, seed_index: int, budget: int = BUDGET, c
     checkpoint_set = set(checkpoints)
     N_checkpoints: dict[int, np.ndarray] = {}
     episode_log: list[tuple[int, bool, bool]] = []  # (t, terminated, truncated)
+    episode_start_states: list[int] = []  # one entry per episode, in order -- NOT a full step-level trajectory
     plan_n_iters: list[int] = []
     departure_counts = np.zeros(N_STATES, dtype=np.int64)
     departure_pair_counts = np.zeros((N_STATES, N_ACTIONS), dtype=np.int64)
@@ -122,6 +123,7 @@ def run_condition_seed(condition: dict, seed_index: int, budget: int = BUDGET, c
         if is_departure[0]:
             departure_counts[s] += 1
             departure_pair_counts[s, a] += 1
+            episode_start_states.append(s)
         is_departure[0] = terminated or truncated
         if terminated or truncated:
             episode_log.append((t, bool(terminated), bool(truncated)))
@@ -187,10 +189,17 @@ def run_condition_seed(condition: dict, seed_index: int, budget: int = BUDGET, c
         "plan_n_iter_mean": float(np.mean(plan_n_iters)) if plan_n_iters else float("nan"),
         "plan_n_iter_max": int(max(plan_n_iters)) if plan_n_iters else 0,
     }
+    # episode_start_states has one entry per episode STARTED, including a
+    # trailing incomplete one if the run ends mid-episode -- truncate to
+    # n_episodes (episodes actually COMPLETED, with a real length) so it
+    # aligns 1:1 with episode_lengths/episode_truncated_flags.
+    episode_truncated_flags = np.array([tr for _, _, tr in episode_log], dtype=bool)
     arrays = {
         "departure_counts": departure_counts,
         "departure_pair_fraction": departure_fraction,
         "episode_lengths": np.array(lengths, dtype=np.int64),
+        "episode_start_state": np.array(episode_start_states[:n_episodes], dtype=np.int64),
+        "episode_truncated": episode_truncated_flags,
     }
     return {"per_state_rows": per_state_rows, "per_pair_rows": per_pair_rows, "summary": summary, "arrays": arrays}
 

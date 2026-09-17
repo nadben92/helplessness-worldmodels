@@ -41,6 +41,21 @@ def isolated_sweep(tmp_path, monkeypatch):
 CONDITION = {"alpha": 1.0, "epsilon": 0.1, "key": "unit_test_condition"}
 
 
+def test_episode_level_arrays_are_aligned_and_exclude_the_trailing_incomplete_episode(isolated_sweep):
+    """episode_lengths/episode_start_state/episode_truncated must have
+    the same length (one entry per COMPLETED episode) -- a run that ends
+    mid-episode has one more entry in the internal episode_start_states
+    list (the started-but-never-finished final episode) than in
+    episode_log, which must be dropped, not misaligned against lengths."""
+    result = sweep_mod.run_condition_seed(CONDITION, 0, budget=3000, checkpoints=(1500, 3000))
+    arrays = result["arrays"]
+    n = result["summary"]["n_episodes"]
+    assert len(arrays["episode_lengths"]) == n
+    assert len(arrays["episode_start_state"]) == n
+    assert len(arrays["episode_truncated"]) == n
+    assert arrays["episode_lengths"].sum() <= 3000  # completed episodes only, budget=3000
+
+
 def test_run_and_save_creates_the_final_directory_on_success(isolated_sweep):
     run_name, elapsed, status = sweep_mod.run_and_save(CONDITION, 0)
     assert status == "done"
