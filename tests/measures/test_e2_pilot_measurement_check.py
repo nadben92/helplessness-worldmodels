@@ -58,10 +58,11 @@ def test_jumeau_matches_fresh_agent_on_synthetic_counts():
     assert result["v_matches"]
 
 
-def test_jumeau_matches_live_agent_when_n_log_and_n_agent_and_v_agent_all_consistent():
-    """The non-circular check must PASS when N_log, N_agent, and V_agent
-    are genuinely consistent (V_agent freshly converged on the same N) --
-    the "everything lines up" case."""
+def test_jumeau_matches_live_agent_when_everything_is_at_the_same_horizon():
+    """The non-circular check must PASS when N_log (at both checkpoint
+    and replan horizon), N_agent, and V_agent are all genuinely
+    consistent (V_agent freshly converged on that same N) -- the
+    "everything lines up, no staleness" case."""
     N = _synthetic_N(seed=4, n_per_pair=100)
     from helplessness.planning.value_iteration import value_iteration
     from helplessness.agents.tabular import TabularModelBasedAgent
@@ -72,24 +73,23 @@ def test_jumeau_matches_live_agent_when_n_log_and_n_agent_and_v_agent_all_consis
     Q_agent = np.einsum("sap,p->sa", tmp_agent.T_hat, pmc_mod._R_TRUE + pmc_mod.GAMMA * V_agent * (~pmc_mod._TERMINAL))
     policy_agent = Q_agent.argmax(axis=1)
 
-    result = pmc_mod.jumeau_matches_live_agent(N_log=N, N_agent=N, V_agent=V_agent, policy_agent=policy_agent)
+    result = pmc_mod.jumeau_matches_live_agent(
+        N_log_at_checkpoint=N, N_agent=N, N_log_at_replan=N, V_agent=V_agent, policy_agent=policy_agent,
+    )
     assert result["n_log_matches_n_agent"]
-    assert result["t_hat_matches"]
+    assert result["t_hat_at_checkpoint_matches"]
     assert result["v_gap"] < 1e-6
     assert result["greedy_action_mismatches"] == []
 
 
-def test_jumeau_matches_live_agent_detects_genuine_staleness():
-    """The check must actually HAVE TEETH: if V_agent was computed under
-    a DIFFERENT N than N_agent (standing in for staleness -- exactly what
-    a mid-episode checkpoint produces in the real pilot: V computed under
-    an older T_hat than the N captured a moment later), the v_gap must be
-    large, not silently pass. This is precisely what the old (circular)
-    jumeau_matches_fresh_agent could never detect, since it always
-    recomputes both sides from the SAME N. Uses two independently-drawn
-    N realisations (not a single-pair tweak, which can land on a
-    non-argmax action and change nothing -- see the first version of
-    this test) to guarantee a real T_hat, hence V, divergence."""
+def test_jumeau_matches_live_agent_detects_a_genuine_replan_horizon_mismatch():
+    """The check must actually HAVE TEETH: if V_agent/policy_agent were
+    computed under a DIFFERENT N than what N_log_at_replan claims (a
+    real bug, not staleness this time -- staleness is now handled
+    correctly by using the replan horizon, see the next test), the
+    v_gap must be large, not silently pass. This is precisely what the
+    old (circular) jumeau_matches_fresh_agent could never detect, since
+    it always recomputed both sides from the SAME N."""
     from helplessness.planning.value_iteration import value_iteration
     from helplessness.agents.tabular import TabularModelBasedAgent
 
@@ -102,7 +102,43 @@ def test_jumeau_matches_live_agent_detects_genuine_staleness():
     Q_stale = np.einsum("sap,p->sa", stale_agent.T_hat, pmc_mod._R_TRUE + pmc_mod.GAMMA * V_agent_stale * (~pmc_mod._TERMINAL))
     policy_stale = Q_stale.argmax(axis=1)
 
-    result = pmc_mod.jumeau_matches_live_agent(N_log=N_agent, N_agent=N_agent, V_agent=V_agent_stale, policy_agent=policy_stale)
-    assert result["n_log_matches_n_agent"]  # N_log and N_agent still agree (both are N_agent)
-    assert result["t_hat_matches"]  # both built from N_agent
-    assert result["v_gap"] > 1e-3  # V_agent doesn't match N_agent's own T_hat -- must show up
+    # N_log_at_replan is WRONGLY claimed to be N_agent (not N_different,
+    # which is what V_agent_stale/policy_stale actually came from) --
+    # the mismatch must be caught.
+    result = pmc_mod.jumeau_matches_live_agent(
+        N_log_at_checkpoint=N_agent, N_agent=N_agent, N_log_at_replan=N_agent,
+        V_agent=V_agent_stale, policy_agent=policy_stale,
+    )
+    assert result["n_log_matches_n_agent"]  # checkpoint-horizon N's still agree
+    assert result["t_hat_at_checkpoint_matches"]  # checkpoint-horizon T_hat's still agree
+    assert result["v_gap"] > 1e-3  # but V_agent doesn't match the (wrongly-claimed) replan-horizon T_hat
+
+
+def test_jumeau_matches_live_agent_passes_when_replan_horizon_correctly_narrower_than_checkpoint():
+    """The actual fix, reproduced at unit-test scale: a checkpoint's N
+    (N_agent, N_log_at_checkpoint) can include MORE data than the
+    replan that produced V_agent/policy_agent (N_log_at_replan, a
+    STRICT SUBSET of the checkpoint's transitions) -- once V_agent is
+    compared against the jumeau built from THAT narrower N, the check
+    must pass, exactly as it did on the real pilot data after this
+    correction (48/48 checkpoints)."""
+    from helplessness.planning.value_iteration import value_iteration
+    from helplessness.agents.tabular import TabularModelBasedAgent
+
+    N_at_replan = _synthetic_N(seed=6, n_per_pair=30)  # the data horizon V_agent actually saw
+    N_at_checkpoint = N_at_replan.copy()
+    N_at_checkpoint[2, 1, 5] += 7  # a handful of transitions AFTER the last replan, before the checkpoint
+
+    replan_agent = TabularModelBasedAgent(N_STATES, N_ACTIONS, alpha=pmc_mod.ALPHA, alpha_support=pmc_mod._SUPPORT)
+    replan_agent.N = N_at_replan
+    V_agent, _ = value_iteration(replan_agent.T_hat, pmc_mod._R_TRUE, pmc_mod._TERMINAL, gamma=pmc_mod.GAMMA)
+    Q_agent = np.einsum("sap,p->sa", replan_agent.T_hat, pmc_mod._R_TRUE + pmc_mod.GAMMA * V_agent * (~pmc_mod._TERMINAL))
+    policy_agent = Q_agent.argmax(axis=1)
+
+    result = pmc_mod.jumeau_matches_live_agent(
+        N_log_at_checkpoint=N_at_checkpoint, N_agent=N_at_checkpoint,
+        N_log_at_replan=N_at_replan, V_agent=V_agent, policy_agent=policy_agent,
+    )
+    assert result["n_log_matches_n_agent"]
+    assert result["v_gap"] < 1e-6
+    assert result["greedy_action_mismatches"] == []

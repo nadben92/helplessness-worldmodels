@@ -127,7 +127,8 @@ def jumeau_matches_fresh_agent(N_final: np.ndarray, alpha: float = ALPHA) -> dic
 
 
 def jumeau_matches_live_agent(
-    N_log: np.ndarray, N_agent: np.ndarray, V_agent: np.ndarray, policy_agent: np.ndarray,
+    N_log_at_checkpoint: np.ndarray, N_agent: np.ndarray,
+    N_log_at_replan: np.ndarray, V_agent: np.ndarray, policy_agent: np.ndarray,
     alpha: float = ALPHA, gamma: float = GAMMA, tol: float = 1e-10,
 ) -> dict:
     """The NON-CIRCULAR jumeau check: N_log comes from an independent
@@ -137,35 +138,51 @@ def jumeau_matches_live_agent(
     pilot.py), never recomputed here -- two genuinely separate sources
     compared against each other, not two computations of the same thing.
 
-    Returns 4 checks:
-    - n_log_matches_n_agent: the trajectory reconstruction agrees with
-      the agent's own internal counting, bit-for-bit.
-    - t_hat_matches: T_hat built from N_log (via a fresh
-      TabularModelBasedAgent, NOT via twin.py, to keep this comparison
-      independent of twin.py's own code path too) equals T_hat built
-      from N_agent the same way, bit-for-bit -- trivially implied by the
-      first check given T_hat is a pure function of N, but exercised
-      explicitly anyway.
+    V_agent/policy_agent were produced by the agent's LAST COMPLETED
+    replan (episode-boundary-only, per loop.py -- unchanged), which used
+    data only up to last_replan_checkpoints[t], NOT up to the checkpoint
+    step t itself (a checkpoint can fall mid-episode, after the last
+    replan but before the next one). Comparing them to a jumeau built
+    from N reconstructed up to t was comparing two different data
+    horizons and is not a fair test -- this was flagged and corrected
+    (see docs/E2_online_4zones.md and the pilot's own last_replan_checkpoints
+    tracking): N_log_at_replan must be reconstructed up to that SAME
+    last_replan step, not the checkpoint step, for the V/greedy-action
+    comparison. N_log_at_checkpoint (reconstructed up to t) is still used
+    for the first check below, which is checkpoint-based by nature.
+
+    Returns 5 checks:
+    - n_log_matches_n_agent: the trajectory reconstruction (up to the
+      checkpoint step) agrees with the agent's own internal counting at
+      that checkpoint, bit-for-bit -- the one comparison that IS
+      checkpoint-horizon by nature (N_agent at a checkpoint always
+      reflects every transition up to and including it).
+    - t_hat_at_checkpoint_matches: T_hat built from N_log_at_checkpoint
+      equals T_hat built from N_agent, via two INDEPENDENT
+      TabularModelBasedAgent constructions -- trivially implied by
+      n_log_matches_n_agent (T_hat is a pure function of N) but exercised
+      explicitly anyway, and unaffected by the replan-horizon correction
+      below (both sides are checkpoint-horizon here).
     - v_gap: max|V_jumeau - V_agent|, where V_jumeau is a COLD
-      value_iteration on T_hat(N_log) and V_agent is the LIVE agent's own
-      V, captured as-is (may be stale relative to N_agent if the
-      checkpoint falls mid-episode -- replanning happens only at episode
-      boundaries, see loop.py -- not masked by a forced extra replan).
+      value_iteration on T_hat built from N_log_at_replan -- the REPLAN
+      horizon, the SAME data horizon V_agent was actually computed from
+      (not the checkpoint horizon, per the docstring's main point above).
     - greedy_action_mismatches: states where policy_agent[s] is NOT among
       the jumeau's own tied-optimal actions (tolerance-based tie check on
-      Q_jumeau) -- ties are excluded from the comparison, per spec.
+      Q_jumeau, built from the same replan-horizon T_hat/V_jumeau) --
+      ties are excluded from the comparison, per spec.
     """
-    n_log_matches_n_agent = bool(np.array_equal(N_log, N_agent))
+    n_log_matches_n_agent = bool(np.array_equal(N_log_at_checkpoint, N_agent))
 
-    agent_from_log = TabularModelBasedAgent(N_STATES, N_ACTIONS, alpha=alpha, alpha_support=_SUPPORT)
-    agent_from_log.N = N_log
-    T_hat_jumeau = agent_from_log.T_hat
-
+    agent_from_log_at_checkpoint = TabularModelBasedAgent(N_STATES, N_ACTIONS, alpha=alpha, alpha_support=_SUPPORT)
+    agent_from_log_at_checkpoint.N = N_log_at_checkpoint
     agent_from_agent_n = TabularModelBasedAgent(N_STATES, N_ACTIONS, alpha=alpha, alpha_support=_SUPPORT)
     agent_from_agent_n.N = N_agent
-    T_hat_from_agent_n = agent_from_agent_n.T_hat
+    t_hat_at_checkpoint_matches = bool(np.array_equal(agent_from_log_at_checkpoint.T_hat, agent_from_agent_n.T_hat))
 
-    t_hat_matches = bool(np.array_equal(T_hat_jumeau, T_hat_from_agent_n))
+    agent_from_log_at_replan = TabularModelBasedAgent(N_STATES, N_ACTIONS, alpha=alpha, alpha_support=_SUPPORT)
+    agent_from_log_at_replan.N = N_log_at_replan
+    T_hat_jumeau = agent_from_log_at_replan.T_hat
 
     V_jumeau, _ = value_iteration(T_hat_jumeau, _R_TRUE, _TERMINAL, gamma=gamma, tol=tol)
     v_gap = float(np.max(np.abs(V_jumeau - V_agent)))
@@ -177,7 +194,7 @@ def jumeau_matches_live_agent(
 
     return {
         "n_log_matches_n_agent": n_log_matches_n_agent,
-        "t_hat_matches": t_hat_matches,
+        "t_hat_at_checkpoint_matches": t_hat_at_checkpoint_matches,
         "v_gap": v_gap,
         "greedy_action_mismatches": mismatches,
     }
