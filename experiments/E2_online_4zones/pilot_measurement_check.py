@@ -14,9 +14,11 @@ import matched_control as matched_mod
 import rng as rng_mod
 import twin as twin_mod
 
+from helplessness.agents.tabular import TabularModelBasedAgent
 from helplessness.config import load_yaml_block
 from helplessness.envs.zones import geographic_support_mask
 from helplessness.measures.controllability import controllability_per_state
+from helplessness.planning.value_iteration import value_iteration
 
 CFG = load_yaml_block("zones/e1_4zones.yaml")
 DIRECTION = "away_from_goal"
@@ -96,17 +98,15 @@ def measure_checkpoint(N_online: np.ndarray, seed: int, checkpoint_step: int) ->
 
 
 def jumeau_matches_fresh_agent(N_final: np.ndarray, alpha: float = ALPHA) -> dict:
-    """Verification 3's 3rd bullet: jumeau(N) == the agent's own internal
-    belief. Since value_iteration's converged V is warm-start-independent
-    (a contraction mapping's unique fixed point -- see
-    tests/planning/test_value_iteration.py::test_value_iteration_warm_start_converges_to_the_same_v_in_fewer_iterations),
-    a FRESH agent planning cold on this exact final N must converge to
-    the mathematically identical V as the original (warm-started) online
-    run did -- checked directly against an independently constructed
-    OnlineTabularAgentKnownReward, not merely against twin.py's own
-    internals (twin.py already reuses that code path, see twin.py's
-    _t_hat_from_counts -- this check is against a SEPARATE, freshly
-    constructed agent object)."""
+    """CIRCULAR, kept only as a basic sanity check on twin.py's own
+    internal consistency -- both sides of this comparison are computed
+    by the SAME code (a freshly constructed agent planning on N, vs
+    twin.py doing the same thing internally), so this can never catch a
+    real discrepancy between the twin and an agent that actually
+    accumulated its counts step by step during collection. See
+    jumeau_matches_live_agent() below for the real, non-circular check
+    (compares against the LIVE agent's own N/V/policy as captured during
+    the actual online run, never recomputed)."""
     fresh_agent = e2_agent.OnlineTabularAgentKnownReward(
         n_states=N_STATES, n_actions=N_ACTIONS, R_true=_R_TRUE, terminal_true=_TERMINAL,
         support=_SUPPORT, alpha=alpha, gamma=GAMMA,
@@ -123,4 +123,61 @@ def jumeau_matches_fresh_agent(N_final: np.ndarray, alpha: float = ALPHA) -> dic
         "t_hat_matches": bool(np.array_equal(fresh_agent.T_hat, twin_result["T_hat"])),
         "i_hat_matches": bool(np.allclose(controllability_per_state(fresh_agent.T_hat), twin_result["I_hat"])),
         "v_matches": bool(np.allclose(fresh_agent.V, twin_result["v_pi_believed"])),
+    }
+
+
+def jumeau_matches_live_agent(
+    N_log: np.ndarray, N_agent: np.ndarray, V_agent: np.ndarray, policy_agent: np.ndarray,
+    alpha: float = ALPHA, gamma: float = GAMMA, tol: float = 1e-10,
+) -> dict:
+    """The NON-CIRCULAR jumeau check: N_log comes from an independent
+    reconstruction of the raw trajectory log (trajectory.py), never from
+    the agent's own counting; N_agent/V_agent/policy_agent are captured
+    DIRECTLY off the live agent object during the real online run (see
+    pilot.py), never recomputed here -- two genuinely separate sources
+    compared against each other, not two computations of the same thing.
+
+    Returns 4 checks:
+    - n_log_matches_n_agent: the trajectory reconstruction agrees with
+      the agent's own internal counting, bit-for-bit.
+    - t_hat_matches: T_hat built from N_log (via a fresh
+      TabularModelBasedAgent, NOT via twin.py, to keep this comparison
+      independent of twin.py's own code path too) equals T_hat built
+      from N_agent the same way, bit-for-bit -- trivially implied by the
+      first check given T_hat is a pure function of N, but exercised
+      explicitly anyway.
+    - v_gap: max|V_jumeau - V_agent|, where V_jumeau is a COLD
+      value_iteration on T_hat(N_log) and V_agent is the LIVE agent's own
+      V, captured as-is (may be stale relative to N_agent if the
+      checkpoint falls mid-episode -- replanning happens only at episode
+      boundaries, see loop.py -- not masked by a forced extra replan).
+    - greedy_action_mismatches: states where policy_agent[s] is NOT among
+      the jumeau's own tied-optimal actions (tolerance-based tie check on
+      Q_jumeau) -- ties are excluded from the comparison, per spec.
+    """
+    n_log_matches_n_agent = bool(np.array_equal(N_log, N_agent))
+
+    agent_from_log = TabularModelBasedAgent(N_STATES, N_ACTIONS, alpha=alpha, alpha_support=_SUPPORT)
+    agent_from_log.N = N_log
+    T_hat_jumeau = agent_from_log.T_hat
+
+    agent_from_agent_n = TabularModelBasedAgent(N_STATES, N_ACTIONS, alpha=alpha, alpha_support=_SUPPORT)
+    agent_from_agent_n.N = N_agent
+    T_hat_from_agent_n = agent_from_agent_n.T_hat
+
+    t_hat_matches = bool(np.array_equal(T_hat_jumeau, T_hat_from_agent_n))
+
+    V_jumeau, _ = value_iteration(T_hat_jumeau, _R_TRUE, _TERMINAL, gamma=gamma, tol=tol)
+    v_gap = float(np.max(np.abs(V_jumeau - V_agent)))
+
+    Q_jumeau = np.einsum("sap,p->sa", T_hat_jumeau, _R_TRUE + gamma * V_jumeau * (~_TERMINAL))
+    row_max = Q_jumeau.max(axis=1, keepdims=True)
+    tied = Q_jumeau >= (row_max - 1e-6)
+    mismatches = [int(s) for s in range(N_STATES) if not tied[s, policy_agent[s]]]
+
+    return {
+        "n_log_matches_n_agent": n_log_matches_n_agent,
+        "t_hat_matches": t_hat_matches,
+        "v_gap": v_gap,
+        "greedy_action_mismatches": mismatches,
     }

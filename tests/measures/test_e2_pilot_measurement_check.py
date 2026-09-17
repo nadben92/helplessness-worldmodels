@@ -56,3 +56,53 @@ def test_jumeau_matches_fresh_agent_on_synthetic_counts():
     assert result["t_hat_matches"]
     assert result["i_hat_matches"]
     assert result["v_matches"]
+
+
+def test_jumeau_matches_live_agent_when_n_log_and_n_agent_and_v_agent_all_consistent():
+    """The non-circular check must PASS when N_log, N_agent, and V_agent
+    are genuinely consistent (V_agent freshly converged on the same N) --
+    the "everything lines up" case."""
+    N = _synthetic_N(seed=4, n_per_pair=100)
+    from helplessness.planning.value_iteration import value_iteration
+    from helplessness.agents.tabular import TabularModelBasedAgent
+
+    tmp_agent = TabularModelBasedAgent(N_STATES, N_ACTIONS, alpha=pmc_mod.ALPHA, alpha_support=pmc_mod._SUPPORT)
+    tmp_agent.N = N
+    V_agent, _ = value_iteration(tmp_agent.T_hat, pmc_mod._R_TRUE, pmc_mod._TERMINAL, gamma=pmc_mod.GAMMA)
+    Q_agent = np.einsum("sap,p->sa", tmp_agent.T_hat, pmc_mod._R_TRUE + pmc_mod.GAMMA * V_agent * (~pmc_mod._TERMINAL))
+    policy_agent = Q_agent.argmax(axis=1)
+
+    result = pmc_mod.jumeau_matches_live_agent(N_log=N, N_agent=N, V_agent=V_agent, policy_agent=policy_agent)
+    assert result["n_log_matches_n_agent"]
+    assert result["t_hat_matches"]
+    assert result["v_gap"] < 1e-6
+    assert result["greedy_action_mismatches"] == []
+
+
+def test_jumeau_matches_live_agent_detects_genuine_staleness():
+    """The check must actually HAVE TEETH: if V_agent was computed under
+    a DIFFERENT N than N_agent (standing in for staleness -- exactly what
+    a mid-episode checkpoint produces in the real pilot: V computed under
+    an older T_hat than the N captured a moment later), the v_gap must be
+    large, not silently pass. This is precisely what the old (circular)
+    jumeau_matches_fresh_agent could never detect, since it always
+    recomputes both sides from the SAME N. Uses two independently-drawn
+    N realisations (not a single-pair tweak, which can land on a
+    non-argmax action and change nothing -- see the first version of
+    this test) to guarantee a real T_hat, hence V, divergence."""
+    from helplessness.planning.value_iteration import value_iteration
+    from helplessness.agents.tabular import TabularModelBasedAgent
+
+    N_agent = _synthetic_N(seed=5, n_per_pair=50)
+    N_different = _synthetic_N(seed=99, n_per_pair=50)  # a wholly independent realisation
+
+    stale_agent = TabularModelBasedAgent(N_STATES, N_ACTIONS, alpha=pmc_mod.ALPHA, alpha_support=pmc_mod._SUPPORT)
+    stale_agent.N = N_different
+    V_agent_stale, _ = value_iteration(stale_agent.T_hat, pmc_mod._R_TRUE, pmc_mod._TERMINAL, gamma=pmc_mod.GAMMA)
+    Q_stale = np.einsum("sap,p->sa", stale_agent.T_hat, pmc_mod._R_TRUE + pmc_mod.GAMMA * V_agent_stale * (~pmc_mod._TERMINAL))
+    policy_stale = Q_stale.argmax(axis=1)
+
+    result = pmc_mod.jumeau_matches_live_agent(N_log=N_agent, N_agent=N_agent, V_agent=V_agent_stale, policy_agent=policy_stale)
+    assert result["n_log_matches_n_agent"]  # N_log and N_agent still agree (both are N_agent)
+    assert result["t_hat_matches"]  # both built from N_agent
+    assert result["v_gap"] > 1e-3  # V_agent doesn't match N_agent's own T_hat -- must show up
