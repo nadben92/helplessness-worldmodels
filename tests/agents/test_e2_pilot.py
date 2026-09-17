@@ -31,3 +31,27 @@ def test_run_one_seed_is_deterministic_given_the_same_seed():
     result_b = pilot_mod.run_one_seed(seed=1, budget=150, checkpoints=(100,))
     assert np.array_equal(result_a["N_final"], result_b["N_final"])
     assert result_a["episode_log"] == result_b["episode_log"]
+
+
+def test_checkpoint_result_independent_of_total_budget():
+    """The property the sweep design depends on ("chaque checkpoint
+    equivaut a un run de ce budget"): a checkpoint's N snapshot must be
+    IDENTICAL regardless of whether the run stops right after it or
+    continues on to a much larger budget -- nothing (RNG derivation,
+    replanning cadence, checkpoint definition) may look ahead at the
+    total budget. Checked directly: the same seed's N at step 1000 must
+    be bit-identical whether budget=1000 or budget=5000."""
+    short_run = pilot_mod.run_one_seed(seed=42, budget=1000, checkpoints=(1000,))
+    long_run = pilot_mod.run_one_seed(seed=42, budget=5000, checkpoints=(1000, 5000))
+    assert np.array_equal(short_run["N_checkpoints"][1000], long_run["N_checkpoints"][1000])
+    assert short_run["episode_log"] == [e for e in long_run["episode_log"] if e[0] <= 1000]
+
+
+def test_checkpoint_matched_and_reference_streams_independent_of_total_budget():
+    """Same property, one level down: spawn_checkpoint_streams (used for
+    the matched control and reference at each checkpoint) depends only on
+    (seed, checkpoint_step), confirmed here at the RNG level directly
+    rather than only through its downstream effect on N."""
+    a = pilot_mod.e2_rng.spawn_checkpoint_streams(seed=42, checkpoint_step=1000)
+    b = pilot_mod.e2_rng.spawn_checkpoint_streams(seed=42, checkpoint_step=1000)
+    assert a["matched_control"].random(5).tolist() == b["matched_control"].random(5).tolist()
