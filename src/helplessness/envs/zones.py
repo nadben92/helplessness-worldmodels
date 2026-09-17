@@ -19,7 +19,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from helplessness.envs.appearance.base import AppearanceSpec
-from helplessness.envs.dynamics.base import DynamicsSpec
+from helplessness.envs.dynamics.base import ACTIONS, DynamicsSpec
 from helplessness.envs.dynamics.controllable import ControllableDeterministic
 
 
@@ -291,3 +291,31 @@ def interior_mask(zone: Zone, grid_shape: tuple[int, int]) -> np.ndarray:
         if all(mask[nr, nc] for nr, nc in neighbours):
             interior[r, c] = True
     return interior
+
+
+# ---------------------------------------------------------------------
+# geographic support (promoted from E1's estimation.py::geographic_alpha_support
+# -- pure grid geometry, independent of any dynamics type or Env instance,
+# so it belongs here rather than duplicated per-experiment. E1 re-exports
+# this unchanged; E2's online agent uses it directly as its Dirichlet
+# alpha_support, replacing the GridWorld-specific p=1.0 trick
+# (OnlineTabularAgent.geographic_support(env), which assumes a single
+# global noise parameter that no longer exists per-zone).
+# ---------------------------------------------------------------------
+
+
+def geographic_support_mask(grid_shape: tuple[int, int]) -> np.ndarray:
+    """(S, S) bool: state s's geographically reachable successors -- its 5
+    torus neighbours (up/down/left/right/stay), the same 5 cells every
+    DynamicsSpec in envs.dynamics ever puts mass on regardless of type.
+    Purely geometric: no dynamics, no Env instance, no simulation."""
+    n_rows, n_cols = grid_shape
+    n_states = n_rows * n_cols
+    support = np.zeros((n_states, n_states), dtype=bool)
+    for r in range(n_rows):
+        for c in range(n_cols):
+            s = r * n_cols + c
+            for dr, dc in ACTIONS:
+                s2 = ((r + dr) % n_rows) * n_cols + ((c + dc) % n_cols)
+                support[s, s2] = True
+    return support

@@ -19,7 +19,7 @@ from __future__ import annotations
 import numpy as np
 
 from helplessness.agents.tabular import TabularModelBasedAgent
-from helplessness.envs.dynamics.base import ACTIONS, N_ACTIONS
+from helplessness.envs.zones import geographic_support_mask
 
 
 def spawn_exp_ctrl_rngs(seed: int) -> tuple[np.random.Generator, np.random.Generator]:
@@ -73,17 +73,13 @@ def geographic_alpha_support(grid_shape: tuple[int, int]) -> np.ndarray:
     Used only for the Dirichlet robustness variant's alpha_support
     (spec 3.3: "restreint aux 5 successeurs geographiquement atteignables"),
     never the default estimator.
+
+    Promoted to helplessness.envs.zones.geographic_support_mask (pure grid
+    geometry, no dynamics/Env dependency, reused by E2's online agent) --
+    this is a thin re-export kept for E1's own import path and byte-for-byte
+    behaviour, never reimplemented here.
     """
-    n_rows, n_cols = grid_shape
-    n_states = n_rows * n_cols
-    support = np.zeros((n_states, n_states), dtype=bool)
-    for r in range(n_rows):
-        for c in range(n_cols):
-            s = r * n_cols + c
-            for dr, dc in ACTIONS:
-                s2 = ((r + dr) % n_rows) * n_cols + ((c + dc) % n_cols)
-                support[s, s2] = True
-    return support
+    return geographic_support_mask(grid_shape)
 
 
 def agent_from_counts(

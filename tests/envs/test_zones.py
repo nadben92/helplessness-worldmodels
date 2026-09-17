@@ -13,6 +13,7 @@ from helplessness.envs.zones import (
     Zone,
     ZoneLayout,
     assert_reference_unchanged,
+    geographic_support_mask,
     reference_zone,
     zone_spec_hash,
 )
@@ -132,3 +133,61 @@ def test_assert_reference_unchanged_catches_appearance_drift():
     zone.appearance = AppearanceSpec(category="not_reference")
     with pytest.raises(ValueError, match="diverged"):
         assert_reference_unchanged(zone, anchor=(1, 1))
+
+
+# ---------------------------------------------------------------------
+# geographic_support_mask (promoted from E1's estimation.py::geographic_alpha_support,
+# see experiments/E1_offline_4zones/estimation.py -- E1 re-exports this
+# function unchanged, tested there for byte-identical behaviour)
+# ---------------------------------------------------------------------
+
+
+def test_geographic_support_mask_has_exactly_five_true_per_row_on_a_torus():
+    support = geographic_support_mask((6, 6))
+    assert np.all(support.sum(axis=1) == 5)
+
+
+def test_geographic_support_mask_includes_self_and_the_four_neighbours():
+    grid_shape = (6, 6)
+    support = geographic_support_mask(grid_shape)
+    s = 2 * grid_shape[1] + 2  # state (2, 2)
+    expected = {
+        2 * grid_shape[1] + 2,  # self (stay)
+        1 * grid_shape[1] + 2,  # up
+        3 * grid_shape[1] + 2,  # down
+        2 * grid_shape[1] + 1,  # left
+        2 * grid_shape[1] + 3,  # right
+    }
+    assert set(np.flatnonzero(support[s])) == expected
+
+
+def test_geographic_support_mask_wraps_on_the_torus():
+    grid_shape = (5, 5)
+    support = geographic_support_mask(grid_shape)
+    s = 0  # state (0, 0), corner -- neighbours wrap
+    expected = {
+        0,  # self
+        4 * grid_shape[1] + 0,  # up wraps to last row
+        1 * grid_shape[1] + 0,  # down
+        0 * grid_shape[1] + 4,  # left wraps to last col
+        0 * grid_shape[1] + 1,  # right
+    }
+    assert set(np.flatnonzero(support[s])) == expected
+
+
+def test_geographic_support_mask_matches_e1s_reexport():
+    """experiments/E1_offline_4zones/estimation.py::geographic_alpha_support
+    must remain a byte-identical re-export of this function -- E1 is frozen,
+    see CLAUDE.md."""
+    import sys
+    from pathlib import Path
+
+    e1_dir = str(Path(__file__).resolve().parents[2] / "experiments" / "E1_offline_4zones")
+    sys.path.insert(0, e1_dir)
+    try:
+        from estimation import geographic_alpha_support
+    finally:
+        sys.path.remove(e1_dir)
+
+    grid_shape = (12, 12)
+    assert np.array_equal(geographic_alpha_support(grid_shape), geographic_support_mask(grid_shape))
