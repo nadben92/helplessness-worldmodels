@@ -182,3 +182,41 @@ def test_v_star_multiset_per_zone_type_is_identical_across_rotations(category):
         assert multisets[rotation] == pytest.approx(multisets[0], abs=1e-6), (
             f"category={category}: V* multiset at rotation {rotation} differs from rotation 0"
         )
+
+
+@pytest.mark.parametrize("rotation", [0, 1, 2, 3])
+def test_pairing_agreement_survives_quadrant_permutation(rotation):
+    """E1's pairing-agreement invariant (conditional_entropy_per_state
+    identical between exp and ctrl per (s,a), only I differs -- see
+    tests/envs/test_e1_4zone_layout.py::test_pairing_agreement_per_zone)
+    is a property of derive_control() applied per zone, independent of
+    WHERE that zone sits -- confirmed here to survive every
+    counterbalancing rotation, not just the identity assignment E1 itself
+    exercises."""
+    from helplessness.measures.controllability import conditional_entropy_per_state, controllability_per_state
+
+    e2_env = _import_e2_env()
+    assignment = e2_env.quadrant_assignment_for_rotation(rotation)
+    exp_layout = e2_env.build_layout(CFG, DIRECTION, quadrant_assignment=assignment)
+    ctrl_layout = e2_env.build_control_layout(CFG, DIRECTION, quadrant_assignment=assignment)
+    P_exp = e2_env.build_env(exp_layout, CFG, goal_reward=50.0).transition_tensor()
+    P_ctrl = e2_env.build_env(ctrl_layout, CFG, goal_reward=50.0).transition_tensor()
+
+    H_exp = conditional_entropy_per_state(P_exp)
+    H_ctrl = conditional_entropy_per_state(P_ctrl)
+    I_exp = controllability_per_state(P_exp)
+    I_ctrl = controllability_per_state(P_ctrl)
+
+    for zone in exp_layout.zones:
+        if zone.appearance.category == "corridor":
+            continue
+        idx = np.flatnonzero(zone.mask)
+        assert H_exp[idx] == pytest.approx(H_ctrl[idx], abs=1e-9), f"rotation={rotation} zone={zone.appearance.category}"
+        for s in idx:
+            for a in range(5):
+                supp_exp = int((P_exp[s, a] > 0).sum())
+                supp_ctrl = int((P_ctrl[s, a] > 0).sum())
+                assert supp_exp == supp_ctrl, f"rotation={rotation} zone={zone.appearance.category} s={s} a={a}"
+        from helplessness.envs.dynamics.uncontrollable import UncontrollableDeterministic, UncontrollableNoisy
+        if isinstance(zone.dynamics, (UncontrollableDeterministic, UncontrollableNoisy)):
+            assert not np.allclose(I_exp[idx], I_ctrl[idx]), f"rotation={rotation} zone={zone.appearance.category}: I should differ"
