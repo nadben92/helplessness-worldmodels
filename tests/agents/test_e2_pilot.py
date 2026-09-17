@@ -47,6 +47,46 @@ def test_checkpoint_result_independent_of_total_budget():
     assert short_run["episode_log"] == [e for e in long_run["episode_log"] if e[0] <= 1000]
 
 
+def test_checkpoint_captures_live_agent_state_not_recomputed():
+    """N_checkpoints/V_checkpoints/policy_checkpoints must be READ OFF
+    the live agent object, not recomputed -- checked indirectly: at a
+    checkpoint falling strictly between two episode boundaries, V/policy
+    must reflect the PREVIOUS replan (staleness expected, not masked)."""
+    result = pilot_mod.run_one_seed(seed=3, budget=400, checkpoints=(400,))
+    # N_final and the last checkpoint's N must be identical (both are the
+    # same live object read at the same moment, end of run).
+    assert np.array_equal(result["N_final"], result["N_checkpoints"][400])
+    assert np.array_equal(result["V_final"], result["V_checkpoints"][400])
+    assert np.array_equal(result["policy_final"], result["policy_checkpoints"][400])
+
+
+def test_trajectory_log_has_one_row_per_step_excludes_resets():
+    budget = 500
+    result = pilot_mod.run_one_seed(seed=4, budget=budget, checkpoints=(budget,))
+    traj = result["trajectory"]
+    assert len(traj["t"]) == budget
+    assert traj["t"].tolist() == list(range(1, budget + 1))
+    n_completed_episodes = len(result["episode_log"])
+    # episode_id counts UP at each boundary; the run may end mid-episode
+    # (one extra, incomplete episode_id beyond the completed ones).
+    assert int(traj["episode_id"].max()) in (n_completed_episodes - 1, n_completed_episodes)
+
+
+def test_trajectory_reconstructs_n_exactly_matching_live_agent_n():
+    from _experiment_loader import load_experiment_module
+    traj_mod = load_experiment_module("E2_online_4zones", "trajectory.py", "_e2_trajectory_for_pilot_test")
+
+    budget = 733
+    result = pilot_mod.run_one_seed(seed=5, budget=budget, checkpoints=(200, budget))
+    traj = result["trajectory"]
+    for t in (200, budget):
+        N_log = traj_mod.reconstruct_N_from_trajectory(
+            traj["t"], traj["s"], traj["a"], traj["s_next"],
+            up_to_t=t, n_states=pilot_mod.N_STATES, n_actions=pilot_mod.N_ACTIONS,
+        )
+        assert np.array_equal(N_log, result["N_checkpoints"][t]), f"mismatch at t={t}"
+
+
 def test_checkpoint_matched_and_reference_streams_independent_of_total_budget():
     """Same property, one level down: spawn_checkpoint_streams (used for
     the matched control and reference at each checkpoint) depends only on

@@ -5,10 +5,24 @@ exercised here). Reports facts only (N distribution, episode outcomes,
 value-iteration cost) -- no scientific interpretation, per the task's
 own working rules.
 
+At each checkpoint, the agent's LIVE internal state (N, V, policy) is
+captured directly off the running agent object, never recomputed --
+this is what lets the twin be verified against the REAL agent rather
+than against a second copy of the same computation (see
+docs/E2_online_4zones.md's non-circularity requirement). V/policy can be
+STALE relative to N at a checkpoint that falls mid-episode (replanning
+happens only at episode boundaries, see loop.py) -- captured as-is,
+staleness included, not masked by a forced extra replan.
+
+Every transition is logged in full, compressed to compact dtypes
+(episode_id, t, s, a, r, s_next, terminated, truncated), enabling N to be
+reconstructed independently from the trajectory alone (see trajectory.py)
+-- the second, genuinely independent path the twin's verification needs.
+
 Writes results/E2_online_4zones/pilot_seed<NN>/ (config.yaml, meta.yaml,
 metrics -- via helplessness.runs, same convention as E1 onward) plus a
-raw .npz per seed holding every checkpointed N[s,a,s'], the full episode
-log, and the per-replan value-iteration iteration counts.
+raw .npz per seed holding every checkpointed N/V/policy, the full
+trajectory log, and the per-replan value-iteration iteration counts.
 """
 
 from __future__ import annotations
@@ -68,8 +82,22 @@ def run_one_seed(seed: int, budget: int = BUDGET, checkpoints: tuple[int, ...] =
 
     checkpoint_set = set(checkpoints)
     N_checkpoints: dict[int, np.ndarray] = {}
+    V_checkpoints: dict[int, np.ndarray] = {}
+    policy_checkpoints: dict[int, np.ndarray] = {}
     episode_log: list[tuple[int, bool]] = []  # (t_at_episode_end, success)
     plan_n_iters: list[int] = []
+
+    # Full trajectory log, pre-allocated compact arrays (never a Python
+    # list of tuples at this scale -- 1e6 rows).
+    traj_t = np.zeros(budget, dtype=np.int32)
+    traj_episode_id = np.zeros(budget, dtype=np.int32)
+    traj_s = np.zeros(budget, dtype=np.uint16)
+    traj_a = np.zeros(budget, dtype=np.uint8)
+    traj_r = np.zeros(budget, dtype=np.float32)
+    traj_s_next = np.zeros(budget, dtype=np.uint16)
+    traj_terminated = np.zeros(budget, dtype=bool)
+    traj_truncated = np.zeros(budget, dtype=bool)
+    episode_counter = [0]  # mutable cell, incremented by on_transition
 
     real_plan = agent.plan
 
@@ -80,10 +108,26 @@ def run_one_seed(seed: int, budget: int = BUDGET, checkpoints: tuple[int, ...] =
     agent.plan = counting_plan
 
     def on_transition(t, s, a, r, s_next, terminated, truncated):
+        idx = t - 1
+        traj_t[idx] = t
+        traj_episode_id[idx] = episode_counter[0]
+        traj_s[idx] = s
+        traj_a[idx] = a
+        traj_r[idx] = r
+        traj_s_next[idx] = s_next
+        traj_terminated[idx] = terminated
+        traj_truncated[idx] = truncated
+
         if terminated or truncated:
             episode_log.append((t, bool(terminated)))
+            episode_counter[0] += 1
+
         if t in checkpoint_set:
+            # Captured directly off the live agent object -- never
+            # recomputed (see module docstring: non-circularity).
             N_checkpoints[t] = agent.N.copy()
+            V_checkpoints[t] = agent.V.copy()
+            policy_checkpoints[t] = agent.policy.copy()
 
     t0 = time.time()
     e2_loop.train_online_e2(
@@ -92,30 +136,44 @@ def run_one_seed(seed: int, budget: int = BUDGET, checkpoints: tuple[int, ...] =
         on_transition=on_transition,
     )
     elapsed = time.time() - t0
-    agent.plan(streams["tiebreak"])  # final replan matching the final N (see docs/E2_online_4zones.md)
 
     return {
         "seed": seed,
         "N_final": agent.N.copy(),
+        "V_final": agent.V.copy(),
+        "policy_final": agent.policy.copy(),
         "N_checkpoints": N_checkpoints,
+        "V_checkpoints": V_checkpoints,
+        "policy_checkpoints": policy_checkpoints,
         "episode_log": episode_log,
         "plan_n_iters": np.array(plan_n_iters, dtype=np.int64),
         "elapsed_seconds": elapsed,
         "layout": layout,
+        "trajectory": {
+            "t": traj_t, "episode_id": traj_episode_id, "s": traj_s, "a": traj_a,
+            "r": traj_r, "s_next": traj_s_next, "terminated": traj_terminated, "truncated": traj_truncated,
+        },
     }
 
 
 def save_seed_results(result: dict, run_dir: Path) -> None:
     checkpoints_sorted = sorted(result["N_checkpoints"].keys())
-    np.savez(
+    traj = result["trajectory"]
+    np.savez_compressed(
         run_dir / "raw.npz",
         N_final=result["N_final"],
+        V_final=result["V_final"],
+        policy_final=result["policy_final"],
         checkpoint_steps=np.array(checkpoints_sorted),
         **{f"N_checkpoint_{t}": result["N_checkpoints"][t] for t in checkpoints_sorted},
+        **{f"V_checkpoint_{t}": result["V_checkpoints"][t] for t in checkpoints_sorted},
+        **{f"policy_checkpoint_{t}": result["policy_checkpoints"][t] for t in checkpoints_sorted},
         episode_t=np.array([t for t, _ in result["episode_log"]]),
         episode_success=np.array([s for _, s in result["episode_log"]]),
         plan_n_iters=result["plan_n_iters"],
         elapsed_seconds=np.array(result["elapsed_seconds"]),
+        traj_t=traj["t"], traj_episode_id=traj["episode_id"], traj_s=traj["s"], traj_a=traj["a"],
+        traj_r=traj["r"], traj_s_next=traj["s_next"], traj_terminated=traj["terminated"], traj_truncated=traj["truncated"],
     )
     write_run_meta(
         run_dir, seed=result["seed"], status="done",

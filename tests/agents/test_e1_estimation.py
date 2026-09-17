@@ -153,6 +153,56 @@ def test_agent_from_counts_robustness_variant_uses_geographic_support():
     assert T.shape == (3, 2, 3)
 
 
+def test_agent_from_counts_alpha_support_prior_is_exact():
+    """Numeric closed-form check on E1's OWN agent_from_counts wrapper
+    (not just the shared TabularModelBasedAgent class directly, see
+    tests/agents/test_agent.py's equivalent checks) -- catches the same
+    class of bug the 5x-prior-mass fix addressed
+    (src/helplessness/agents/tabular.py), specifically through E1's own
+    code path.
+
+    Uses a real 2D grid (4x4, wraps without collapsing) so
+    geographic_alpha_support's support size is genuinely 5 per row,
+    matching the Dirichlet formula T_hat(s'|s,a) =
+    (N[s,a,s'] + alpha/5) / (N[s,a].sum() + alpha) -- NOT alpha/5 as a
+    literal PROBABILITY (that would only coincide with the correct
+    unvisited-pair value 1/5 at alpha=... no, 1/5 always, regardless of
+    alpha -- alpha cancels top and bottom for a symmetric prior at zero
+    data; alpha/5 is the NUMERATOR pseudo-count, not the probability).
+    """
+    grid_shape = (4, 4)
+    n_states = 16
+    n_actions = 2
+    support = geographic_alpha_support(grid_shape)  # (16, 16), 5 True per row
+    R_true = np.zeros(n_states)
+    alpha = 0.5
+
+    counts = np.zeros((n_states, n_actions, n_states), dtype=np.int64)
+    agent_unvisited = agent_from_counts(counts, R_true, alpha=alpha, alpha_support=support)
+    T_unvisited = agent_unvisited.T_hat
+    assert T_unvisited.sum(axis=2) == pytest.approx(1.0)
+    row0 = T_unvisited[0, 0]
+    support_states = np.flatnonzero(support[0])
+    assert len(support_states) == 5
+    assert row0[support_states] == pytest.approx(np.full(5, 0.2))  # 1/5, alpha-independent at zero data
+    assert row0[~support[0]] == pytest.approx(np.zeros(n_states - 5))
+
+    # a partially-visited pair: total prior mass must be alpha (not
+    # support_size*alpha) -- the closed form distinguishes the two.
+    counts_visited = counts.copy()
+    visited_successor = support_states[0]
+    counts_visited[0, 0, visited_successor] = 20
+    agent_visited = agent_from_counts(counts_visited, R_true, alpha=alpha, alpha_support=support)
+    row_visited = agent_visited.T_hat[0, 0]
+    n_total = 20.0
+    expected_visited = (20.0 + alpha / 5) / (n_total + alpha)
+    expected_other = (0.0 + alpha / 5) / (n_total + alpha)
+    assert row_visited[visited_successor] == pytest.approx(expected_visited)
+    for s in support_states:
+        if s != visited_successor:
+            assert row_visited[s] == pytest.approx(expected_other)
+
+
 # ---------------------------------------------------------------------
 # spawn_exp_ctrl_rngs: the RNG-correlation bug regression test, plus the
 # deliberate shared-seed identity check the fix's diagnosis calls for.
