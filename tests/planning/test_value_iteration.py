@@ -142,19 +142,32 @@ def test_policy_evaluation_stochastic_matches_e1_delta_when_no_ties(tmp_path):
     policy_evaluation_stochastic) must agree exactly, to the 1e-9 clamp
     tolerance both conventions share (see
     experiments/E1_offline_4zones/measurement.py's clamp)."""
-    import sys
+    import importlib.util
     from pathlib import Path
 
+    from helplessness.config import load_yaml_block
     from helplessness.evaluation.tiebreak import uniform_tie_policy_probs
 
-    e1_dir = str(Path(__file__).resolve().parents[2] / "experiments" / "E1_offline_4zones")
-    sys.path.insert(0, e1_dir)
-    try:
-        from env import build_layout, build_env, reward_and_terminal
-        from estimation import agent_from_counts, collect_generative
-        from helplessness.config import load_yaml_block
-    finally:
-        sys.path.remove(e1_dir)
+    def _load_module(unique_name: str, path: Path):
+        # experiments/E1_offline_4zones/env.py and
+        # experiments/E2_online_4zones/env.py are BOTH importable as bare
+        # "env" -- sys.modules caches by name regardless of sys.path, so a
+        # plain sys.path.insert(...) + "from env import ..." here is only
+        # safe by test-collection-order luck (see
+        # tests/envs/test_e2_4zone_layout.py's own fix for the same
+        # collision). Load by explicit file path under a unique name
+        # instead, unaffected by whatever else this pytest session has
+        # already imported.
+        spec = importlib.util.spec_from_file_location(unique_name, path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    e1_dir = Path(__file__).resolve().parents[2] / "experiments" / "E1_offline_4zones"
+    e1_env = _load_module("_e1_env_for_vi_test", e1_dir / "env.py")
+    e1_estimation = _load_module("_e1_estimation_for_vi_test", e1_dir / "estimation.py")
+    build_layout, build_env, reward_and_terminal = e1_env.build_layout, e1_env.build_env, e1_env.reward_and_terminal
+    agent_from_counts, collect_generative = e1_estimation.agent_from_counts, e1_estimation.collect_generative
 
     cfg = load_yaml_block("zones/e1_4zones.yaml")
     layout = build_layout(cfg, direction="away_from_goal")
