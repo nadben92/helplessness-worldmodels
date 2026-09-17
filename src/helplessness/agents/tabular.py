@@ -71,12 +71,26 @@ class TabularModelBasedAgent(Agent):
         """(S, A, S), normalised rows. Dirichlet(alpha) prior: a (s,a) pair
         never visited yields a distribution over states equal to the prior
         alone, rather than a division by zero -- uniform over all states by
-        default, or restricted to alpha_support[s] if one was given."""
+        default, or restricted to alpha_support[s] if one was given.
+
+        alpha is always the TOTAL prior pseudo-count mass per (s, a) pair,
+        spread uniformly over its support: alpha/n_states per cell when
+        alpha_support is None (n_states cells), alpha/support_size[s] per
+        cell when restricted to alpha_support[s] (support_size[s] cells) --
+        so T_hat(s'|s,a) = (N[s,a,s'] + alpha/support_size[s]) /
+        (N[s,a].sum() + alpha) exactly, never alpha*support_size[s] of
+        total prior mass (a bug caught by
+        tests/agents/test_agent.py::test_alpha_support_prior_mass_is_alpha_not_a_raw_zero_one_mask
+        -- at zero data both conventions renormalise to the same uniform
+        row, so only a partially-visited pair's exact value exposes the
+        difference)."""
         if self.alpha_support is None:
             counts = self.N + self.alpha
             return counts / counts.sum(axis=2, keepdims=True)
 
-        prior = self.alpha_support[:, None, :] * self.alpha  # (S, 1, S) broadcasts over A
+        support_size = self.alpha_support.sum(axis=1)  # (S,), >=1 per row (validated in __init__)
+        per_cell_alpha = self.alpha / support_size  # (S,)
+        prior = self.alpha_support[:, None, :] * per_cell_alpha[:, None, None]  # (S, 1, S) broadcasts over A
         counts = self.N + prior
         T = counts / counts.sum(axis=2, keepdims=True)
 
