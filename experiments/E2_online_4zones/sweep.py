@@ -26,7 +26,10 @@ from __future__ import annotations
 
 import concurrent.futures
 import json
+import os
+import shutil
 import time
+import uuid
 from pathlib import Path
 
 import numpy as np
@@ -42,7 +45,7 @@ import twin as twin_mod
 
 from helplessness.config import load_yaml_block, REPO_ROOT
 from helplessness.envs.zones import geographic_support_mask
-from helplessness.runs import make_run_dir, write_run_meta
+from helplessness.runs import write_run_meta
 
 CFG = load_yaml_block("zones/e1_4zones.yaml")
 DIRECTION = "away_from_goal"
@@ -192,41 +195,104 @@ def run_condition_seed(condition: dict, seed_index: int, budget: int = BUDGET, c
     return {"per_state_rows": per_state_rows, "per_pair_rows": per_pair_rows, "summary": summary, "arrays": arrays}
 
 
-def run_and_save(condition: dict, seed_index: int) -> tuple[str, float]:
-    result = run_condition_seed(condition, seed_index)
-    run_name = f"{condition['key']}_seed{seed_index:02d}"
-    run_dir = make_run_dir(RESULTS_ROOT, EXPERIMENT_ID, run_name)
+def _run_name(condition: dict, seed_index: int) -> str:
+    return f"{condition['key']}_seed{seed_index:02d}"
 
-    artifact_mod.write_per_state_artifact(result["per_state_rows"], run_dir / "per_state.csv")
-    artifact_mod.write_per_pair_artifact(result["per_pair_rows"], run_dir / "per_pair.csv")
-    np.savez_compressed(run_dir / "arrays.npz", **result["arrays"])
-    with open(run_dir / "summary.json", "w") as f:
+
+def _final_dir(run_name: str) -> Path:
+    return RESULTS_ROOT / EXPERIMENT_ID / run_name
+
+
+def run_and_save(condition: dict, seed_index: int) -> tuple[str, float | None, str]:
+    """Self-contained, resumable unit of work: skips outright if its
+    final directory already exists (a previous sweep invocation
+    completed it), otherwise computes into a uniquely-named temp
+    directory and commits it to its final name with ONE atomic
+    os.replace() call. A process killed at any point before that call
+    (including mid-write of any individual file) leaves only the temp
+    directory behind -- the final directory name never exists until
+    every file in it is already fully written, so re-running the same
+    sweep command can never mistake a partial run for a completed one,
+    and always resumes from exactly where it left off. Returns
+    (run_name, elapsed_seconds_or_None, "done"|"skipped")."""
+    run_name = _run_name(condition, seed_index)
+    final_dir = _final_dir(run_name)
+    if final_dir.exists():
+        return run_name, None, "skipped"
+
+    results_dir = RESULTS_ROOT / EXPERIMENT_ID
+    results_dir.mkdir(parents=True, exist_ok=True)
+    tmp_dir = results_dir / f".tmp_{run_name}_{os.getpid()}_{uuid.uuid4().hex[:8]}"
+    tmp_dir.mkdir(parents=True, exist_ok=False)
+
+    # BUDGET/CHECKPOINTS passed explicitly (read as module globals HERE,
+    # at call time) rather than relying on run_condition_seed's own
+    # default parameter values, which are bound once at function
+    # DEFINITION time -- a module-level override (e.g. a test driver
+    # monkeypatching sweep.BUDGET for a small, fast resumability check)
+    # would silently have no effect on an already-bound default.
+    result = run_condition_seed(condition, seed_index, budget=BUDGET, checkpoints=CHECKPOINTS)
+
+    artifact_mod.write_per_state_artifact(result["per_state_rows"], tmp_dir / "per_state.csv")
+    artifact_mod.write_per_pair_artifact(result["per_pair_rows"], tmp_dir / "per_pair.csv")
+    np.savez_compressed(tmp_dir / "arrays.npz", **result["arrays"])
+    with open(tmp_dir / "summary.json", "w") as f:
         json.dump(result["summary"], f, indent=2)
-    write_run_meta(run_dir, seed=seed_index, status="done", **result["summary"])
+    # result["summary"] already carries "seed" (see run_condition_seed) --
+    # pass status separately, everything else via the summary dict only.
+    write_run_meta(tmp_dir, status="done", **result["summary"])
 
-    return run_name, result["summary"]["elapsed_seconds"]
+    # os.replace (not os.rename): atomic on both POSIX and Windows, and
+    # succeeds even if final_dir were somehow already created by another
+    # process in the meantime (harmless -- both results are byte-identical,
+    # this job's RNG streams depend only on (condition, seed_index)).
+    os.replace(tmp_dir, final_dir)
+
+    return run_name, result["summary"]["elapsed_seconds"], "done"
 
 
 def all_jobs() -> list[tuple[dict, int]]:
     return [(cond, s) for cond in CONDITIONS for s in range(N_SEEDS)]
 
 
+def _cleanup_stale_temp_dirs() -> None:
+    """Removes .tmp_* leftovers from a previous interrupted invocation.
+    Always safe to discard: the corresponding final directory does not
+    exist (checked separately before any job is skipped), so that job
+    will simply be recomputed from scratch -- never a partial result."""
+    results_dir = RESULTS_ROOT / EXPERIMENT_ID
+    if not results_dir.exists():
+        return
+    for stale in results_dir.glob(".tmp_*"):
+        shutil.rmtree(stale, ignore_errors=True)
+
+
 def main(max_workers: int = 8) -> None:
+    _cleanup_stale_temp_dirs()
     jobs = all_jobs()
-    print(f"Launching {len(jobs)} jobs across {max_workers} worker processes...")
+    already_done = [(cond, s) for cond, s in jobs if _final_dir(_run_name(cond, s)).exists()]
+    to_run = [(cond, s) for cond, s in jobs if not _final_dir(_run_name(cond, s)).exists()]
+
+    print(f"{len(jobs)} total jobs, {len(already_done)} already done (skipped), {len(to_run)} to run.")
+    print(f"Parallel workers: {max_workers} (of {os.cpu_count()} logical CPUs available).")
+    for cond, s in already_done:
+        print(f"[skip] {_run_name(cond, s)} (already done)")
+
     t0 = time.time()
+    n_remaining = len(to_run)
     with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as ex:
-        futures = {ex.submit(run_and_save, cond, s): (cond["key"], s) for cond, s in jobs}
-        n_done = 0
+        futures = {ex.submit(run_and_save, cond, s): (cond["key"], s) for cond, s in to_run}
         for fut in concurrent.futures.as_completed(futures):
             key, s = futures[fut]
             try:
-                run_name, elapsed = fut.result()
-                n_done += 1
-                print(f"[{n_done}/{len(jobs)}] done: {run_name} ({elapsed:.1f}s)")
+                run_name, elapsed, status = fut.result()
+                n_remaining -= 1
+                print(f"[{status}] {run_name} elapsed={elapsed:.1f}s remaining={n_remaining}")
             except Exception as exc:
-                print(f"[FAILED] {key} seed={s}: {exc!r}")
-    print(f"Sweep finished in {time.time() - t0:.1f}s")
+                n_remaining -= 1
+                print(f"[FAILED] {key} seed={s}: {exc!r} remaining={n_remaining}")
+    print(f"Sweep pass finished in {time.time() - t0:.1f}s "
+          f"({len(already_done)} skipped, {len(to_run)} run this invocation).")
 
 
 if __name__ == "__main__":

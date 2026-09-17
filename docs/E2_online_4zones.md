@@ -39,6 +39,36 @@ greedy, Dirichlet prior restricted to geographically reachable successors.
   simpler than the p=1-trick the prototype used, which assumed a single
   global noise parameter that no longer exists once dynamics are per-zone.
 
+## Convention: alpha is the TOTAL prior mass per (s, a) pair
+
+`alpha` (the Dirichlet prior hyperparameter, `helplessness.agents.tabular.TabularModelBasedAgent`'s
+`alpha` argument together with an `alpha_support` mask) always denotes
+the **total** pseudo-count mass spread over a (s, a) pair's support, not
+a per-successor value:
+
+```
+T_hat(s' | s, a) = (N[s, a, s'] + alpha/5) / (N[s, a].sum() + alpha)
+```
+
+for the 5-state geographic support (`helplessness.envs.zones.geographic_support_mask`)
+every dynamics type in this family uses. Each of the 5 reachable
+successors receives a pseudo-count of exactly `alpha/5`; the sum of the
+5 pseudo-counts is `alpha`, matching a single Dirichlet concentration
+parameter, not `alpha` per successor (which would make the effective
+prior mass `5*alpha`).
+
+This was a real bug, not just a naming risk: `TabularModelBasedAgent.T_hat`'s
+`alpha_support` branch originally put the *full* `alpha` on each support
+cell (`alpha_support * alpha`), giving `5*alpha` total prior mass per
+pair -- invisible at zero data (a symmetric prior's alpha cancels top and
+bottom of the unvisited-pair formula, so the zero-data row is `1/5`
+regardless of which convention is used), but wrong as soon as any real
+counts exist. Fixed in `src/helplessness/agents/tabular.py`; see
+`tests/agents/test_agent.py::test_alpha_support_prior_mass_is_alpha_not_a_raw_zero_one_mask`
+and `tests/agents/test_e1_estimation.py::test_agent_from_counts_alpha_support_prior_is_exact`
+for the regression pins (on the shared class directly, and through E1's
+own `agent_from_counts` wrapper respectively).
+
 ## Configuration
 
 Not yet defined -- depends on E1's zone layout being finalised first.
