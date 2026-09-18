@@ -60,12 +60,12 @@ def make_f7_counts_profile() -> None:
                 "median_N": np.median(all_vals), "q10_N": np.percentile(all_vals, 10),
                 "q90_N": np.percentile(all_vals, 90),
             })
-        ax.plot(ad.CHECKPOINTS, max_by_cp, color="black", linestyle="-", marker="o", markersize=4, label="max/état (moy.)")
-        ax.plot(ad.CHECKPOINTS, min_by_cp, color="black", linestyle="--", marker="x", markersize=4, label="min/état (moy.)")
-        ax.plot(ad.CHECKPOINTS, q50_by_cp, color="gray", linestyle=":", marker="", label="médiane N")
-    axes[0].set_ylabel("N (échelle log)")
+        ax.plot(ad.CHECKPOINTS, max_by_cp, color="black", linestyle="-", marker="o", markersize=4, label="max/state (mean)")
+        ax.plot(ad.CHECKPOINTS, min_by_cp, color="black", linestyle="--", marker="x", markersize=4, label="min/state (mean)")
+        ax.plot(ad.CHECKPOINTS, q50_by_cp, color="gray", linestyle=":", marker="", label="median N")
+    axes[0].set_ylabel("N (log scale)")
     axes[0].legend(fontsize=7)
-    fig.suptitle(f"F7a — profil de comptage par zone vs checkpoint ({ad.REFERENCE_CONDITION})")
+    fig.suptitle(f"F7a — count profile by zone type vs checkpoint ({ad.REFERENCE_CONDITION})")
     fig.tight_layout()
     fg.save_figure(fig, "F7a_counts_profile")
     fg.save_csv(
@@ -107,8 +107,8 @@ def make_f7_departure_share() -> None:
         ax.bar(x + (i - 1) * width, shares, width, label=bin_label, color=["white", "0.6", "0.2"][i], edgecolor="black")
     ax.set_xticks(x)
     ax.set_xticklabels([fg.ZONE_LABELS[z] for z in ad.ZONE_CATEGORIES], rotation=20, ha="right")
-    ax.set_ylabel("part des comptages venant des départs")
-    ax.set_title(f"F7b — part des comptages venant des départs, par zone × tranche (checkpoint final, {ad.REFERENCE_CONDITION})")
+    ax.set_ylabel("share of counts from episode starts")
+    ax.set_title(f"F7b — share of counts from episode starts, by zone type × count bin (final checkpoint, {ad.REFERENCE_CONDITION})")
     ax.legend()
     fig.tight_layout()
     fg.save_figure(fig, "F7b_departure_share")

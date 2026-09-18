@@ -1,0 +1,7 @@
+contrast,alpha,analytic_contrast,target_90pct,final_checkpoint_contrast,budget_to_90pct
+controllable-det. − conveyor,0.5,2.321928094887362,2.089735285398626,2.2757527026397275,158489
+controllable-det. − conveyor,1.0,2.321928094887362,2.089735285398626,2.237436126483288,398107
+controllable-det. − conveyor,5.0,2.321928094887362,2.089735285398626,2.024208783051595,not_reached
+controllable-noisy − uncontrollable-noisy,0.5,1.6529,1.48761,1.6363516449946438,158489
+controllable-noisy − uncontrollable-noisy,1.0,1.6529,1.48761,1.6012002176415645,251189
+controllable-noisy − uncontrollable-noisy,5.0,1.6529,1.48761,1.487458462294522,not_reached

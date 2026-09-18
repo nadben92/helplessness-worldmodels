@@ -1,0 +1,6 @@
+zone,n_seeds,mean_n_pairs_total,mean_n_pairs_N_lt_10,mean_n_pairs_N_lt_100
+corridor,20,215.0,0.35,62.1
+uncontrollable_deterministic,20,125.0,0.0,57.35
+controllable_noisy,20,125.0,0.0,79.1
+controllable_deterministic,20,125.0,0.0,49.75
+uncontrollable_noisy,20,125.0,0.0,49.05

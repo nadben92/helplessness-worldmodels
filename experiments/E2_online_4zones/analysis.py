@@ -29,6 +29,8 @@ import fig_f7
 import figures as fg
 import phase_a
 import synthesis_table
+import tables
+import verifications
 
 
 def _json_safe(obj):
@@ -115,7 +117,19 @@ def run_phase_b(per_state: np.ndarray, per_pair: np.ndarray) -> None:
     fig_f7.make_f7_episode_profile()
 
     print("Synthesis table...")
-    synthesis_table.build_synthesis_table(per_state)
+    synthesis_rows, _exterior_rows = synthesis_table.build_synthesis_table(per_state)
+
+    print("Tables...")
+    tables.table1_paired_diff_by_zone(per_state, per_pair)
+    tables.table2_controllable_noisy_ventilated(per_pair)
+    tables.table3_budget_trend_power_law(per_state, per_pair)
+    tables.table4_delta_exterior_max(per_state)
+    tables.table5_b_final_checkpoint_vs_analytic(synthesis_rows)
+    tables.table6_contrast_budget_to_90pct(per_state)
+
+    print("Verifications...")
+    verifications.run_anisotropy_check()
+    verifications.undersampled_pairs_at_final_checkpoint(per_pair)
 
 
 def main() -> None:

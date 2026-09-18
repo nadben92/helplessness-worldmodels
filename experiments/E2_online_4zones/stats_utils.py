@@ -17,6 +17,8 @@ def mean_ci95(values: np.ndarray) -> tuple[float, float, float]:
     approximation to be preferred over the exact small-sample t)."""
     values = np.asarray(values, dtype=np.float64)
     n = len(values)
+    if n == 0:
+        return float("nan"), float("nan"), float("nan")
     mean = float(np.mean(values))
     if n < 2:
         return mean, float("nan"), float("nan")
@@ -44,7 +46,7 @@ def paired_comparison(diffs: np.ndarray) -> dict:
     sd = float(np.std(diffs, ddof=1)) if n > 1 else float("nan")
     cohens_d = (mean / sd) if (n > 1 and sd > 0) else (0.0 if sd == 0 else float("nan"))
 
-    if n > 0 and np.allclose(diffs, 0.0):
+    if n == 0 or np.allclose(diffs, 0.0):
         stat, p = float("nan"), float("nan")
     else:
         stat, p = wilcoxon(diffs)

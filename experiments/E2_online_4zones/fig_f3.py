@@ -42,8 +42,8 @@ def make_f3(per_pair: np.ndarray) -> None:
         fg.setup_log_x_axis(ax)
         ax.set_title(fg.ZONE_LABELS[zone])
         for is_optimal, label, style in (
-            (True, "action optimale sous P", {"linestyle": "-", "marker": "o"}),
-            (False, "action non optimale", {"linestyle": "--", "marker": "x"}),
+            (True, "optimal action under P", {"linestyle": "-", "marker": "o"}),
+            (False, "non-optimal action", {"linestyle": "--", "marker": "x"}),
         ):
             mask_extra = per_pair["is_optimal_under_P"] == is_optimal
             diffs_by_cp = _paired_diff_masked(per_pair, mask_extra, zone)
@@ -63,9 +63,9 @@ def make_f3(per_pair: np.ndarray) -> None:
                 })
             ax.plot(xs, means, color="black", markersize=5, label=label, **style)
             ax.fill_between(xs, los, his, alpha=0.15, color="black")
-    axes1[0].set_ylabel("L1 online − apparié")
+    axes1[0].set_ylabel("L1 (online − matched)")
     axes1[0].legend(fontsize=7, loc="best")
-    fig1.suptitle(f"F3a — écart L1 par zone × statut de l'action (α={ALPHA_REF}, ε={EPSILON_REF})")
+    fig1.suptitle(f"F3a — L1 difference by zone type × action-optimal status (α={ALPHA_REF}, ε={EPSILON_REF})")
     fig1.tight_layout()
     fg.save_figure(fig1, "F3a_l1_diff_by_zone_and_optimal_status")
 
@@ -96,9 +96,9 @@ def make_f3(per_pair: np.ndarray) -> None:
                 ax.plot(xs, means, marker=style["marker"], linestyle=style["linestyle"],
                         color=style["color"], label=fg.ZONE_LABELS[zone], markersize=4)
                 ax.fill_between(xs, los, his, alpha=0.1, color=style["color"])
-    axes2[0].set_ylabel("L1 online − apparié")
+    axes2[0].set_ylabel("L1 (online − matched)")
     axes2[0].legend(fontsize=6, loc="best")
-    fig2.suptitle(f"F3b — écart L1 par tranche de comptage (α={ALPHA_REF}, ε={EPSILON_REF})")
+    fig2.suptitle(f"F3b — L1 difference by count bin (α={ALPHA_REF}, ε={EPSILON_REF})")
     fig2.tight_layout()
     fg.save_figure(fig2, "F3b_l1_diff_by_count_bin")
 

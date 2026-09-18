@@ -5,6 +5,18 @@ seed/rotation actually produced it, then placed at that zone type's
 canonical position (analysis_data.py::canonical_rc_for_state) -- "agrege
 par type de zone, jamais par quadrant" (corridor cells never move, so
 they need no remapping).
+
+Confirmed against the sweep's own summary.json (2026 post-pilot review):
+the reference condition's 20 seeds DO span all 4 counterbalancing
+rotations (5 seeds each, seed_index // 5 == assignment, per
+env.py::rotation_for_seed_index) -- this is not a single-rotation view
+and not a protocol deviation. Every map below therefore shows the FOUR
+DISTINCT ZONE TYPES occupying their four fixed canonical quadrants
+(TYPE_TO_CANONICAL_QUADRANT), each value averaged over all 20 seeds
+after remapping that seed's own physical quadrant back onto its type's
+canonical one -- four distinct regions are the EXPECTED appearance of
+this transform (one region per zone type), not four raw, un-remapped
+physical quadrants that counterbalancing should have made identical.
 """
 
 from __future__ import annotations
@@ -78,9 +90,9 @@ def _plot_map(grid: np.ndarray, title: str, name: str, cmap: str = "gray", vmin=
     else:
         im = ax.imshow(grid, cmap=cmap, vmin=vmin, vmax=vmax)
     _zone_contours(ax)
-    ax.set_title(title)
-    ax.set_xlabel("colonne")
-    ax.set_ylabel("ligne")
+    ax.set_title(f"{title}\n(canonical zone-type frame, N=20 seeds, 4 rotations)", fontsize=10)
+    ax.set_xlabel("column")
+    ax.set_ylabel("row")
     fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     fig.tight_layout()
     fg.save_figure(fig, name)
@@ -109,9 +121,9 @@ def make_f4() -> None:
         n_start_share_by_run.append((share, r["rotation"]))
         n_min_by_run.append((N_pair.min(axis=1).astype(float), r["rotation"]))
 
-    _plot_map(_canonical_grid_average(n_total_by_run), "N(s), moyenne sur graines (checkpoint final)", "F4_N_total", cmap="gray_r")
-    _plot_map(_canonical_grid_average(n_start_share_by_run), "Part de N(s) venant des départs d'épisode", "F4_N_start_share", cmap="gray_r", vmin=0, vmax=1)
-    _plot_map(_canonical_grid_average(n_min_by_run), "Comptage minimal par état (sur les actions)", "F4_N_min_per_state", cmap="gray_r")
+    _plot_map(_canonical_grid_average(n_total_by_run), "N(s), seed mean (final checkpoint)", "F4_N_total", cmap="gray_r")
+    _plot_map(_canonical_grid_average(n_start_share_by_run), "Share of N(s) from episode starts", "F4_N_start_share", cmap="gray_r", vmin=0, vmax=1)
+    _plot_map(_canonical_grid_average(n_min_by_run), "Minimum count per state (over actions)", "F4_N_min_per_state", cmap="gray_r")
 
     # b_hat online, Delta online, and the online-matched diffs, at the
     # final checkpoint, per state -- from per_state.csv (already
@@ -134,13 +146,13 @@ def make_f4() -> None:
     b_matched = per_state_values("matched", "b")
     delta_matched = per_state_values("matched", "delta")
 
-    _plot_map(_canonical_grid_average(b_online), "b̂ online (checkpoint final)", "F4_b_online", center_zero=True)
-    _plot_map(_canonical_grid_average(delta_online), "Δ online (checkpoint final)", "F4_delta_online", cmap="gray_r")
+    _plot_map(_canonical_grid_average(b_online), "b̂ online (final checkpoint)", "F4_b_online", center_zero=True)
+    _plot_map(_canonical_grid_average(delta_online), "Δ online (final checkpoint)", "F4_delta_online", cmap="gray_r")
 
     b_diff = [(vo[0] - vm[0], vo[1]) for vo, vm in zip(b_online, b_matched)]
     delta_diff = [(vo[0] - vm[0], vo[1]) for vo, vm in zip(delta_online, delta_matched)]
-    _plot_map(_canonical_grid_average(b_diff), "b̂ online − apparié (checkpoint final)", "F4_b_diff", center_zero=True)
-    _plot_map(_canonical_grid_average(delta_diff), "Δ online − apparié (checkpoint final)", "F4_delta_diff", center_zero=True)
+    _plot_map(_canonical_grid_average(b_diff), "b̂ (online − matched, final checkpoint)", "F4_b_diff", center_zero=True)
+    _plot_map(_canonical_grid_average(delta_diff), "Δ (online − matched, final checkpoint)", "F4_delta_diff", center_zero=True)
 
     # Delta exterior only (corridor -- the only region outside the 4
     # blocks), tightened color scale -- "c'est la que se lit le plancher
@@ -154,4 +166,4 @@ def make_f4() -> None:
     delta_ext = np.where(exterior_mask, delta_diff_grid, np.nan)
     ext_vals = delta_ext[exterior_mask & ~np.isnan(delta_ext)]
     ext_scale = float(np.nanmax(np.abs(ext_vals))) if len(ext_vals) else 1.0
-    _plot_map(delta_ext, "Δ online − apparié, extérieur uniquement (échelle resserrée)", "F4_delta_diff_exterior", center_zero=True, vmax=ext_scale)
+    _plot_map(delta_ext, "Δ (online − matched), exterior only (tightened scale)", "F4_delta_diff_exterior", center_zero=True, vmax=ext_scale)

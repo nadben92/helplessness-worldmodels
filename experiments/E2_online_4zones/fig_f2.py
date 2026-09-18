@@ -19,9 +19,9 @@ def make_f2(per_state: np.ndarray, per_pair: np.ndarray) -> None:
     csv_rows = []
 
     panels = [
-        ("b", per_state, "b̂ online − apparié (bits)"),
-        ("delta", per_state, "Δ online − apparié"),
-        ("l1", per_pair, "L1 online − apparié"),
+        ("b", per_state, "b̂ (online − matched, bits)"),
+        ("delta", per_state, "Δ (online − matched)"),
+        ("l1", per_pair, "L1 (online − matched)"),
     ]
 
     for ax, (field, source, ylabel) in zip(axes, panels):
@@ -46,7 +46,7 @@ def make_f2(per_state: np.ndarray, per_pair: np.ndarray) -> None:
             ax.fill_between(xs, los, his, alpha=0.12, color=style["color"])
 
     axes[0].legend(loc="best", fontsize=7)
-    fig.suptitle(f"F2 — écart apparié online − apparié (α={ALPHA_REF}, ε={EPSILON_REF})")
+    fig.suptitle(f"F2 — paired difference (online − matched) (α={ALPHA_REF}, ε={EPSILON_REF})")
     fig.tight_layout()
     fg.save_figure(fig, "F2_null_model_paired_diff")
     fg.save_csv(

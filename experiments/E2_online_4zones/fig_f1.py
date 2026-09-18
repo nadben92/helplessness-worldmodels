@@ -57,7 +57,7 @@ def make_f1(per_state: np.ndarray, alpha: float) -> None:
         ax.set_ylabel("b̂ (bits)" if zone == F1_ZONES[0] else "")
 
     axes[0].legend(loc="best", fontsize=8)
-    fig.suptitle(f"F1 — b̂ par type de zone vs budget (α={alpha}, ε=0.1)")
+    fig.suptitle(f"F1 — b̂ by zone type vs budget (α={alpha}, ε=0.1)")
     fig.tight_layout()
     fg.save_figure(fig, f"F1_b_vs_budget_alpha{alpha}")
     fg.save_csv(

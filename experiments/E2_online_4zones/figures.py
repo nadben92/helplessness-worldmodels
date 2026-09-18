@@ -31,11 +31,11 @@ ZONE_STYLE = {
     "uncontrollable_noisy": {"marker": "v", "linestyle": (0, (3, 1, 1, 1)), "color": "#CCBB44"},
 }
 ZONE_LABELS = {
-    "corridor": "couloir",
-    "uncontrollable_deterministic": "tapis roulant",
-    "controllable_noisy": "contrôlable-bruitée",
-    "controllable_deterministic": "contrôlable-déterministe",
-    "uncontrollable_noisy": "incontrôlable-bruitée",
+    "corridor": "corridor",
+    "uncontrollable_deterministic": "conveyor",
+    "controllable_noisy": "controllable-noisy",
+    "controllable_deterministic": "controllable-deterministic",
+    "uncontrollable_noisy": "uncontrollable-noisy",
 }
 CONDITION_STYLE = {
     "online": {"linestyle": "-", "marker": "o", "fillstyle": "full"},
@@ -125,5 +125,5 @@ def paired_diff_by_checkpoint(
 
 def setup_log_x_axis(ax) -> None:
     ax.set_xscale("log")
-    ax.set_xlabel("checkpoint (pas)")
+    ax.set_xlabel("checkpoint (env. steps)")
     ax.axhline(0.0, color="gray", linewidth=0.8, zorder=0)
