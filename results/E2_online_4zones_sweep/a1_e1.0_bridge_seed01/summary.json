@@ -1,0 +1,15 @@
+{
+  "condition_key": "a1_e1.0_bridge",
+  "alpha": 1.0,
+  "epsilon": 1.0,
+  "seed": 1,
+  "assignment": 0,
+  "elapsed_seconds": 255.14402198791504,
+  "n_episodes": 28559,
+  "n_truncated": 27292,
+  "truncation_rate": 0.9556357015301656,
+  "mean_episode_length": 35.01411113834518,
+  "n_replans": 28560,
+  "plan_n_iter_mean": 21.456337535014004,
+  "plan_n_iter_max": 213
+}

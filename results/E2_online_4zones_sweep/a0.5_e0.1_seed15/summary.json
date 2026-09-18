@@ -1,0 +1,15 @@
+{
+  "condition_key": "a0.5_e0.1",
+  "alpha": 0.5,
+  "epsilon": 0.1,
+  "seed": 15,
+  "assignment": 3,
+  "elapsed_seconds": 673.9972853660583,
+  "n_episodes": 102450,
+  "n_truncated": 122,
+  "truncation_rate": 0.0011908247925817472,
+  "mean_episode_length": 9.760849194729136,
+  "n_replans": 102451,
+  "plan_n_iter_mean": 18.97848727684454,
+  "plan_n_iter_max": 213
+}

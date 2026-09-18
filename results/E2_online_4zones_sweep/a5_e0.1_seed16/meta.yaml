@@ -1,0 +1,17 @@
+seed: 16
+git_commit: 88e7990e14b842b0c6dc5b4fb2142fa62484a3e4
+started_at: '2026-09-17T18:25:13Z'
+status: done
+updated_at: '2026-09-17T18:25:13Z'
+condition_key: a5_e0.1
+alpha: 5.0
+epsilon: 0.1
+assignment: 3
+elapsed_seconds: 731.2938423156738
+n_episodes: 101388
+n_truncated: 120
+truncation_rate: 0.0011835720203574387
+mean_episode_length: 9.863060717244645
+n_replans: 101389
+plan_n_iter_mean: 22.55757527936956
+plan_n_iter_max: 213

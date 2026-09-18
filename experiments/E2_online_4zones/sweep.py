@@ -77,7 +77,7 @@ EXPERIMENT_ID = "E2_online_4zones_sweep"
 
 def run_condition_seed(
     condition: dict, seed_index: int, budget: int = BUDGET, checkpoints: tuple[int, ...] = CHECKPOINTS,
-    log_trajectory: bool = False,
+    log_trajectory: bool = False, track_agent_state: bool = False,
 ) -> dict:
     """One (condition, seed) job: online training + full measurement
     chain (online + matched) at every checkpoint. Self-contained -- takes
@@ -96,6 +96,16 @@ def run_condition_seed(
     (seed_index, alpha, epsilon[, checkpoint]) (rng.py), calling this with
     log_trajectory=True for a (condition, seed_index) already in the
     sweep reproduces that exact run's trajectory bit-for-bit.
+
+    track_agent_state=True (off by default -- the real sweep never sets
+    it) additionally captures, at every checkpoint, the LIVE agent's own
+    V/policy and the step of its last completed replan -- exactly what
+    pilot.py already does, never saved by the plain sweep run (see
+    analysis's jumeau check, which needs this to compare against a
+    freshly-computed jumeau; the sweep's own saved arrays.npz has N but
+    never V/policy). Recomputing this for all 80 runs costs as much as
+    the original sweep pass; analysis.py instead reruns a SAMPLE with
+    this flag on.
     """
     alpha, epsilon, cond_key = condition["alpha"], condition["epsilon"], condition["key"]
     rotation = e2_env.rotation_for_seed_index(seed_index, SEEDS_PER_ROTATION)
@@ -127,6 +137,11 @@ def run_condition_seed(
     departure_counts = np.zeros(N_STATES, dtype=np.int64)
     departure_pair_counts = np.zeros((N_STATES, N_ACTIONS), dtype=np.int64)
     is_departure = [True]  # the very first transition of the run is a departure
+
+    V_checkpoints: dict[int, np.ndarray] = {}
+    policy_checkpoints: dict[int, np.ndarray] = {}
+    last_replan_checkpoints: dict[int, int] = {}
+    last_replan_step = [0]
 
     traj = None
     if log_trajectory:
@@ -180,6 +195,16 @@ def run_condition_seed(
             # from departures, not exploitation traffic through a state.
             N_checkpoints[t] = ag.N.copy()
             N_start_checkpoints[t] = departure_pair_counts.copy()
+            if track_agent_state:
+                # Same ordering discipline as pilot.py: captured BEFORE
+                # any replan THIS transition might trigger below, so it
+                # reflects the PREVIOUS replan, not one still pending.
+                V_checkpoints[t] = ag.V.copy()
+                policy_checkpoints[t] = ag.policy.copy()
+                last_replan_checkpoints[t] = last_replan_step[0]
+
+        if track_agent_state and (terminated or truncated):
+            last_replan_step[0] = t
 
     t0 = time.time()
     e2_loop.train_online_e2(
@@ -266,6 +291,12 @@ def run_condition_seed(
     result = {"per_state_rows": per_state_rows, "per_pair_rows": per_pair_rows, "summary": summary, "arrays": arrays}
     if traj is not None:
         result["trajectory"] = traj
+    if track_agent_state:
+        result["agent_state"] = {
+            "V_checkpoints": V_checkpoints,
+            "policy_checkpoints": policy_checkpoints,
+            "last_replan_checkpoints": last_replan_checkpoints,
+        }
     return result
 
 

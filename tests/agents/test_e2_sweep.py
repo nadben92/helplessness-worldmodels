@@ -125,6 +125,28 @@ def test_log_trajectory_does_not_perturb_the_run_and_reconstructs_n_checkpoints(
         assert np.array_equal(N_log.astype(np.int32), result_plain["arrays"][f"N_checkpoint_{t}"])
 
 
+def test_track_agent_state_does_not_perturb_the_run(isolated_sweep):
+    """track_agent_state=True (used only for the jumeau sample-verification
+    rerun, see analysis.py -- never by the real sweep) must not change
+    RNG consumption or results: N_checkpoints must be bit-identical with
+    vs without it, same principle as log_trajectory's own test."""
+    result_plain = sweep_mod.run_condition_seed(CONDITION, 0, budget=3000, checkpoints=(1500, 3000))
+    result_tracked = sweep_mod.run_condition_seed(
+        CONDITION, 0, budget=3000, checkpoints=(1500, 3000), track_agent_state=True,
+    )
+    for t in (1500, 3000):
+        assert np.array_equal(
+            result_plain["arrays"][f"N_checkpoint_{t}"], result_tracked["arrays"][f"N_checkpoint_{t}"]
+        )
+    agent_state = result_tracked["agent_state"]
+    assert set(agent_state["V_checkpoints"].keys()) == {1500, 3000}
+    assert set(agent_state["policy_checkpoints"].keys()) == {1500, 3000}
+    for t in (1500, 3000):
+        assert agent_state["last_replan_checkpoints"][t] < t
+        assert agent_state["V_checkpoints"][t].shape == (sweep_mod.N_STATES,)
+        assert agent_state["policy_checkpoints"][t].shape == (sweep_mod.N_STATES,)
+
+
 def test_run_and_save_creates_the_final_directory_on_success(isolated_sweep):
     run_name, elapsed, status = sweep_mod.run_and_save(CONDITION, 0)
     assert status == "done"

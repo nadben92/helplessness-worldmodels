@@ -1,0 +1,17 @@
+seed: 12
+git_commit: 88e7990e14b842b0c6dc5b4fb2142fa62484a3e4
+started_at: '2026-09-17T18:30:32Z'
+status: done
+updated_at: '2026-09-17T18:30:32Z'
+condition_key: a1_e1.0_bridge
+alpha: 1.0
+epsilon: 1.0
+assignment: 2
+elapsed_seconds: 263.4941613674164
+n_episodes: 28551
+n_truncated: 27348
+truncation_rate: 0.9578648733844699
+mean_episode_length: 35.024587580119785
+n_replans: 28552
+plan_n_iter_mean: 21.610289997198095
+plan_n_iter_max: 213

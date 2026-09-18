@@ -14,6 +14,12 @@ results/online/snapshots/**/*.npz
 results/**/snapshots/**/*.npz
 results/**/checkpoints/**
 results/E2_online_4zones/**/raw.npz
+# sweep's bulk per-run data (~291MB, bit-for-bit regenerable given full
+# determinism -- see rng.py/README.md) -- summary.json/meta.yaml (small,
+# useful for quick inspection without rerunning) stay tracked.
+results/E2_online_4zones_sweep/**/arrays.npz
+results/E2_online_4zones_sweep/**/per_state.csv
+results/E2_online_4zones_sweep/**/per_pair.csv
 
 # matplotlib / notebook scratch output
 notebooks/.ipynb_checkpoints/
