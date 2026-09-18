@@ -1,0 +1,6 @@
+zone,n_episodes,median_length,p90_length,p99_length,truncation_rate
+controllable_deterministic,355314,7.0,11.0,22.0,0.000607913000894983
+controllable_noisy,355937,7.0,13.0,25.0,0.0010254623711499506
+corridor,608823,7.0,14.0,25.0,0.0010544936705742063
+uncontrollable_deterministic,354236,13.0,18.0,29.0,0.002125701509727978
+uncontrollable_noisy,354768,13.0,19.0,30.0,0.002438213142109773

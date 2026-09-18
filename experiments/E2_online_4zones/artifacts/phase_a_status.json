@@ -1,0 +1,242 @@
+{
+  "b_exact_zero": {
+    "('corridor', 'online')": {
+      "n_rows": 55040,
+      "max_abs_b": 0.0,
+      "status": "observed"
+    },
+    "('corridor', 'matched')": {
+      "n_rows": 55040,
+      "max_abs_b": 0.0,
+      "status": "observed"
+    },
+    "('controllable_deterministic', 'online')": {
+      "n_rows": 32000,
+      "max_abs_b": 0.0,
+      "status": "observed"
+    },
+    "('controllable_deterministic', 'matched')": {
+      "n_rows": 32000,
+      "max_abs_b": 0.0,
+      "status": "observed"
+    }
+  },
+  "t_hat_equal_via_l1": {
+    "uncontrollable_deterministic": {
+      "n_pairs_compared": 160000,
+      "max_l1_diff": 0.0,
+      "status": "observed"
+    },
+    "controllable_deterministic": {
+      "n_pairs_compared": 160000,
+      "max_l1_diff": 0.0,
+      "status": "observed"
+    }
+  },
+  "delta_nonneg": {
+    "online": {
+      "n_rows": 183040,
+      "min_delta": 0.0,
+      "n_violations": 0,
+      "status": "observed"
+    },
+    "matched": {
+      "n_rows": 183040,
+      "min_delta": 0.0,
+      "n_violations": 0,
+      "status": "observed"
+    }
+  },
+  "b_variance": {
+    "(0.5, 0.1, 'controllable_noisy')": {
+      "n_seeds": 20,
+      "variance": 0.0008333887999439843,
+      "status": "observed"
+    },
+    "(0.5, 0.1, 'uncontrollable_noisy')": {
+      "n_seeds": 20,
+      "variance": 0.00010424273771745719,
+      "status": "observed"
+    },
+    "(1.0, 0.1, 'controllable_noisy')": {
+      "n_seeds": 20,
+      "variance": 0.0004500559200607936,
+      "status": "observed"
+    },
+    "(1.0, 0.1, 'uncontrollable_noisy')": {
+      "n_seeds": 20,
+      "variance": 0.00022510038023279894,
+      "status": "observed"
+    },
+    "(1.0, 1.0, 'controllable_noisy')": {
+      "n_seeds": 20,
+      "variance": 3.0750023715732586e-05,
+      "status": "observed"
+    },
+    "(1.0, 1.0, 'uncontrollable_noisy')": {
+      "n_seeds": 20,
+      "variance": 6.018292230747537e-05,
+      "status": "observed"
+    },
+    "(5.0, 0.1, 'controllable_noisy')": {
+      "n_seeds": 20,
+      "variance": 0.000224646625351891,
+      "status": "observed"
+    },
+    "(5.0, 0.1, 'uncontrollable_noisy')": {
+      "n_seeds": 20,
+      "variance": 0.0002889588728657522,
+      "status": "observed"
+    }
+  },
+  "n_start_leq_n": {
+    "n_pairs_checked": 921600,
+    "n_violations": 0,
+    "max_violation": 0,
+    "status": "observed"
+  },
+  "epsilon_one_no_diff": {
+    "corridor": {
+      "b": {
+        "n_seeds": 20,
+        "mean_diff": 0.0,
+        "wilcoxon_stat": NaN,
+        "wilcoxon_p": NaN,
+        "status": "observed (no diff)"
+      },
+      "delta": {
+        "n_seeds": 20,
+        "mean_diff": 0.0,
+        "wilcoxon_stat": NaN,
+        "wilcoxon_p": NaN,
+        "status": "observed (no diff)"
+      },
+      "l1": {
+        "n_seeds": 20,
+        "mean_diff": 0.0,
+        "wilcoxon_stat": NaN,
+        "wilcoxon_p": NaN,
+        "status": "observed (no diff)"
+      }
+    },
+    "uncontrollable_deterministic": {
+      "b": {
+        "n_seeds": 20,
+        "mean_diff": 0.0,
+        "wilcoxon_stat": NaN,
+        "wilcoxon_p": NaN,
+        "status": "observed (no diff)"
+      },
+      "delta": {
+        "n_seeds": 20,
+        "mean_diff": 0.0,
+        "wilcoxon_stat": NaN,
+        "wilcoxon_p": NaN,
+        "status": "observed (no diff)"
+      },
+      "l1": {
+        "n_seeds": 20,
+        "mean_diff": 0.0,
+        "wilcoxon_stat": NaN,
+        "wilcoxon_p": NaN,
+        "status": "observed (no diff)"
+      }
+    },
+    "controllable_noisy": {
+      "b": {
+        "n_seeds": 20,
+        "mean_diff": -0.0009846323778584128,
+        "wilcoxon_stat": 85.0,
+        "wilcoxon_p": 0.47490501403808594,
+        "status": "observed (no diff)"
+      },
+      "delta": {
+        "n_seeds": 20,
+        "mean_diff": 0.0,
+        "wilcoxon_stat": NaN,
+        "wilcoxon_p": NaN,
+        "status": "observed (no diff)"
+      },
+      "l1": {
+        "n_seeds": 20,
+        "mean_diff": -0.0002706115979280988,
+        "wilcoxon_stat": 55.0,
+        "wilcoxon_p": 0.06372261047363281,
+        "status": "observed (no diff)"
+      }
+    },
+    "controllable_deterministic": {
+      "b": {
+        "n_seeds": 20,
+        "mean_diff": 0.0,
+        "wilcoxon_stat": NaN,
+        "wilcoxon_p": NaN,
+        "status": "observed (no diff)"
+      },
+      "delta": {
+        "n_seeds": 20,
+        "mean_diff": 0.0,
+        "wilcoxon_stat": NaN,
+        "wilcoxon_p": NaN,
+        "status": "observed (no diff)"
+      },
+      "l1": {
+        "n_seeds": 20,
+        "mean_diff": 0.0,
+        "wilcoxon_stat": NaN,
+        "wilcoxon_p": NaN,
+        "status": "observed (no diff)"
+      }
+    },
+    "uncontrollable_noisy": {
+      "b": {
+        "n_seeds": 20,
+        "mean_diff": 2.428286391374934e-05,
+        "wilcoxon_stat": 104.0,
+        "wilcoxon_p": 0.9854354858398438,
+        "status": "observed (no diff)"
+      },
+      "delta": {
+        "n_seeds": 20,
+        "mean_diff": 0.0,
+        "wilcoxon_stat": NaN,
+        "wilcoxon_p": NaN,
+        "status": "observed (no diff)"
+      },
+      "l1": {
+        "n_seeds": 20,
+        "mean_diff": -0.00011055574182380242,
+        "wilcoxon_stat": 103.0,
+        "wilcoxon_p": 0.956329345703125,
+        "status": "observed (no diff)"
+      }
+    }
+  },
+  "counterbalancing_dispersion": {
+    "corridor": {
+      "inter_seed_std": 0.0,
+      "inter_rotation_std_of_rotation_means": 0.0,
+      "n_rotations_present": 4
+    },
+    "uncontrollable_deterministic": {
+      "inter_seed_std": 0.00374403315088586,
+      "inter_rotation_std_of_rotation_means": 0.001762249653179004,
+      "n_rotations_present": 4
+    },
+    "controllable_noisy": {
+      "inter_seed_std": 0.021214521443124603,
+      "inter_rotation_std_of_rotation_means": 0.013765738129247827,
+      "n_rotations_present": 4
+    },
+    "controllable_deterministic": {
+      "inter_seed_std": 0.0,
+      "inter_rotation_std_of_rotation_means": 0.0,
+      "n_rotations_present": 4
+    },
+    "uncontrollable_noisy": {
+      "inter_seed_std": 0.015003345634650923,
+      "inter_rotation_std_of_rotation_means": 0.008847095285595711,
+      "n_rotations_present": 4
+    }
+  }
+}

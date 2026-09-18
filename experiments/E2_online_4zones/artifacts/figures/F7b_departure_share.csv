@@ -1,0 +1,16 @@
+zone,count_bin,mean_departure_share
+corridor,N<10,0.884920634920635
+uncontrollable_deterministic,N<10,nan
+controllable_noisy,N<10,nan
+controllable_deterministic,N<10,nan
+uncontrollable_noisy,N<10,nan
+corridor,10<=N<100,0.44311314178904804
+uncontrollable_deterministic,10<=N<100,0.27851143823855995
+controllable_noisy,10<=N<100,0.34493828322841513
+controllable_deterministic,10<=N<100,0.3801657849033372
+uncontrollable_noisy,10<=N<100,0.3782755072787305
+corridor,N>=100,0.11479519203934878
+uncontrollable_deterministic,N>=100,0.45358582308753614
+controllable_noisy,N>=100,0.2867798983391864
+controllable_deterministic,N>=100,0.12502761629127773
+uncontrollable_noisy,N>=100,0.25107327104308663

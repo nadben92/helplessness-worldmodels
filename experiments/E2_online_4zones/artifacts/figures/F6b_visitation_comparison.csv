@@ -1,0 +1,11 @@
+zone,epsilon,median_N,p10_N,p90_N,mean_N
+corridor,0.1,224.5,30.0,6159.299999999992,2638.2423255813956
+uncontrollable_deterministic,0.1,154.0,39.0,1542.3999999999987,519.116
+controllable_noisy,0.1,70.0,28.0,1954.1999999999998,542.5956
+controllable_deterministic,0.1,155.0,28.0,4421.599999999999,1749.8868
+uncontrollable_noisy,0.1,146.0,42.0,2186.2,650.6248
+corridor,1.0,833.5,418.0,4931.2,1922.600930232558
+uncontrollable_deterministic,1.0,251.0,144.0,1249.1,569.6188
+controllable_noisy,1.0,1550.0,795.0,3233.1,1746.5936
+controllable_deterministic,1.0,1557.0,793.9,3229.0,1746.9576
+uncontrollable_noisy,1.0,326.0,165.0,1415.1,629.9564
