@@ -158,16 +158,45 @@ aux 3 checkpoints (cohérent avec la Phase A). Table complète : b̂, L1 et
 ### 5.3 — Tendance budget, loi de puissance, contrôlable-bruitée (`table3_budget_trend_power_law.csv`)
 
 Ajustement OLS log-log de \|écart moyen\| vs budget, checkpoints ≥ 10⁴
-(11 points) :
+(11 points, df=9, t_crit=2,262) :
 
-| quantité | exposant | IC 95 % | r |
-|---|---|---|---|
-| b̂ | +0,005 | [−0,148 ; 0,159] | 0,03 |
-| L1 | −0,415 | [−0,616 ; −0,215] | −0,84 |
+| quantité | exposant | IC 95 % | r | erreur type |
+|---|---|---|---|---|
+| b̂ | +0,005 | [−0,148 ; 0,159] | 0,03 | 0,068 |
+| L1 | −0,415 | [−0,616 ; −0,215] | −0,84 | 0,091 |
 
 L'écart sur L1 décroît avec le budget (exposant négatif, IC excluant 0,
-corrélation forte) ; l'écart sur b̂ ne montre pas de tendance nette sur
-cette plage (IC englobant 0).
+corrélation forte).
+
+Pour b̂, « plat » et « non détectable » ne sont pas équivalents — les deux
+sont vérifiés séparément :
+
+- L'IC de l'exposant b̂ ([−0,148 ; 0,159], demi-largeur 0,153) **exclut**
+  la valeur de l'exposant L1 (−0,415) et **exclut** −0,5 (décroissance
+  attendue d'une erreur d'échantillonnage en 1/√N). L'ajustement n'est
+  donc pas simplement sous-puissant : il rejette activement une
+  décroissance de l'ampleur de celle observée sur L1 ou de celle attendue
+  par du bruit d'échantillonnage pur.
+- Seuil de détection à cet effectif (11 points, test bilatéral α=0,05,
+  puissance 80 %) : |exposant| ≳ 0,21. Un exposant plus petit en valeur
+  absolue (décroissance plus lente que ≈0,21) ne serait pas fiablement
+  distingué de 0 à ce nombre de graines/checkpoints.
+- Conclusion correcte : l'écart sur b̂ n'a **pas** de décroissance de
+  l'ampleur de celle sur L1, ni de l'ampleur attendue par du seul bruit
+  d'échantillonnage — mais une décroissance plus faible (|exposant|
+  < ~0,21) ne peut ni être confirmée ni exclue avec ces données.
+
+Écart brut sur b̂ (contrôlable-bruitée, avec IC 95 %, n=20 comparaisons) :
+
+| checkpoint | écart moyen | IC 95 % |
+|---|---|---|
+| 10⁵ | −0,0221 | [−0,0370 ; −0,0072] |
+| 10⁶ | −0,0110 | [−0,0209 ; −0,0010] |
+
+L'écart reste non nul (IC excluant 0) aux deux checkpoints ; le point
+central diminue de moitié entre 10⁵ et 10⁶, mais les IC se chevauchent
+largement (pas de diminution significative point à point entre ces deux
+checkpoints seuls).
 
 ### 5.4 — Δ extérieur, majorant (`table4_delta_exterior_max.csv`)
 
@@ -220,41 +249,79 @@ dans la plage de budget balayée (≤10⁶).
 
 ## Vérifications
 
-### Anisotropie de la visite (`verif_corridor_branch_visitation.csv`, `verif_resolved_drift.csv`)
+### Anisotropie de la visite : géométrie vs boucle
 
-Comptages agrégés des 4 branches du couloir (N(s) sommé sur la branche,
-moyenne ± IC 95 % sur les 20 graines de la condition de référence,
-checkpoint final) :
+Trois sources, comparées en PARTS relatives (chaque branche divisée par
+le total des 4 branches — les échelles absolues diffèrent, la part est
+comparable) :
 
-| branche | N moyen | IC 95 % |
-|---|---|---|
-| colonne 0 | 305 675 | [272 547 ; 338 803] |
-| ligne 6 | 155 628 | [144 754 ; 166 502] |
-| ligne 0 | 121 290 | [100 211 ; 142 368] |
-| colonne 6 | 24 340 | [22 960 ; 25 719] |
+- **Référence ε=0,1** (`verif_corridor_branch_visitation.csv`) : N(s)
+  sommé par branche, moyenne sur les 20 graines, checkpoint final —
+  observé (politique + exploration).
+- **Pont ε=1** (`verif_corridor_branch_visitation_epsilon1_bridge.csv`) :
+  même calcul, condition ε=1 (politique purement aléatoire, aucun rôle du
+  but) — la dynamique seule, sans boucle de décision.
+- **DP optimal sous P** (`verif_corridor_branch_dp_optimal.csv`) : pour
+  chaque rotation, valeur/politique optimale exacte par itération de la
+  valeur sur le noyau vrai P, puis nombre de visites attendu par état
+  via la matrice fondamentale de la chaîne absorbante induite
+  ((I−Q)⁻¹, Q restreinte aux 143 états non-but), moyenné uniformément
+  sur les 143 états de départ non-terminaux, puis moyenné sur les 4
+  rotations. Aucune collecte, aucun RNG — calcul exact.
 
-Dérive résolue (`helplessness.envs.zones.resolve_drift`, direction
-`away_from_goal`, but en (0,0)) pour chaque bande de lignes géométrique
-— fixe, indépendante de la rotation puisque dérivée de la plage de
-lignes du quadrant géométrique, jamais du type qui l'occupe :
+| branche | part DP optimal | part pont ε=1 | part référence ε=0,1 |
+|---|---|---|---|
+| ligne 0 | 0,224 | 0,056 | 0,200 |
+| ligne 6 | 0,226 | 0,635 | 0,256 |
+| colonne 0 | 0,505 | 0,147 | 0,504 |
+| colonne 6 | 0,045 | 0,163 | 0,040 |
+
+(table complète : `verif_corridor_branch_comparison.csv`)
+
+**Colonne 0 / colonne 6 : géométrique, via la politique optimale.** La
+part DP (0,505 / 0,045) reproduit quasiment exactement la part observée
+à ε=0,1 (0,504 / 0,040 — écart ≤0,005). Le pont ε=1 (dynamique seule,
+sans but) ne reproduit PAS ce motif (0,147 / 0,163 — colonne 0 n'y est
+pas dominante). L'asymétrie colonne 0 ≫ colonne 6 n'est donc pas un
+effet de la dynamique brute : c'est la signature de la politique
+optimale sous P (la colonne 0, qui contient le but (0,0), est
+l'artère de corridor la plus empruntée par tout chemin optimal,
+quelle que soit la rotation) — géométrique au sens où elle est
+entièrement déterminée par (P, but), sans dépendre de la politique
+apprise réelle au-delà de son optimalité.
+
+**Ligne 0 / ligne 6 : dynamique, via la dérive.** Sous le pont ε=1
+(aucune politique), l'asymétrie ligne 6 ≫ ligne 0 est encore plus
+marquée (0,635 vs 0,056) que sous DP (0,226 vs 0,224, quasi symétrique)
+ou sous la référence observée (0,256 vs 0,200) — cohérent avec la
+dérive résolue (`helplessness.envs.zones.resolve_drift`, direction
+`away_from_goal`, but en (0,0)), rotation-invariante puisque dérivée de
+la plage de lignes du quadrant géométrique, jamais du type qui l'occupe :
 
 | bande | plage de lignes | dérive (ligne, colonne) |
 |---|---|---|
 | nw/ne | 1–5 | (+1, 0) |
 | sw/se | 7–11 | (−1, 0) |
 
-Les deux bandes dérivent vers la ligne 6 (à l'opposé du but, qui est en
-ligne 0) : cohérent avec ligne 6 > ligne 0 observé (155 628 > 121 290).
-La composante colonne de la dérive est nulle par construction
-(`resolve_drift` : "Column component of the returned drift is always
-0") — elle ne peut donc pas, par construction, expliquer l'écart
-colonne 0 / colonne 6, nettement plus large que l'écart ligne 0 / ligne
-6. La colonne 0 contient le but (0,0) ; la colonne 6 en est le point le
-plus éloigné (ligne et colonne). Aucun biais de collecte non documenté
-identifié au-delà de ces deux faits géométriques (position du but,
-dérive en ligne uniquement) ; les deux n'expliquent cependant pas
-entièrement, à eux seuls, l'amplitude relative colonne 0 vs les 3 autres
-branches — à creuser si nécessaire dans un travail ultérieur.
+Les deux bandes dérivent vers la ligne 6 : sous une politique purement
+aléatoire, cette dérive domine et pousse la quasi-totalité du trafic
+extérieur vers la ligne 6. Sous la politique optimale (DP), le but
+étant en ligne 0, la dérive est presque entièrement compensée (parts
+quasi égales, 0,226 vs 0,224). La référence observée (0,256 vs 0,200)
+se situe entre les deux extrêmes DP et pont, cohérent avec ε=0,1 :
+90 % des pas suivent la politique apprise (proche de DP), 10 %
+explorent au hasard (tirant vers le motif du pont).
+
+**Ce qui reste inexpliqué.** Sous l'hypothèse d'un mélange {DP, pont}
+(la référence ε=0,1 devrait s'interpoler entre les deux extrêmes), 3
+des 4 branches vérifient bien part(DP) ≤ part(référence) ≤ part(pont)
+ou l'inverse selon le sens de l'écart — sauf colonne 6 : part observée
+(0,040) légèrement SOUS la part DP (0,045), donc hors de l'intervalle
+[DP, pont]=[0,045 ; 0,163]. L'écart est faible (0,005) et colonne 6 est
+la branche avec le N total le plus petit (24 340, la plus sensible au
+bruit d'échantillonnage) — probablement du bruit, mais signalé tel
+quel : ce point précis n'est pas strictement couvert par le modèle à
+deux mécanismes (DP + dynamique pure).
 
 ### Couples encore mal échantillonnés (`verif_undersampled_pairs_final_checkpoint.csv`)
 
@@ -291,7 +358,7 @@ sous-dossiers `png/`, `pdf/`, `csv/` (même nom de fichier dans chacun).
 - **F7** (`F7a_counts_profile`, `F7b_departure_share`, `F7c_episode_profile`) — profil de visite de référence (le dernier réutilise `episode_analysis.py` sans recalcul).
 - **Tableau de synthèse** (`synthesis_table_b.csv`, `synthesis_table_delta_exterior.csv`) — checkpoint final, par zone × α : b̂ online, b̂ apparié, écart apparié + IC 95 % + taille d'effet + p Wilcoxon ; Δ moyen extérieur (couloir) par α et condition.
 - **Tableaux chiffrés** (`table1` à `table6`) — section 5 ci-dessus.
-- **Vérifications** (`verif_corridor_branch_visitation`, `verif_resolved_drift`, `verif_undersampled_pairs_final_checkpoint`) — section « Vérifications » ci-dessus.
+- **Vérifications** (`verif_corridor_branch_visitation`, `verif_corridor_branch_visitation_epsilon1_bridge`, `verif_corridor_branch_dp_optimal`, `verif_corridor_branch_comparison`, `verif_resolved_drift`, `verif_undersampled_pairs_final_checkpoint`) — section « Vérifications » ci-dessus.
 
 ## Formes prédites — observé / non observé
 
