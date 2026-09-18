@@ -157,36 +157,53 @@ aux 3 checkpoints (cohérent avec la Phase A). Table complète : b̂, L1 et
 
 ### 5.3 — Tendance budget, loi de puissance, contrôlable-bruitée (`table3_budget_trend_power_law.csv`)
 
-Ajustement OLS log-log de \|écart moyen\| vs budget, checkpoints ≥ 10⁴
-(11 points, df=9, t_crit=2,262) :
+**Cible de l'ajustement.** Loi de puissance ajustée sur \|écart moyen\|
+(log10), jamais sur la valeur signée (non log-transformable si elle
+change de signe) — checkpoints ≥ 10⁴ (11 points).
 
-| quantité | exposant | IC 95 % | r | erreur type |
-|---|---|---|---|---|
-| b̂ | +0,005 | [−0,148 ; 0,159] | 0,03 | 0,068 |
-| L1 | −0,415 | [−0,616 ; −0,215] | −0,84 | 0,091 |
+**Cohérence de signe sur la plage ajustée** (condition sous laquelle
+« \|écart\| décroît » signifie bien « l'écart se rapproche de 0 », et pas
+« l'écart traverse 0 ») : l'écart signé reste **strictement négatif**
+pour b̂ sur les 11 checkpoints (min −0,0370, max −0,0110) et
+**strictement positif** pour L1 (min +0,0015, max +0,0212) — aucun
+changement de signe dans les deux cas.
 
-L'écart sur L1 décroît avec le budget (exposant négatif, IC excluant 0,
-corrélation forte).
+**Deux IC de l'exposant, côte à côte** :
 
-Pour b̂, « plat » et « non détectable » ne sont pas équivalents — les deux
-sont vérifiés séparément :
+- **OLS asymptotique** (utilisé précédemment) — traite les 11
+  checkpoints comme 11 observations indépendantes, alors qu'ils sont
+  tous calculés à partir des 20 mêmes graines (structure emboîtée) :
+  IC systématiquement trop étroit.
+- **Bootstrap par graine** (2000 tirages, IC par percentiles 2,5/97,5) —
+  à chaque tirage, rééchantillonnage des 20 graines avec remise (le
+  MÊME jeu de graines rééchantillonné est appliqué aux 11 checkpoints,
+  pour préserver la structure emboîdée), recalcul de la courbe
+  écart-moyen-par-checkpoint sur ces graines, puis réajustement complet
+  de la loi de puissance.
 
-- L'IC de l'exposant b̂ ([−0,148 ; 0,159], demi-largeur 0,153) **exclut**
-  la valeur de l'exposant L1 (−0,415) et **exclut** −0,5 (décroissance
-  attendue d'une erreur d'échantillonnage en 1/√N). L'ajustement n'est
-  donc pas simplement sous-puissant : il rejette activement une
-  décroissance de l'ampleur de celle observée sur L1 ou de celle attendue
-  par du bruit d'échantillonnage pur.
-- Seuil de détection à cet effectif (11 points, test bilatéral α=0,05,
-  puissance 80 %) : |exposant| ≳ 0,21. Un exposant plus petit en valeur
-  absolue (décroissance plus lente que ≈0,21) ne serait pas fiablement
-  distingué de 0 à ce nombre de graines/checkpoints.
-- Conclusion correcte : l'écart sur b̂ n'a **pas** de décroissance de
-  l'ampleur de celle sur L1, ni de l'ampleur attendue par du seul bruit
-  d'échantillonnage — mais une décroissance plus faible (|exposant|
-  < ~0,21) ne peut ni être confirmée ni exclue avec ces données.
+| quantité | exposant | IC OLS | IC bootstrap (2000 tirages) |
+|---|---|---|---|
+| b̂ | +0,005 | [−0,148 ; 0,159] | [−0,210 ; 0,274] |
+| L1 | −0,415 | [−0,616 ; −0,215] | [−0,777 ; −0,156] |
 
-Écart brut sur b̂ (contrôlable-bruitée, avec IC 95 %, n=20 comparaisons) :
+Le bootstrap élargit l'IC dans les deux cas (comme attendu : il capture
+la vraie incertitude, corrélée entre checkpoints, que l'OLS sous-
+estimait) — mais ne change pas la conclusion :
+
+- **L1** : IC bootstrap [−0,777 ; −0,156], exclut toujours 0 — la
+  décroissance reste détectée, avec un intervalle plus large.
+- **b̂** : IC bootstrap [−0,210 ; 0,274]. Il **exclut toujours −0,415**
+  (l'exposant L1) et **exclut toujours −0,5** (décroissance attendue
+  d'une erreur d'échantillonnage en 1/√N) — les deux valeurs restent en
+  dehors de l'intervalle, même élargi. L'ajustement b̂ n'est donc pas
+  simplement sous-puissant : sous le bootstrap comme sous l'OLS, il
+  rejette activement une décroissance de l'ampleur de celle observée sur
+  L1 ou attendue par du seul bruit d'échantillonnage. Une décroissance
+  plus lente (|exposant| dans les basses valeurs de l'intervalle, jusqu'à
+  ≈0,21-0,27) reste ni confirmée ni exclue.
+
+Écart brut sur b̂ (contrôlable-bruitée, avec IC 95 % sur la moyenne des
+20 graines, n=20 comparaisons) :
 
 | checkpoint | écart moyen | IC 95 % |
 |---|---|---|

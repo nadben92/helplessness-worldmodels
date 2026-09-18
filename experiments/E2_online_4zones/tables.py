@@ -113,23 +113,98 @@ def _power_law_fit(xs: list[int], ys: list[float]) -> dict:
     }
 
 
+def _per_seed_diff_matrix(
+    source: np.ndarray, zone: str, alpha: float, epsilon: float, value_field: str, checkpoints: tuple[int, ...],
+) -> np.ndarray:
+    """(N_SEEDS, len(checkpoints)) matrix of the per-seed (online -
+    matched) diff, EXPLICITLY indexed by seed id (0..N_SEEDS-1) at every
+    checkpoint -- so a bootstrap that resamples seed rows keeps the same
+    seed aligned across all checkpoints (the nested structure: every
+    checkpoint's mean diff is computed from the SAME 20 seeds, never an
+    independent sample per checkpoint)."""
+    zone_mask = source["zone"] == zone
+    online_mask = zone_mask & (source["condition"] == "online") & (source["alpha"] == alpha) & (source["epsilon"] == epsilon)
+    matched_mask = zone_mask & (source["condition"] == "matched") & (source["alpha"] == alpha) & (source["epsilon"] == epsilon)
+    online_sub = source[online_mask]
+    matched_sub = source[matched_mask]
+
+    mat = np.full((ad.N_SEEDS, len(checkpoints)), np.nan)
+    for j, cp in enumerate(checkpoints):
+        o_cp = online_sub[online_sub["checkpoint"] == cp]
+        m_cp = matched_sub[matched_sub["checkpoint"] == cp]
+        for seed in range(ad.N_SEEDS):
+            o_val = o_cp[value_field][o_cp["seed"] == seed].mean()
+            m_val = m_cp[value_field][m_cp["seed"] == seed].mean()
+            mat[seed, j] = o_val - m_val
+    return mat
+
+
+def _bootstrap_exponent_ci(diff_matrix: np.ndarray, checkpoints: tuple[int, ...], n_boot: int, rng: np.random.Generator) -> dict:
+    """Percentile bootstrap (2.5/97.5) of the power-law exponent,
+    resampling SEEDS (rows) with replacement -- each bootstrap draw picks
+    a set of 20 seeds (with replacement) ONCE and reuses it across every
+    checkpoint, so it correctly propagates the fact that all 11
+    checkpoints are computed from the same 20 seeds (never treats the 11
+    checkpoints as 11 independent draws, which is what the OLS asymptotic
+    CI implicitly does and why it understates the true uncertainty)."""
+    n_seeds = diff_matrix.shape[0]
+    xs = np.asarray(checkpoints, dtype=float)
+    exponents = np.empty(n_boot)
+    for b in range(n_boot):
+        idx = rng.integers(0, n_seeds, size=n_seeds)
+        mean_diff_by_cp = diff_matrix[idx, :].mean(axis=0)
+        exponents[b] = _power_law_fit(xs, mean_diff_by_cp)["exponent"]
+    lo, hi = np.percentile(exponents, [2.5, 97.5])
+    return {"ci95_low": float(lo), "ci95_high": float(hi)}
+
+
+N_BOOTSTRAP_DRAWS = 2000
+
+
 def table3_budget_trend_power_law(per_state: np.ndarray, per_pair: np.ndarray) -> list[dict]:
     """Power-law fit (|mean paired diff| ~ budget^exponent, OLS in
-    log-log) on checkpoints >= 1e4, controllable-noisy zone, for b and L1
-    -- reports whether the gap shrinks with budget and at what rate."""
+    log-log) on checkpoints >= 1e4, controllable-noisy zone, for b and L1.
+    Two CIs are reported side by side: the OLS asymptotic one (treats the
+    11 checkpoints as independent, understates uncertainty since they
+    share the same 20 seeds) and a seed-level percentile bootstrap
+    (N_BOOTSTRAP_DRAWS resamples of the 20 seeds, propagated identically
+    to every checkpoint per draw -- see _bootstrap_exponent_ci). The fit
+    target is |mean diff| (log10), never the signed value (can't be
+    log-transformed) -- sign_consistent/min_diff/max_diff report whether
+    the SIGNED diff stays one-signed over the fitted range, which is the
+    condition under which "|diff| shrinking" cleanly means "diff shrinking
+    toward zero" rather than crossing through it."""
     zone = "controllable_noisy"
     high_checkpoints = tuple(cp for cp in ad.CHECKPOINTS if cp >= 10_000)
+    xs = list(high_checkpoints)
+    seed_seqs = np.random.SeedSequence(20260000).spawn(2)
+
     rows = []
-    for quantity in ("b", "l1"):
+    for quantity, boot_seed in zip(("b", "l1"), seed_seqs):
         source = _diff_source(quantity, per_state, per_pair)
-        diffs_by_cp = fg.paired_diff_by_checkpoint(source, zone, ALPHA_REF, EPSILON_REF, quantity, high_checkpoints)
-        xs = list(high_checkpoints)
-        ys = [float(np.mean(diffs_by_cp[cp])) for cp in high_checkpoints]
+        diff_matrix = _per_seed_diff_matrix(source, zone, ALPHA_REF, EPSILON_REF, quantity, high_checkpoints)
+        ys = diff_matrix.mean(axis=0)  # signed mean diff per checkpoint, same as the OLS fit's own input
+
         fit = _power_law_fit(xs, ys)
-        rows.append({"quantity": quantity, "zone": zone, **fit})
+        boot = _bootstrap_exponent_ci(diff_matrix, high_checkpoints, N_BOOTSTRAP_DRAWS, np.random.default_rng(boot_seed))
+
+        rows.append({
+            "quantity": quantity, "zone": zone, "fit_target": "abs_mean_diff (log10)",
+            "n_points": fit["n_points"], "n_bootstrap_draws": N_BOOTSTRAP_DRAWS,
+            "exponent": fit["exponent"],
+            "exponent_ols_ci95_low": fit["exponent_ci95_low"], "exponent_ols_ci95_high": fit["exponent_ci95_high"],
+            "exponent_bootstrap_ci95_low": boot["ci95_low"], "exponent_bootstrap_ci95_high": boot["ci95_high"],
+            "intercept": fit["intercept"], "r_value": fit["r_value"],
+            "sign_consistent": bool(np.all(ys < 0) or np.all(ys > 0)),
+            "min_signed_diff": float(np.min(ys)), "max_signed_diff": float(np.max(ys)),
+        })
+
     fg.save_csv(
-        rows, ["quantity", "zone", "n_points", "exponent", "exponent_ci95_low", "exponent_ci95_high",
-               "intercept", "r_value"],
+        rows,
+        ["quantity", "zone", "fit_target", "n_points", "n_bootstrap_draws", "exponent",
+         "exponent_ols_ci95_low", "exponent_ols_ci95_high",
+         "exponent_bootstrap_ci95_low", "exponent_bootstrap_ci95_high",
+         "intercept", "r_value", "sign_consistent", "min_signed_diff", "max_signed_diff"],
         "table3_budget_trend_power_law",
     )
     return rows
