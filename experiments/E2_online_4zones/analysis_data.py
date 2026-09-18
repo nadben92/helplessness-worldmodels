@@ -81,6 +81,55 @@ def zone_of_state_for_rotation(rotation: int) -> np.ndarray:
     return _ZONE_OF_STATE_CACHE[rotation]
 
 
+# Each zone TYPE's canonical quadrant key (rotation=0's own placement,
+# i.e. identity_quadrant_assignment) -- fixed by configs/zones/e1_4zones.yaml,
+# never changes. Used to remap any seed's actual (rotated) state positions
+# onto one common canonical grid for the spatial maps (F4): "agrege par
+# type de zone, jamais par quadrant" -- averaging raw absolute (row,col)
+# positions across seeds would blend DIFFERENT zone types at the same
+# physical cell, since counterbalancing rotates which type occupies which
+# quadrant. Block geometry itself (each quadrant's row/col range) never
+# moves -- only which type sits in it -- so a state's position WITHIN its
+# block, relative to that block's own top-left corner, is preserved
+# exactly when remapped to the type's canonical block.
+TYPE_TO_CANONICAL_QUADRANT = {
+    "uncontrollable_deterministic": "nw",
+    "controllable_noisy": "ne",
+    "controllable_deterministic": "sw",
+    "uncontrollable_noisy": "se",
+}
+
+
+def _block_row_col_ranges() -> dict[str, tuple[tuple[int, int], tuple[int, int]]]:
+    return {
+        key: (tuple(block["rows"]), tuple(block["cols"]))
+        for key, block in CFG["blocks"].items()
+    }
+
+
+_BLOCK_RANGES = _block_row_col_ranges()
+
+
+def canonical_rc_for_state(zone_type: str, state: int, rotation: int) -> tuple[int, int] | None:
+    """Maps `state` (as it actually occurs under `rotation`, for zone
+    type `zone_type`) onto the (row, col) it would occupy in the
+    CANONICAL (rotation=0) layout -- None for the corridor (never
+    rotated, no remapping needed; use the state's own position as-is)."""
+    if zone_type == "corridor":
+        return None
+    assignment = e2_env.quadrant_assignment_for_rotation(rotation)
+    source_key = TYPE_TO_CANONICAL_QUADRANT[zone_type]
+    actual_quadrant = next(target for target, source in assignment.items() if source == source_key)
+
+    actual_rows, actual_cols = _BLOCK_RANGES[actual_quadrant]
+    canonical_rows, canonical_cols = _BLOCK_RANGES[source_key]
+
+    r, c = divmod(state, N_COLS)
+    rel_r = r - actual_rows[0]
+    rel_c = c - actual_cols[0]
+    return canonical_rows[0] + rel_r, canonical_cols[0] + rel_c
+
+
 def all_run_dirs(sweep_root: Path = SWEEP_ROOT) -> list[Path]:
     return sorted(p for p in sweep_root.iterdir() if p.is_dir() and not p.name.startswith("."))
 
