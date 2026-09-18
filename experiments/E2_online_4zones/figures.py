@@ -50,19 +50,21 @@ ANALYTIC_B = {
 
 
 def ensure_dirs() -> None:
-    FIGURES_DIR.mkdir(parents=True, exist_ok=True)
+    (FIGURES_DIR / "png").mkdir(parents=True, exist_ok=True)
+    (FIGURES_DIR / "pdf").mkdir(parents=True, exist_ok=True)
+    (FIGURES_DIR / "csv").mkdir(parents=True, exist_ok=True)
 
 
 def save_figure(fig, name: str) -> None:
     ensure_dirs()
-    fig.savefig(FIGURES_DIR / f"{name}.png", dpi=150, bbox_inches="tight")
-    fig.savefig(FIGURES_DIR / f"{name}.pdf", bbox_inches="tight")
+    fig.savefig(FIGURES_DIR / "png" / f"{name}.png", dpi=150, bbox_inches="tight")
+    fig.savefig(FIGURES_DIR / "pdf" / f"{name}.pdf", bbox_inches="tight")
     plt.close(fig)
 
 
 def save_csv(rows: list[dict], columns: list[str], name: str) -> None:
     ensure_dirs()
-    path = FIGURES_DIR / f"{name}.csv"
+    path = FIGURES_DIR / "csv" / f"{name}.csv"
     with open(path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=columns)
         writer.writeheader()

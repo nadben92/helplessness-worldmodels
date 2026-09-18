@@ -38,7 +38,7 @@ Contre-balancement : dispersion inter-rotation ≤ dispersion inter-graine dans 
 
 ## Figures et tableaux
 
-Tous les PNG/PDF/CSV sont sous `artifacts/figures/`.
+Tous les PNG/PDF/CSV sont sous `artifacts/figures/`, répartis dans les sous-dossiers `png/`, `pdf/`, `csv/` (même nom de fichier dans chacun).
 
 - **F1** (`F1_b_vs_budget_alpha{0.5,1.0,5.0}`) — b̂ par type de zone vs budget, online/apparié, une figure par α.
 - **F2** (`F2_null_model_paired_diff`) — écart apparié online−apparié sur b̂/Δ/L1 par zone, α=1 ε=0,1. Figure centrale.
