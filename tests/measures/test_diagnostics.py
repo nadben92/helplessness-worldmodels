@@ -113,3 +113,49 @@ def test_mean_random_pair_jensen_shannon_estimates_the_all_pairs_mean():
     exact = mean_pairwise_jensen_shannon(items)
     estimate = mean_random_pair_jensen_shannon(items, np.random.default_rng(2), n_pairs=20_000)
     assert estimate == pytest.approx(exact, rel=0.03)
+
+
+def test_d1_contrast_uses_the_larger_of_the_floor_and_three_combined_se():
+    from helplessness.measures.diagnostics import d1_contrast
+
+    small_se = d1_contrast(I_L=0.5, se_L=0.01, I_Lprime=0.7, se_Lprime=0.01)  # floor 0.25 dominates
+    assert small_se["threshold"] == 0.25 and not small_se["accepted"]
+    assert d1_contrast(0.5, 0.01, 0.8, 0.01)["accepted"]
+    big_se = d1_contrast(I_L=0.5, se_L=0.1, I_Lprime=0.9, se_Lprime=0.1)  # 3 * sqrt(0.02) = 0.424 > 0.4
+    assert big_se["threshold"] == pytest.approx(3 * np.sqrt(0.02)) and not big_se["accepted"]
+    assert d1_contrast(0.9, 0.01, 0.5, 0.01)["accepted"]  # sign does not matter
+
+
+def test_alpha_app_with_se_hand_values_and_numeric_derivative():
+    from helplessness.measures.diagnostics import alpha_app_with_se
+
+    alpha, se = alpha_app_with_se(np.array([0.5]), np.array([0.0]), I_L=0.0, se_L=0.0, I_Lprime=2.0, se_Lprime=0.0)
+    assert alpha[0] == 0.25 and se[0] == 0.0
+    _, se_swap_only = alpha_app_with_se(np.array([0.5]), np.array([0.1]), 0.0, 0.0, 2.0, 0.0)
+    assert se_swap_only[0] == pytest.approx(0.05)  # 0.1 / c
+    # each partial derivative against a finite difference
+    I_s, I_L, I_Lp, h = 0.7, 0.2, 1.4, 1e-6
+    f = lambda a, b, c: (a - b) / (c - b)
+    for which in range(3):
+        se_args = [0.0, 0.0, 0.0]
+        se_args[which] = 1.0
+        _, se_one = alpha_app_with_se(np.array([I_s]), np.array([se_args[0]]), I_L, se_args[1], I_Lp, se_args[2])
+        args = [I_s, I_L, I_Lp]
+        up = list(args); up[which] += h
+        dn = list(args); dn[which] -= h
+        assert se_one[0] == pytest.approx(abs((f(*up) - f(*dn)) / (2 * h)), rel=1e-5)
+
+
+def test_summarize_alpha_app_flags_anomalies_and_never_averages_them():
+    from helplessness.measures.diagnostics import summarize_alpha_app
+
+    alpha = np.array([0.2, 0.4, 1.5, -0.05, 0.3])
+    se = np.array([0.01, 0.01, 0.01, 0.1, 0.01])  # 1.5 is an anomaly; -0.05 is within 3 se of 0
+    out = summarize_alpha_app(alpha, se)
+    assert out["n_anomalies"] == 1 and out["anomalies"][0]["index"] == 2
+    kept = np.array([0.2, 0.4, -0.05, 0.3])
+    assert out["mean"] == pytest.approx(kept.mean())
+    half = 3 * kept.std(ddof=1) / 2.0
+    assert out["ci_low"] == pytest.approx(kept.mean() - half) and out["ci_high"] == pytest.approx(kept.mean() + half)
+    lone = summarize_alpha_app(np.array([0.5, 5.0]), np.array([0.01, 0.01]))
+    assert lone["n_kept"] == 1 and lone["ci_low"] is None
