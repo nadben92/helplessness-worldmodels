@@ -40,3 +40,12 @@ env/
 
 # pytest
 .pytest_cache/
+
+# E3 (docs/e3/DECISIONS.md, 2026-09-25): model checkpoints saved by the
+# training guards (failure/ of a run, and the older mini_failures/), the
+# per-seed bulk arrays (regenerable from the run's config + commit), and
+# throw-away dry-run output.
+results/**/failure/**/*.pt
+results/**/mini_failures/**/*.pt
+results/E3_worldmodel_4zones/**/arrays.npz
+results/_dryrun*/

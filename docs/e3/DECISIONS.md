@@ -1028,3 +1028,162 @@ ESTIMATOR_COMPARISON.md).
 - Retained for mini.yaml: lr 1e-3, lr_after_switch 1e-4, clip_norm null,
   collapse guard (1 bit, 5 consecutive), runtime.num_threads 6. Caveat as
   above: 0 collapses in 6 runs does not prove the risk is gone.
+
+## 2026-09-25 -- after the mini run: labelled accuracies, D1 rule, absolute deadline, device, run outputs, RNG streams, long run
+
+Context (user): the mini run's mechanics pass (replay template accuracy
+0.99, z-only probe 0.98, I(z;s) ~6.86 of 7.17 bits, D2 3-4 bits), but the
+prior has not learned the dynamics:
+- KL(posterior || prior) is 9-18 bits per step;
+- the L1 of the kernel vs P is 1.6-1.9;
+- p_hat(frequent outcome) is 0.26-0.35;
+- I_z of the conveyor is 0.5-0.65 bit.
+Hypothesis: budget (~7 visits per (s, a), 4000-5700 steps after the
+switch at lr 1e-4). This entry covers step A of the plan that follows:
+the long diagnostic run is prepared, not run.
+
+**Two template accuracies, labelled.** The report's 0.99 and the
+separation figure's 0.70-0.87 measure different things:
+- 0.99 = **replay windows (real contexts h_t), hard sample**
+  (`probe.template_match_accuracy`: the replay unroll, z_t one
+  straight-through draw).
+- 0.70-0.87 = **canonical probe (fresh h0), hard sample, one draw**
+  (`probe.canonical_separation`): each state's render encoded from the
+  learned initial state h0. That context only occurs at the start of a
+  replay window, so this number is expected to be lower.
+Every report now gives three labelled numbers: replay/hard,
+canonical/hard (mean of 5 draws), canonical/mode (run_mini.ACC_LABELS).
+The mechanics gate (floor 0.5) uses replay/hard, as before.
+
+**D1 rule.** A contrast (L, L') is accepted only if
+|I_L' - I_L| > max(0.25 bit, 3 x combined MC se), where the zone means'
+MC se come from `zone_mean_mc_se` (`measures.diagnostics.d1_contrast`;
+config `measure.d1_contrast_min_bits`, which replaces
+`contrast_threshold`). For an accepted pair, alpha_app is computed for
+**every** state of L (not 2 per zone as before), local and global:
+- each per-state value gets a standard error by first-order error
+  propagation over I_swap, I_L and I_L' (`alpha_app_with_se`);
+- a value outside [0, 1] by more than 3 of its se is an **anomaly**:
+  listed with its state, never averaged;
+- the others are summarised by their mean over the zone's states
+  +/- 3 sd/sqrt(n) (`summarize_alpha_app`).
+All three are pure functions in measures/, tested against hand values
+and finite differences. The report's D1 table gives, per pair: contrast,
+threshold, accepted, local and global mean [interval] (n kept / n), and
+the anomalies. Cost: ~0.016 s per state, ~10 s for the 600 values.
+
+**Switch deadline in absolute steps.** `train.latent_estimator.switch_max_steps`
+is an absolute number of gradient steps in every config: 6307 in
+mini.yaml (the value "60% of 10512" resolved to), 10000 in mini_long.yaml.
+`build_separation_switch` rejects null. The margin (deadline - switch
+step) is printed at the switch and recorded in results.json, meta.yaml
+and the report (the mini run's seed 5 switched at 6201 for a deadline of
+6307: margin 106). The isolation test's own `make_schedule` keeps its
+documented "60% of n_steps" default: it is a test tool whose recorded
+results used it, not a run config.
+
+**Device (audit B1 + 1.4).**
+- `runtime.device` (auto | cpu | cuda) in the config, and `--device` on
+  the command line.
+- The RSSM is built on the CPU right after `torch.manual_seed(seed)`,
+  then moved, so its initial weights do not depend on the device. The
+  background and the templates are moved too.
+- The probes take their device from the model's parameters and move
+  their own inputs (`canonical_separation` and `latent_usage_diagnostic`
+  did not).
+- The resolved device is printed at startup and recorded in meta.yaml.
+- At startup, `torch.backends.cuda.matmul.allow_tf32 = False` and
+  `torch.backends.cudnn.allow_tf32 = False`, also recorded. The A100
+  default enables TF32 for convolutions, and the probabilities phase
+  separates the states on tiny probability differences.
+
+**Run outputs (audit B3 + 4.1 + 4.4).** One directory per seed through
+`runs.make_run_dir` (never overwritten), named with `runs.make_run_name`:
+`grid12x12__4zones__pair-experimental__worldmodel-<config>__seedNN__<UTC>`.
+- `config.yaml`: the resolved config.
+- `meta.yaml`: status, seed, commit and "working tree modified" flag,
+  python / torch / CUDA / cuDNN / GPU, device, TF32 and determinism
+  flags, threads, switch step, deadline and margin.
+- `console.log`.
+- `diagnostics.jsonl`: appended per point.
+- `results.json` and `arrays.npz`, written at the end of each seed.
+- `REPORT.md` and `artifacts/*.png`.
+- `failure/`: checkpoint and diagnostic, if a guard fired. The guards
+  used to write to `results/E3_worldmodel_4zones/mini_failures/`.
+With several seeds, a combined report goes to its own directory. Nothing
+is written to `docs/` any more; `docs/e3/MINI_REPORT.md` stays as the
+record of the mini run that produced it.
+
+A seed stopped by a guard no longer stops the others: it is marked
+`failed`, the next seed runs, and the process exits with code 1.
+
+Options: `--config`, `--device`, `--out-dir`, `--seeds`, `--max-steps`
+(caps the gradient steps; the report says so). Windows limits paths to
+260 characters and the run name is long: an `--out-dir` deep in a long
+path (e.g. a temp directory) fails on Windows. The default `results/` in
+this repository stays under 190 characters.
+
+**Separate random streams (audit 3.1).** Each training consumer has its
+own stream, and every measurement has streams of its own:
+- `collect`: environment actions, `default_rng(seed)` as before, so the
+  same data;
+- `replay`: training minibatches, `default_rng([seed, 1])`;
+- `switch_pairs`: `default_rng([seed, 4])`, the label-free statistic on
+  its fixed schedule;
+- `latent`: a dedicated `torch.Generator` on the model's device, used
+  for every latent draw of the training step;
+- measurements: separation curve, training diagnostics, I(z;s), z-only
+  probe, context dispersion, D1 each draw from their own (numpy, torch)
+  pair.
+The network initialisation keeps the global torch RNG, seeded just
+before the model is built.
+
+To make this possible, `rssm.sample_categorical_index` draws through
+`torch.multinomial(..., generator=g)` when a generator is given, and
+through the historical `Categorical.sample()` path when it is None. The
+generator is threaded through `straight_through_sample`, Gumbel,
+`partial_straight_through`, `sample_posterior`, `observation_step`,
+`imagination_step`, `unroll_observation`, `train_world_model_step`,
+`sample_categorical_batch` and the probes.
+
+Test (`tests/e3/test_e3_run_outputs.py`): the real `run_one_seed` on a
+tiny config, same seed, run twice.
+- Measured often: separation every 10 steps, training diagnostics every
+  20 steps.
+- Measured rarely: separation every 50 steps, no training diagnostics.
+- Result: every training loss, gradient norm, lr and beta_rep is
+  **bit-identical** (CPU, same threads), and so is the switch step.
+
+**Trajectories are no longer bit-comparable to the runs before this
+entry.** Two things changed:
+- the latent draws now come from a different sampler call on a
+  different stream;
+- the minibatches come from a stream that is no longer shared with the
+  measurements.
+Same seed, same data, same initial weights; different training
+trajectory. The isolation-test results (ESTIMATOR_COMPARISON.md) are
+unaffected: that loop does not pass a generator, so it uses the
+historical path.
+
+**Long diagnostic run, prepared, not run: `configs/e3/mini_long.yaml`.**
+- Budget: 20,000 environment steps at epsilon=1 (19,744 + prefill 256;
+  ~28 visits per (s, a)) and 40,000 gradient steps (replay ratio 2).
+- Switch deadline: 10,000 absolute steps. Seed 0 only.
+- Procedure unchanged from mini.yaml; only the budget, the deadline,
+  `measure.diagnostics_every: 2000` and the seeds differ.
+Every 2000 gradient steps (and at the end), one line is appended to
+`diagnostics.jsonl` and the figure `artifacts/training_diagnostics_seed00.png`
+is redrawn:
+- KL(posterior || prior) by zone;
+- L1 of the s-space kernel vs P and vs B by zone, and L1(B, P);
+- canonical I_z by zone with its MC se;
+- p_hat(frequent outcome) in the two noisy zones;
+- the canonical posterior entropy;
+- the three labelled template accuracies.
+Expected shapes, fixed in advance (`run_mini.shape_verdicts`), judged
+between the first diagnostic at or after the switch and the last one:
+- KL in the deterministic zones decreasing, to < 1 bit;
+- L1(WM, P) decreasing toward L1(B, P);
+- I_z of the conveyor decreasing;
+- I_z of the controllable-deterministic zone increasing.
+For the two I_z checks, a change within 3 combined se is "non concluant".
