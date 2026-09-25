@@ -33,6 +33,13 @@ budget:
   prefill_steps: 256       # epsilon=0.1 policy in a real run; epsilon=1 here (E3-0 style, no policy yet)
   checkpoints: [5000]      # single end checkpoint -- this is a smoke/shape config, not a calibration run
 
+collection:
+  # Episode starts: uniform over the non-terminal states, drawn at every reset from the
+  # dedicated start_state stream (E2's rng.spawn_streams) -- E2's protocol (spec 4.6, 6).
+  # Every E3 run before 2026-09-25 started every episode at (0, 0) (DECISIONS.md).
+  start_distribution: uniform_non_terminal
+  epsilon: 1.0              # E3-0 collection policy: uniform actions (no policy before Phase 5)
+
 train:
   batch_size: 8
   seq_len: 16

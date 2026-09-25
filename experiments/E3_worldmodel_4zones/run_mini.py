@@ -54,6 +54,8 @@ from helplessness.agents.worldmodel.agent import categorical_mode
 from helplessness.agents.worldmodel.losses import reconstruction_mask
 from helplessness.agents.worldmodel.loop import (
     CollapseAfterSwitchError,
+    draw_start_state,
+    non_terminal_states,
     SeparationNotReachedError,
     SeparationSwitch,
     WorldModelLossConfig,
@@ -75,7 +77,12 @@ from helplessness.measures.diagnostics import (
     summarize_alpha_app,
 )
 from helplessness.measures.latent_controllability import latent_state_information
+from helplessness.experiment_loader import load_experiment_module
 from helplessness.runs import make_run_dir, make_run_name, write_run_meta
+
+# E2's own stream scheme (SeedSequence(seed).spawn), imported for the start_state stream.
+e2_rng = load_experiment_module("E2_online_4zones", "rng.py", "e3_run_mini_e2_rng")
+START_DISTRIBUTIONS = ("uniform_non_terminal",)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG = REPO_ROOT / "configs" / "e3" / "mini.yaml"
@@ -256,12 +263,15 @@ class RunLog:
 def seed_streams(seed: int, device: torch.device) -> dict:
     """Separate random streams (docs/e3/DECISIONS.md, 2026-09-25): changing
     how often anything is MEASURED never changes the training trajectory.
-    Training consumes only "collect" (environment actions), "replay"
-    (minibatch windows), "switch_pairs" (the label-free switch statistic,
-    evaluated on a fixed schedule) and "latent" (every latent draw of the
-    training step); the network initialisation uses the global torch RNG,
-    seeded just before the model is built. Every measurement draws from its
-    own streams, created where it is used (measure_streams)."""
+    Training consumes only "collect" (environment actions), "start_state"
+    (the uniform start of every episode -- E2's own stream, from
+    experiments/E2_online_4zones/rng.py::spawn_streams, derived by
+    SeedSequence(seed).spawn), "replay" (minibatch windows),
+    "switch_pairs" (the label-free switch statistic, evaluated on a fixed
+    schedule) and "latent" (every latent draw of the training step); the
+    network initialisation uses the global torch RNG, seeded just before
+    the model is built. Every measurement draws from its own streams,
+    created where it is used (measure_streams)."""
 
     def torch_gen(key: int) -> torch.Generator:
         gen = torch.Generator(device=device)
@@ -269,7 +279,8 @@ def seed_streams(seed: int, device: torch.device) -> dict:
         return gen
 
     return {
-        "collect": np.random.default_rng(seed),  # same actions (hence same data) as the runs before 2026-09-25
+        "collect": np.random.default_rng(seed),  # environment actions
+        "start_state": e2_rng.spawn_streams(seed)["start_state"],
         "replay": np.random.default_rng([seed, 1]),
         "switch_pairs": np.random.default_rng([seed, 4]),
         "latent": torch_gen(2),
@@ -363,14 +374,29 @@ def build_run(cfg: dict, seed: int):
     return layout, themes, env, background_t, templates_t
 
 
-def collect_and_count(env, replay: ReplayBuffer, n_steps: int, rng: np.random.Generator, n_states: int, n_actions: int) -> np.ndarray:
+def collect_and_count(
+    env, replay: ReplayBuffer, n_steps: int, rng: np.random.Generator, n_states: int, n_actions: int,
+    start_rng: np.random.Generator, starts_out: list | None = None,
+) -> np.ndarray:
     """Local to run_mini.py (not a modification of Phase 2's
     collect_fixed_policy_data): fills replay AND accumulates
     N[s, a, s'] counts in the same pass, so the report's tabular-twin
     comparison uses the EXACT SAME transitions the world model trained
-    on, without a second collection pass."""
+    on, without a second collection pass. Every episode starts in a state
+    drawn uniformly among the non-terminal states from start_rng (E2's
+    protocol, docs/e3/DECISIONS.md 2026-09-25); starts_out, if given,
+    receives every start state in order (including one for a final,
+    unfinished episode)."""
     N = np.zeros((n_states, n_actions, n_states), dtype=np.int64)
-    obs, info = env.reset()
+    start_states = non_terminal_states(env)
+
+    def reset():
+        obs0, info0 = env.reset(start_state=draw_start_state(start_states, start_rng))
+        if starts_out is not None:
+            starts_out.append(int(info0["state"]))
+        return obs0, info0
+
+    obs, info = reset()
     s = info["state"]
     is_first = True
     for _ in range(n_steps):
@@ -381,7 +407,7 @@ def collect_and_count(env, replay: ReplayBuffer, n_steps: int, rng: np.random.Ge
         N[s, a, s_next] += 1
         is_first = terminated or truncated
         if is_first:
-            obs_next, info = env.reset()
+            obs_next, info = reset()
         s = info["state"]
         obs = obs_next
     return N
@@ -596,7 +622,8 @@ def run_one_seed(cfg: dict, seed: int, run_dir: Path, device: torch.device, max_
     log = RunLog(run_dir / "console.log", f"[seed={seed}]")
     meta = environment_metadata(device)
     (run_dir / "config.yaml").write_text(yaml.safe_dump(cfg, sort_keys=False), encoding="utf-8")
-    write_run_meta(run_dir, seed, status="running", **meta)
+    write_run_meta(run_dir, seed, status="running", start_distribution=cfg["collection"]["start_distribution"],
+                   collection_epsilon=cfg["collection"]["epsilon"], **meta)
     artifacts = run_dir / "artifacts"
     k = cfg["render"]["k"]
     streams = seed_streams(seed, device)
@@ -609,10 +636,18 @@ def run_one_seed(cfg: dict, seed: int, run_dir: Path, device: torch.device, max_
     image_side = 12 * k
     budget, prefill = cfg["budget"]["total_steps"], cfg["budget"]["prefill_steps"]
     replay = ReplayBuffer.for_run(budget=budget, prefill_steps=prefill, image_shape=(image_side, image_side, 3))
-    log(f"collecting {prefill + budget} steps under epsilon=1 ...")
+    collection = cfg["collection"]
+    if collection["start_distribution"] not in START_DISTRIBUTIONS or collection["epsilon"] != 1.0:
+        raise ValueError(f"collection must be start_distribution in {START_DISTRIBUTIONS} and epsilon 1.0 (no policy before "
+                         f"Phase 5), got {collection}")
+    log(f"collecting {prefill + budget} steps under epsilon={collection['epsilon']:g}, episode starts "
+        f"{collection['start_distribution']} ...")
     t0 = time.perf_counter()
-    N = collect_and_count(env, replay, n_steps=prefill + budget, rng=streams["collect"], n_states=N_STATES, n_actions=N_ACTIONS)
-    log(f"collection done in {time.perf_counter() - t0:.1f}s")
+    episode_starts: list[int] = []
+    N = collect_and_count(env, replay, n_steps=prefill + budget, rng=streams["collect"], n_states=N_STATES, n_actions=N_ACTIONS,
+                          start_rng=streams["start_state"], starts_out=episode_starts)
+    log(f"collection done in {time.perf_counter() - t0:.1f}s; {len(episode_starts)} episode starts over "
+        f"{len(set(episode_starts))} distinct states")
     T_hat_B = build_tabular_twin(N, N_STATES, N_ACTIONS)
     P_true = env.transition_tensor()
 
@@ -811,7 +846,7 @@ def run_one_seed(cfg: dict, seed: int, run_dir: Path, device: torch.device, max_
     }
 
     np.savez_compressed(
-        run_dir / "arrays.npz", N=N, T_hat_B=T_hat_B, P_true=P_true, p_hat=kernel_result["p_hat"],
+        run_dir / "arrays.npz", N=N, episode_starts=np.asarray(episode_starts, dtype=np.int64), T_hat_B=T_hat_B, P_true=P_true, p_hat=kernel_result["p_hat"],
         ghost_fraction=kernel_result["ghost_fraction"], I_z=iz_result["I_z"], I_z_se=iz_result["se"],
         posterior_probs=probe["posterior_probs"], prior_probs=probe["prior_probs"], l1_vs_p=extras["l1_vs_p"],
         l1_vs_b=extras["l1_vs_b"], l1_b_vs_p=extras["l1_b_vs_p"],

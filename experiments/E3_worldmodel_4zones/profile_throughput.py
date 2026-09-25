@@ -47,7 +47,7 @@ def profile(n_env_steps: int, n_train_steps: int, batch_size: int, seq_len: int,
     rng = np.random.default_rng(0)
 
     t0 = time.perf_counter()
-    collect_fixed_policy_data(env, buf, n_steps=n_env_steps, rng=rng, epsilon=1.0)
+    collect_fixed_policy_data(env, buf, n_steps=n_env_steps, rng=rng, start_rng=np.random.default_rng([1, 7]), epsilon=1.0)
     env_elapsed = time.perf_counter() - t0
     env_sps = n_env_steps / env_elapsed
     print(f"env: {n_env_steps} steps in {env_elapsed:.2f}s -> {env_sps:.1f} steps/s")

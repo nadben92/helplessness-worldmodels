@@ -156,3 +156,23 @@ def test_shape_verdicts_rules():
     assert by_check["I_z decreasing (uncontrollable_deterministic)"] == "non concluant"  # within 3 combined se
     assert run_mini.shape_verdicts([record(2000, 5.0, 1.5, 0.9, 1.1)], 1500)[0]["verdict"].startswith("non évaluable")
     assert torch.get_num_threads() >= 1
+
+
+def test_episode_starts_come_from_the_dedicated_stream_whatever_the_measurement_frequency(two_runs):
+    """Uniform starts (docs/e3/DECISIONS.md, 2026-09-25): the sequence of
+    episode starts is the same measured often or rarely, and it is exactly
+    the sequence of uniform draws of E2's start_state stream for the seed
+    over the non-terminal states -- no other stream touches it."""
+    (_, dir_often), (_, dir_rarely) = two_runs
+    starts_often = np.load(dir_often / "arrays.npz")["episode_starts"]
+    starts_rarely = np.load(dir_rarely / "arrays.npz")["episode_starts"]
+    assert len(starts_often) > 1 and np.array_equal(starts_often, starts_rarely)
+
+    e2_rng = load_experiment_module("E2_online_4zones", "rng.py", "test_run_outputs_e2_rng")
+    stream = e2_rng.spawn_streams(0)["start_state"]
+    support = np.array([s for s in range(144) if s != run_mini.e3_env.goal_state()])
+    expected = [int(support[stream.integers(len(support))]) for _ in range(len(starts_often))]
+    assert starts_often.tolist() == expected
+
+    meta = yaml.safe_load((dir_often / "meta.yaml").read_text(encoding="utf-8"))
+    assert meta["start_distribution"] == "uniform_non_terminal" and meta["collection_epsilon"] == 1.0

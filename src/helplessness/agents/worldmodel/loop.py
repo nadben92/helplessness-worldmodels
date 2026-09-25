@@ -22,14 +22,37 @@ from helplessness.agents.worldmodel.replay import ModelBatch, ReplayBuffer
 from helplessness.agents.worldmodel.rssm import RSSM, LatentEstimator
 
 
-def collect_fixed_policy_data(env, replay: ReplayBuffer, n_steps: int, rng: np.random.Generator, epsilon: float = 1.0) -> None:
+def non_terminal_states(env) -> np.ndarray:
+    """Every state that is not terminal (duck-typed: env.terminal_mask()) --
+    the support of the uniform start distribution, as E2's own
+    NON_TERMINAL_STATES (experiments/E2_online_4zones/sweep.py)."""
+    return np.flatnonzero(~np.asarray(env.terminal_mask(), dtype=bool))
+
+
+def draw_start_state(start_states: np.ndarray, start_rng: np.random.Generator) -> int:
+    """One uniform draw among start_states from the dedicated start_state
+    stream -- the same draw as E2's loop.py::_draw_start."""
+    return int(start_states[start_rng.integers(len(start_states))])
+
+
+def collect_fixed_policy_data(
+    env, replay: ReplayBuffer, n_steps: int, rng: np.random.Generator, start_rng: np.random.Generator,
+    epsilon: float = 1.0, start_states: np.ndarray | None = None,
+) -> None:
     """Runs n_steps environment transitions under an epsilon-greedy
     policy that is UNIFORM RANDOM whenever it explores (no policy
     exists yet at this phase, so epsilon=1.0 always explores -- E3-0's
     own condition, spec section 6). Never counts a reset as a step.
     Stores every transition into replay, including the true label s
-    (log-only -- see replay.py's own docstring)."""
-    obs, info = env.reset()
+    (log-only -- see replay.py's own docstring).
+
+    Every episode, the first included, starts in a state drawn uniformly
+    among the non-terminal states (start_states, default
+    non_terminal_states(env)) from the dedicated start_rng stream -- the
+    E2 protocol (spec 4.6 and 6; docs/e3/DECISIONS.md, 2026-09-25).
+    start_rng is required: no caller can fall back to the fixed start."""
+    start_states = non_terminal_states(env) if start_states is None else np.asarray(start_states)
+    obs, info = env.reset(start_state=draw_start_state(start_states, start_rng))
     s = info["state"]
     is_first = True
     for _ in range(n_steps):
@@ -43,7 +66,7 @@ def collect_fixed_policy_data(env, replay: ReplayBuffer, n_steps: int, rng: np.r
 
         is_first = terminated or truncated
         if is_first:
-            obs_next, info = env.reset()
+            obs_next, info = env.reset(start_state=draw_start_state(start_states, start_rng))
         s = info["state"]
         obs = obs_next
 

@@ -85,7 +85,7 @@ def _tiny_setup(seed: int = 0):
 
     replay = ReplayBuffer(capacity=500, image_shape=(24, 24, 3))
     rng = np.random.default_rng(seed)
-    collect_fixed_policy_data(env, replay, n_steps=200, rng=rng, epsilon=1.0)
+    collect_fixed_policy_data(env, replay, n_steps=200, rng=rng, start_rng=np.random.default_rng([1, 7]), epsilon=1.0)
 
     train_cfg = run_mini.load_mini_config()["train"]
     lr, lr_after_switch = train_cfg["lr"], train_cfg["lr_after_switch"]

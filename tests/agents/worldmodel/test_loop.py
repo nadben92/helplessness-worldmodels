@@ -49,7 +49,7 @@ def test_collect_fixed_policy_data_fills_replay_with_expected_shapes():
     env, _ = _build_env_and_background()
     buf = ReplayBuffer(capacity=200, image_shape=(K * 12, K * 12, 3))
     rng = np.random.default_rng(0)
-    collect_fixed_policy_data(env, buf, n_steps=100, rng=rng, epsilon=1.0)
+    collect_fixed_policy_data(env, buf, n_steps=100, rng=rng, start_rng=np.random.default_rng([1, 7]), epsilon=1.0)
     assert len(buf) == 100
 
     model_batch, label_batch = buf.sample(batch_size=4, seq_len=16, rng=rng)
@@ -69,7 +69,7 @@ def test_collect_fixed_policy_data_never_conflates_terminal_and_truncated():
     env, _ = _build_env_and_background(max_steps=4)
     buf = ReplayBuffer(capacity=200, image_shape=(K * 12, K * 12, 3))
     rng = np.random.default_rng(1)
-    collect_fixed_policy_data(env, buf, n_steps=200, rng=rng, epsilon=1.0)
+    collect_fixed_policy_data(env, buf, n_steps=200, rng=rng, start_rng=np.random.default_rng([1, 7]), epsilon=1.0)
     model_batch, label_batch = buf.sample(batch_size=1, seq_len=200, rng=rng)
     terminal = model_batch.terminal[0]
     truncated = model_batch.truncated[0]
@@ -90,7 +90,7 @@ def test_world_model_loss_runs_end_to_end_and_is_finite():
     env, background = _build_env_and_background()
     buf = ReplayBuffer(capacity=200, image_shape=(K * 12, K * 12, 3))
     rng = np.random.default_rng(2)
-    collect_fixed_policy_data(env, buf, n_steps=80, rng=rng, epsilon=1.0)
+    collect_fixed_policy_data(env, buf, n_steps=80, rng=rng, start_rng=np.random.default_rng([1, 7]), epsilon=1.0)
 
     rssm = RSSM(_small_rssm_cfg())
     model_batch, _ = buf.sample(batch_size=2, seq_len=8, rng=rng)
@@ -107,7 +107,7 @@ def test_train_world_model_step_updates_parameters_and_returns_finite_losses():
     env, background = _build_env_and_background()
     buf = ReplayBuffer(capacity=200, image_shape=(K * 12, K * 12, 3))
     rng = np.random.default_rng(3)
-    collect_fixed_policy_data(env, buf, n_steps=80, rng=rng, epsilon=1.0)
+    collect_fixed_policy_data(env, buf, n_steps=80, rng=rng, start_rng=np.random.default_rng([1, 7]), epsilon=1.0)
 
     rssm = RSSM(_small_rssm_cfg())
     optimizer = torch.optim.Adam(rssm.parameters(), lr=1e-4, eps=1e-8)
@@ -134,7 +134,7 @@ def test_repeated_training_steps_decrease_total_loss_on_a_tiny_fixed_batch():
     env, background = _build_env_and_background()
     buf = ReplayBuffer(capacity=200, image_shape=(K * 12, K * 12, 3))
     rng = np.random.default_rng(4)
-    collect_fixed_policy_data(env, buf, n_steps=80, rng=rng, epsilon=1.0)
+    collect_fixed_policy_data(env, buf, n_steps=80, rng=rng, start_rng=np.random.default_rng([1, 7]), epsilon=1.0)
 
     rssm = RSSM(_small_rssm_cfg())
     optimizer = torch.optim.Adam(rssm.parameters(), lr=3e-3, eps=1e-8)  # higher lr for a fast, short sanity check
@@ -232,7 +232,7 @@ def test_train_world_model_step_can_return_the_batch_posteriors():
     env, background = _build_env_and_background()
     buf = ReplayBuffer(capacity=200, image_shape=(K * 12, K * 12, 3))
     rng = np.random.default_rng(6)
-    collect_fixed_policy_data(env, buf, n_steps=60, rng=rng, epsilon=1.0)
+    collect_fixed_policy_data(env, buf, n_steps=60, rng=rng, start_rng=np.random.default_rng([1, 7]), epsilon=1.0)
     rssm = RSSM(_small_rssm_cfg())
     opt = torch.optim.Adam(rssm.parameters(), lr=1e-3)
     mb, _ = buf.sample(batch_size=3, seq_len=5, rng=rng)
@@ -249,7 +249,7 @@ def test_train_world_model_step_accepts_an_estimator():
     env, background = _build_env_and_background()
     buf = ReplayBuffer(capacity=200, image_shape=(K * 12, K * 12, 3))
     rng = np.random.default_rng(5)
-    collect_fixed_policy_data(env, buf, n_steps=60, rng=rng, epsilon=1.0)
+    collect_fixed_policy_data(env, buf, n_steps=60, rng=rng, start_rng=np.random.default_rng([1, 7]), epsilon=1.0)
     rssm = RSSM(_small_rssm_cfg())
     opt = torch.optim.Adam(rssm.parameters(), lr=1e-3)
     mb, _ = buf.sample(batch_size=2, seq_len=6, rng=rng)
@@ -317,7 +317,7 @@ def test_clip_norm_none_does_not_clip_and_reports_the_same_pre_clip_grad_norm():
     env, background = _build_env_and_background()
     buf = ReplayBuffer(capacity=200, image_shape=(K * 12, K * 12, 3))
     rng = np.random.default_rng(3)
-    collect_fixed_policy_data(env, buf, n_steps=80, rng=rng, epsilon=1.0)
+    collect_fixed_policy_data(env, buf, n_steps=80, rng=rng, start_rng=np.random.default_rng([1, 7]), epsilon=1.0)
     model_batch, _ = buf.sample(batch_size=2, seq_len=8, rng=rng)
     cfg = WorldModelLossConfig(k=K, w_patch=10.0)
 

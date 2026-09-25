@@ -5,6 +5,12 @@ deliberately deviated from, with who decided and why. Updated at the end
 of every phase gate, never rewritten retroactively (a superseded
 decision gets a new dated entry, not an edit to the old one).
 
+**Priority rule (2026-09-25).** When this log and the initial E3 prompt
+(`prompt_e3_worldmodel.md`) conflict, this log wins. The prompt remains the
+reference for everything this log does not change. Section by section,
+`docs/e3/SPEC_STATUS.md` records which parts of the prompt are unchanged,
+amended (with the entry below that amends them) or under review.
+
 ## 2026-09-23 — Phase 0 validation
 
 1. **Checkpoint grid.** The spec's "11 checkpoints" is corrected to E2's
@@ -1206,3 +1212,122 @@ The long run (mini_long.yaml) will show whether the gap closes. If it
 does not, the definition of the main measure is revisited in Phase 4a:
 a probe from a short standardised context, or from replay contexts,
 using the context-dispersion measure as the basis.
+
+## 2026-09-25 -- episode starts: uniform over the non-terminal states (E2 protocol)
+
+**Deviation found and corrected.** Every E3 run before this commit --
+including the mini run of 2026-09-24 and every isolation-test data
+collection that used the world-model loop -- started EVERY episode at
+(0, 0). Both collection loops called `env.reset()` without a start state,
+and `TorusZonedEnv` then falls back to `start_position=(0, 0)`
+(`experiments/E3_worldmodel_4zones/env.py::build_pixel_env`). This has
+been the case since Phase 2 (`loop.collect_fixed_policy_data`), and Phase 3
+reused it in `run_mini.collect_and_count`. The fixed start was never a
+decision: `docs/e3/ARCHITECTURE.md` planned E2's `start_state` stream and
+it was never wired. It is a deviation from the spec (prompt sections 4.6
+and 6: uniform starts) and from E2 (`experiments/E2_online_4zones/loop.py`:
+uniform draw over the non-terminal states at every reset, dedicated
+`start_state` stream).
+
+**Correction (user decision).** At every reset, both loops now draw the
+start state uniformly among the non-terminal states
+(`loop.non_terminal_states` = E2's `NON_TERMINAL_STATES`: every state but
+the goal) with `loop.draw_start_state`, the same draw as E2's
+`_draw_start`.
+- The stream is dedicated. `run_mini` takes it from E2's own scheme by
+  import: `experiments/E2_online_4zones/rng.py::spawn_streams(seed)["start_state"]`,
+  derived by `SeedSequence(seed).spawn`.
+- `start_rng` is a required argument of `collect_fixed_policy_data`, so
+  no caller can fall back to the fixed start.
+- New config block `collection: {start_distribution: uniform_non_terminal,
+  epsilon: 1.0}` in mini.yaml and mini_long.yaml. It is validated by
+  run_mini (the only supported values) and recorded in meta.yaml.
+- The start sequence is saved in `arrays.npz` (`episode_starts`).
+Tests:
+- a chi-square test of uniformity over the non-terminal states, for both
+  loops (40,000 and 30,000 steps), with no start on the goal;
+- the start sequence is identical whatever the measurement frequency, and
+  equal to the uniform draws of E2's `start_state` stream
+  (`tests/e3/test_e3_run_outputs.py`);
+- the comparison with E2 below.
+
+**What the earlier results depend on.** The mini run's conclusions on the
+mechanics (template accuracy, z-only probe, I(z;s), D2) and on the prior
+(KL, L1, frequent outcome, conveyor I_z) do not depend on the start
+distribution. Their argument is the separation of the posterior and the
+learning of the transition kernel, not the visitation pattern. The
+numbers themselves would differ under uniform starts.
+
+**Exposure of the canonical-probe regime** (h0 with the render of an
+arbitrary state; mini.yaml, seed 0, 2000 x 8 sampled windows of 16 steps):
+- fixed start: ~6% of training steps (window starts only; episode starts
+  always showed state 0, and h0 overall was 10.8%);
+- uniform starts: **8.9%** (~1 in 11.3), and every h0 step now shows an
+  arbitrary state.
+The total h0 share falls because the episodes get longer. With uniform
+starts, 148 episodes in 5,256 steps (mean ~35.5, almost all truncated at
+36); with the fixed start, 253 episodes (mean ~21). The figure first
+proposed for this entry (~10.8%) was the fixed-start total.
+
+**Conformance with E2** (`tests/e3/test_e3_protocol_conformance.py`),
+against E2 as amended by this log and SPEC_STATUS.md. Every E2 value is
+read from E2's code (`sweep.py`, `pilot.py`, `env.py`), never copied.
+Passing:
+- start support and distribution;
+- collection epsilon (= E2's epsilon=1 bridge condition, E3-0);
+- uniform actions;
+- truncation at H = `sweep.H` (truncated, not terminal);
+- terminal at the goal only;
+- reward vector = E2's `reward_and_terminal`: goal_reward 50 at the goal,
+  -1 per step everywhere else. E2's step cost is -1, not 0;
+- gamma in E3's config = `sweep.GAMMA`;
+- budget and the 16-point grid = `sweep.BUDGET` / `sweep.CHECKPOINTS`;
+- the start_state stream = E2's spawned stream.
+Strict xfail, with the reason:
+- closed-loop epsilon and gamma consumed by the agent (Phase 5);
+- model checkpoints on the grid (Phase 4a, B5);
+- **independence of the collection, dynamics and theme streams**, a
+  deviation reported below.
+
+**Other deviations found, reported, not corrected (user to decide):**
+1. **Correlated streams (spec 6).** The collection actions
+   (`default_rng(seed)`), the environment dynamics
+   (`TorusZonedEnv(seed=seed)` -> `default_rng(seed)`) and the themes
+   (`default_rng(seed)`) are seeded with the same integer: identical bit
+   streams, the pattern E2's rng.py calls a real bug found in E1. E2
+   derives them by `SeedSequence(seed).spawn`.
+2. **Metadata (spec 10).** meta.yaml records the seed, the config and
+   the commit, but not the permutation (quadrant assignment), the themes
+   or the block class A/B. The class is in results.json and the report,
+   not in meta.yaml.
+3. **Episode parameters not read from the config.** run_mini hard-codes
+   goal_reward=50 and relies on `build_pixel_env`'s defaults for the step
+   reward (-1) and H (36), instead of reading
+   `experiments/E3_worldmodel_4zones/config.yaml` (`episode`). The values
+   agree today.
+4. **MC sample count (spec 5.2).** The default M = 4096; the configs use
+   `iz_mc_samples: 2000`. This log has no entry for it.
+5. **Spec 10 outputs** not produced yet: `transitions.parquet`, model
+   weights per checkpoint (the latter is B5).
+
+**Addendum to the h0 note (user, 2026-09-25).** The share of training
+steps in the h0 regime depends on seq_len: a window start is 1 step in
+16 in the mini configurations, and would be 1 in 64 in the spec's.
+- The measurement has to be made again with the full configuration in
+  Phase 4a.
+- If the canonical-vs-replay accuracy gap closes on the long mini run,
+  that does not carry over to the full configuration.
+
+**The fixed start was the goal itself.** The goal is state 0, the cell
+(0, 0) (`env.goal_state() == 0`), so every episode of the earlier runs
+began ON the terminal state:
+- the first step always left the goal;
+- an episode ended by returning to it or at H = 36;
+- hence the short episodes (mean ~21 steps against ~35.5 with uniform
+  starts);
+- the "start cell" of the h0 analysis above is the goal cell.
+This does not change the statement on the mini run's conclusions (their
+argument is the separation of the posterior and the learning of the
+kernel). The visitation of the earlier runs, however, was concentrated
+around the goal. The truncated mini_long run after the correction:
+570 starts over 140 of the 143 non-terminal states, none on the goal.
