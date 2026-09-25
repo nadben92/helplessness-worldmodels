@@ -1,0 +1,125 @@
+# Long diagnostic run (docs/e3/DECISIONS.md, 2026-09-25): configs/e3/mini.yaml
+# with a 4x larger budget, one seed, and training diagnostics every 2000
+# gradient steps. Question: the mini run's mechanics pass (replay template
+# accuracy 0.99, I(z;s) 6.86 of 7.17 bits) but its prior has not learned the
+# dynamics (KL posterior||prior 9-18 bits per step, L1 of the kernel vs P
+# 1.6-1.9). Hypothesis: budget -- ~7 visits per (s, a) pair and 4000-5700
+# steps after the switch at lr 1e-4. Here: 20,000 environment steps at
+# epsilon=1 (~28 visits per pair), 40,000 gradient steps, switch deadline
+# 10,000 (absolute). Procedure unchanged: criterion switch, lr 1e-3 -> 1e-4
+# at the switch, beta_rep ramp after it, no clipping, both guards active.
+# Model, render, loss and procedure blocks are identical to mini.yaml; only
+# budget, switch_max_steps, measure.diagnostics_every and seeds differ.
+#
+# Expected shapes, fixed in advance (judged by run_mini.shape_verdicts between
+# the first diagnostic at/after the switch and the last one):
+#   - KL(posterior || prior) in the deterministic zones decreasing, to < 1 bit;
+#   - L1(world model, P) decreasing toward L1(B, P);
+#   - I_z of the conveyor (uncontrollable_deterministic) decreasing;
+#   - I_z of the controllable-deterministic zone increasing.
+#
+# Duration on this CPU (6 threads), measured 2026-09-25 on truncated runs:
+# 2.4-2.9 gradient steps/s -> 3.9-4.6 h of training; 21 diagnostic points x
+# ~150 s (~53 min); collection + final measures ~4 min. About 5-5.5 h.
+
+model:
+  n_vars: 8
+  n_classes: 8
+  h_dim: 64
+  embed_dim: 64
+  base_depth: 8
+  unimix: 0.01
+
+render:
+  k: 6  # spec default (72x72). k=2 made the agent marker a single pixel -- not the design (DECISIONS.md, 2026-09-24)
+  grid_lines: false
+  cielab_min_dist: 30.0
+  cielab_marker_min_dist: 30.0
+
+budget:
+  total_steps: 19744       # + prefill 256 = 20,000 environment steps; x replay_ratio 2 = 40,000 gradient steps
+  prefill_steps: 256       # epsilon=0.1 policy in a real run; epsilon=1 here (E3-0 style, no policy yet)
+  checkpoints: [19744]     # not read by run_mini.py yet (periodic checkpoints are Phase 4a, B5)
+
+train:
+  batch_size: 8
+  seq_len: 16
+  replay_ratio: 2
+  # Two-phase learning rate (DECISIONS.md, 2026-09-24): lr until the
+  # EFFECTIVE estimator switch (option (i): the probabilities phase does not
+  # separate at 1e-4), then lr_after_switch (the spec's 1e-4) for the rest
+  # of training, on every world-model parameter. lr is calibrated in Phase 4.
+  lr: 1.0e-3
+  lr_after_switch: 1.0e-4
+  adam_eps: 1.0e-8
+  # Global gradient clipping DISABLED (null; the key stays for the record).
+  # A global threshold does not act on the mechanism of the late collapse
+  # and a threshold of 500 broke the probabilities phase (DECISIONS.md,
+  # 2026-09-24). The lr drop at the switch is the retained guard.
+  clip_norm: null
+  w_patch: 10.0
+  beta_dyn: 0.5
+  beta_rep: 0.1
+  free_bits: 0.0             # stays 0: the collapse happens with no KL at all (DECISIONS.md, 2026-09-24)
+  free_bits_mode: per_step
+  # beta_dyn (KL(sg(q) || p)) runs at full weight from step 0: it only
+  # trains the prior, never pulls the posterior. beta_rep (KL(q || sg(p)))
+  # is 0 until the estimator switch, then ramps linearly to its full value
+  # over rep_warmup_steps; null = 20% of the budget left after the switch
+  # (docs/e3/DECISIONS.md, 2026-09-24).
+  rep_warmup_steps: null
+  # Posterior estimator (training procedure only), selected by the
+  # estimator comparison (docs/e3/ESTIMATOR_COMPARISON.md): the decoder
+  # receives the posterior probabilities, then plain straight-through
+  # samples once the posteriors are separated. The switch is triggered by
+  # a LABEL-FREE criterion: mean JS (bits) between the posteriors of
+  # switch_n_pairs random image pairs of the current training batch,
+  # evaluated every switch_eval_every steps; switch once it exceeds
+  # switch_js_threshold on switch_consecutive consecutive evaluations, not
+  # before switch_min_steps. Not reached by switch_max_steps -- an ABSOLUTE
+  # number of gradient steps, never a fraction of the budget (DECISIONS.md,
+  # 2026-09-25) -> the run stops with SeparationNotReachedError, never a
+  # silent switch. The margin (deadline - switch step) is logged in every
+  # report.
+  latent_estimator:
+    kind: warmup_probs_until_separated
+    switch_js_threshold: 3.0
+    switch_consecutive: 5
+    switch_eval_every: 50
+    switch_min_steps: 500
+    switch_max_steps: 10000
+    switch_n_pairs: 64
+    # Guard after the switch: the same label-free statistic falling back
+    # below collapse_js_threshold bits on collapse_consecutive consecutive
+    # evaluations -> CollapseAfterSwitchError (checkpoint + diagnostic
+    # saved), never a silent collapse (DECISIONS.md, 2026-09-24).
+    collapse_js_threshold: 1.0
+    collapse_consecutive: 5
+
+measure:
+  iz_mc_samples: 2000        # M for latent_controllability
+  kernel_k_s: 16              # K_s draws for canonical_kernel_probe
+  kernel_margin_threshold: 1.0e-3
+  z_only_test_frac: 0.2
+  context_dispersion_n_samples: 100
+  # D1: a (L, L') contrast is accepted only if |I_L' - I_L| > max(d1_contrast_min_bits,
+  # 3 x combined MC se) (DECISIONS.md, 2026-09-25).
+  d1_contrast_min_bits: 0.25
+  separation_every: 250       # training steps between canonical separation measurements (JS, accuracy)
+  monitor_every: 500          # console line: step, batch-pair JS, labelled JS, phase, beta_rep, recon_patch, grad_norm, lr
+  # Training diagnostics (KL / L1 / I_z by zone, frequent outcome, posterior
+  # entropy, template accuracies), appended to diagnostics.jsonl every this many
+  # gradient steps; null = only the final point. Each point costs ~2.5 min at
+  # this model size (mostly the s-space kernel, 144 x 5 x kernel_k_s decodes).
+  diagnostics_every: 2000
+
+runtime:
+  # torch.set_num_threads. Results are bit-exact only on the same machine
+  # with the same number of threads (DECISIONS.md, 2026-09-24). 6 = this
+  # machine's torch default, at which the throughput above was profiled.
+  num_threads: 6
+  # auto | cpu | cuda (CLI --device overrides). The model is built on the CPU
+  # with the seed, then moved, so its initial weights do not depend on the device.
+  device: auto
+
+seeds: [0]  # rotation 0 (class A)

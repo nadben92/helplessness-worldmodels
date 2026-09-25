@@ -11,6 +11,13 @@ Every actual MEASURE (entropy, KL, alpha_app, JS distance, ghost
 classification) is computed by calling into measures/latent_controllability.py,
 measures/kernel_probe.py, measures/diagnostics.py on the plain numpy
 arrays this module produces -- never recomputed here.
+
+Device contract (docs/e3/DECISIONS.md, 2026-09-25): every function takes
+its device from the model's parameters and moves its own tensor inputs
+there (templates, images); callers may pass CPU tensors. Randomness:
+every function that draws accepts an optional torch.Generator
+(`generator`, on the model's device) so measurements never consume the
+training stream; None falls back to the global torch RNG.
 """
 
 from __future__ import annotations
@@ -34,7 +41,7 @@ from helplessness.measures.latent_controllability import latent_controllability,
 # ---------------------------------------------------------------------
 
 
-def canonical_probe(rssm: RSSM, templates: torch.Tensor) -> dict[str, np.ndarray]:
+def canonical_probe(rssm: RSSM, templates: torch.Tensor, generator: torch.Generator | None = None) -> dict[str, np.ndarray]:
     """For every one of the n_states templates (spec 5.1): h0 (fresh
     episode start), z0 = mode of q(.|h0, enc(x)) (never a stochastic
     sample -- see agent.categorical_mode), posterior entropy, and for
@@ -54,7 +61,7 @@ def canonical_probe(rssm: RSSM, templates: torch.Tensor) -> dict[str, np.ndarray
         h1_per_action, prior_per_action = [], []
         for a in range(n_actions):
             a_onehot = F.one_hot(torch.full((n_states,), a, device=device, dtype=torch.long), num_classes=n_actions).to(z0.dtype)
-            out = rssm.imagination_step(h0, z0, a_onehot)
+            out = rssm.imagination_step(h0, z0, a_onehot, generator=generator)
             h1_per_action.append(out["h"])
             prior_per_action.append(out["prior_probs"])
         h1 = torch.stack(h1_per_action, dim=1)  # (n_states, n_actions, h_dim)
@@ -85,8 +92,10 @@ def single_state_probe(rssm: RSSM, x: torch.Tensor) -> dict[str, np.ndarray]:
 # ---------------------------------------------------------------------
 
 
-def canonical_iz(rssm: RSSM, templates: torch.Tensor, M: int, rng: np.random.Generator) -> dict[str, np.ndarray]:
-    probe = canonical_probe(rssm, templates)
+def canonical_iz(
+    rssm: RSSM, templates: torch.Tensor, M: int, rng: np.random.Generator, generator: torch.Generator | None = None
+) -> dict[str, np.ndarray]:
+    probe = canonical_probe(rssm, templates, generator=generator)
     n_states = probe["prior_probs"].shape[0]
     I_z = np.empty(n_states)
     se = np.empty(n_states)
@@ -104,11 +113,12 @@ def canonical_iz(rssm: RSSM, templates: torch.Tensor, M: int, rng: np.random.Gen
 
 
 def canonical_kernel_probe(
-    rssm: RSSM, templates: torch.Tensor, K_s: int, margin_threshold: float, probe: dict[str, np.ndarray] | None = None
+    rssm: RSSM, templates: torch.Tensor, K_s: int, margin_threshold: float, probe: dict[str, np.ndarray] | None = None,
+    generator: torch.Generator | None = None,
 ) -> dict[str, np.ndarray]:
     device = next(rssm.parameters()).device
     if probe is None:
-        probe = canonical_probe(rssm, templates)
+        probe = canonical_probe(rssm, templates, generator=generator)
     n_states, n_actions = probe["h1"].shape[0], probe["h1"].shape[1]
     templates_np = templates.detach().cpu().numpy()
 
@@ -121,7 +131,7 @@ def canonical_kernel_probe(
         for s in range(n_states):
             for a in range(n_actions):
                 h1_sa = h1_t[s, a].unsqueeze(0).expand(K_s, -1)
-                samples = sample_categorical_batch(prior_t[s, a], K_s)
+                samples = sample_categorical_batch(prior_t[s, a], K_s, generator=generator)
                 decoded = rssm.decode(h1_sa, samples).detach().cpu().numpy()
                 result = kernel_probe(decoded, templates_np, margin_threshold)
                 p_hat[s, a] = result["p_hat"]
@@ -130,17 +140,26 @@ def canonical_kernel_probe(
     return {"p_hat": p_hat, "ghost_fraction": ghost_fraction}
 
 
-def template_match_accuracy(rssm: RSSM, model_batch: ModelBatch, label_batch: LabelBatch, templates: torch.Tensor, margin_threshold: float) -> float:
+def template_match_accuracy(
+    rssm: RSSM, model_batch: ModelBatch, label_batch: LabelBatch, templates: torch.Tensor, margin_threshold: float,
+    generator: torch.Generator | None = None,
+) -> float:
     """Calibration criterion C-a (spec section 7): fraction of VISITED
     states whose POSTERIOR reconstruction (decode(h_t, z_t), z_t from
     the real posterior, not the prior) matches its own true template
-    under nearest-L2 matching."""
+    under nearest-L2 matching.
+
+    What exactly this measures (docs/e3/DECISIONS.md, 2026-09-25): REPLAY
+    windows (real contexts h_t, unrolled from each window's start), z_t a
+    HARD straight-through sample of the posterior (one draw per step).
+    Not the canonical probe: see canonical_separation for the fresh-h0
+    path (hard sample and mode)."""
     device = next(rssm.parameters()).device
     x_seq = to_chw_float(model_batch.x, device)
     a_seq = torch.as_tensor(model_batch.a, dtype=torch.long, device=device)
     is_first_seq = torch.as_tensor(model_batch.is_first, dtype=torch.bool, device=device)
     with torch.no_grad():
-        out = unroll_observation(rssm, x_seq, a_seq, is_first_seq)
+        out = unroll_observation(rssm, x_seq, a_seq, is_first_seq, generator=generator)
         decoded = rssm.decoder(out["h"].reshape(-1, rssm.cfg.h_dim), out["z"].reshape(-1, rssm.cfg.latent_dim))
     decoded_np = decoded.detach().cpu().numpy()
     templates_np = templates.detach().cpu().numpy()
@@ -301,7 +320,7 @@ def d1_alpha_app_for_state(
     I_L = I_by_category[own_category]
     I_Lprime = I_by_category[target_category]
     alpha = alpha_app_fn(I_swap, I_L, I_Lprime, contrast_threshold)
-    return {"I_swap": I_swap, "alpha_app": alpha, "I_L": I_L, "I_Lprime": I_Lprime}
+    return {"I_swap": I_swap, "I_swap_se": result["se"], "alpha_app": alpha, "I_L": I_L, "I_Lprime": I_Lprime}
 
 
 def d2_neighbor_distances(posterior_probs: np.ndarray, layout) -> dict[str, np.ndarray]:
@@ -330,14 +349,25 @@ def d2_neighbor_distances(posterior_probs: np.ndarray, layout) -> dict[str, np.n
 # ---------------------------------------------------------------------
 
 
-def canonical_separation(rssm: RSSM, templates: torch.Tensor, n_eval_draws: int = 5, deterministic: bool = False) -> dict[str, float]:
+def canonical_separation(
+    rssm: RSSM, templates: torch.Tensor, n_eval_draws: int = 5, deterministic: bool = False,
+    generator: torch.Generator | None = None,
+) -> dict[str, float]:
     """Canonical path (fresh h0, z from the posterior of render(s)) for
     the n_states templates: nearest-template accuracy of the DISCRETE
     reconstruction with a hard one-hot sample (averaged over
     n_eval_draws draws) and with the posterior mode, mean posterior
     entropy, and mean pairwise Jensen-Shannon divergence between the
     states' posteriors. deterministic=True evaluates z = the posterior
-    probabilities instead of a hard sample (the no-bottleneck reference)."""
+    probabilities instead of a hard sample (the no-bottleneck reference).
+
+    Labels (docs/e3/DECISIONS.md, 2026-09-25): "acc_hard" = CANONICAL
+    PROBE, HARD SAMPLE; "acc_mode" = CANONICAL PROBE, MODE. The canonical
+    path uses the learned initial state h0 for every state, a context the
+    model sees only at window starts, so it is expected to read lower
+    than the replay accuracy (template_match_accuracy)."""
+    device = next(rssm.parameters()).device
+    templates = templates.to(device)
     templates_np = templates.detach().cpu().numpy()
 
     def accuracy(h0: torch.Tensor, z: torch.Tensor) -> float:
@@ -351,7 +381,7 @@ def canonical_separation(rssm: RSSM, templates: torch.Tensor, n_eval_draws: int 
         if deterministic:
             acc_hard = accuracy(h0, post)
         else:
-            acc_hard = float(np.mean([accuracy(h0, straight_through_sample(post)) for _ in range(n_eval_draws)]))
+            acc_hard = float(np.mean([accuracy(h0, straight_through_sample(post, generator)) for _ in range(n_eval_draws)]))
         acc_mode = accuracy(h0, categorical_mode(post))
     post_np = post.detach().cpu().numpy()
     return {
@@ -379,6 +409,7 @@ def latent_usage_diagnostic(rssm: RSSM, templates: torch.Tensor, M: int, rng: np
     A gap acc_probs >> acc_hard with near-uniform posteriors is the
     signature of state information carried by tiny probability
     differences that a discrete sample cannot transmit."""
+    templates = templates.to(next(rssm.parameters()).device)
     hard = canonical_separation(rssm, templates, n_eval_draws=n_eval_draws)
     probs = canonical_separation(rssm, templates, deterministic=True)
     with torch.no_grad():

@@ -68,16 +68,18 @@ train:
   # switch_n_pairs random image pairs of the current training batch,
   # evaluated every switch_eval_every steps; switch once it exceeds
   # switch_js_threshold on switch_consecutive consecutive evaluations, not
-  # before switch_min_steps. Not reached by switch_max_steps (null = 60% of
-  # the training budget) -> the run stops with SeparationNotReachedError,
-  # never a silent switch.
+  # before switch_min_steps. Not reached by switch_max_steps -- an ABSOLUTE
+  # number of gradient steps, never a fraction of the budget (DECISIONS.md,
+  # 2026-09-25) -> the run stops with SeparationNotReachedError, never a
+  # silent switch. The margin (deadline - switch step) is logged in every
+  # report.
   latent_estimator:
     kind: warmup_probs_until_separated
     switch_js_threshold: 3.0
     switch_consecutive: 5
     switch_eval_every: 50
     switch_min_steps: 500
-    switch_max_steps: null
+    switch_max_steps: 6307    # the value the former "60% of 10512" resolved to
     switch_n_pairs: 64
     # Guard after the switch: the same label-free statistic falling back
     # below collapse_js_threshold bits on collapse_consecutive consecutive
@@ -92,14 +94,24 @@ measure:
   kernel_margin_threshold: 1.0e-3
   z_only_test_frac: 0.2
   context_dispersion_n_samples: 100
-  contrast_threshold: 0.05    # spec 8's alpha_app definedness threshold
+  # D1: a (L, L') contrast is accepted only if |I_L' - I_L| > max(d1_contrast_min_bits,
+  # 3 x combined MC se) (DECISIONS.md, 2026-09-25).
+  d1_contrast_min_bits: 0.25
   separation_every: 250       # training steps between canonical separation measurements (JS, accuracy)
   monitor_every: 500          # console line: step, batch-pair JS, labelled JS, phase, beta_rep, recon_patch, grad_norm, lr
+  # Training diagnostics (KL / L1 / I_z by zone, frequent outcome, posterior
+  # entropy, template accuracies), appended to diagnostics.jsonl every this many
+  # gradient steps; null = only the final point. Each point costs ~2.5 min at
+  # this model size (mostly the s-space kernel, 144 x 5 x kernel_k_s decodes).
+  diagnostics_every: null
 
 runtime:
   # torch.set_num_threads. Results are bit-exact only on the same machine
   # with the same number of threads (DECISIONS.md, 2026-09-24). 6 = this
   # machine's torch default, at which the throughput above was profiled.
   num_threads: 6
+  # auto | cpu | cuda (CLI --device overrides). The model is built on the CPU
+  # with the seed, then moved, so its initial weights do not depend on the device.
+  device: auto
 
 seeds: [0, 5]  # rotation 0 (class A) and rotation 1 (class B) -- see env.py::ROTATION_CLASS
