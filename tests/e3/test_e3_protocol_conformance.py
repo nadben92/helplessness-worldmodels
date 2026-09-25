@@ -179,13 +179,58 @@ def test_start_state_stream_is_e2s_spawned_stream():
     assert np.array_equal(ours.integers(1 << 30, size=20), theirs.integers(1 << 30, size=20))
 
 
-@pytest.mark.xfail(reason="deviation reported 2026-09-25, not fixed: E3 seeds the collection actions (default_rng(seed)), the "
-                          "environment dynamics (TorusZonedEnv(seed=seed)) and the themes (default_rng(seed)) with the SAME "
-                          "integer, i.e. identical bit streams; spec 6 and E2 derive them by SeedSequence(seed).spawn",
-                   strict=True)
 def test_collection_dynamics_and_theme_streams_are_independent():
-    seed = 0
-    env = e3_env(seed=seed)
-    actions = run_mini.seed_streams(seed, device=__import__("torch").device("cpu"))["collect"]
-    dynamics = env._dynamics_rng
-    assert actions.bit_generator.state != dynamics.bit_generator.state
+    """Spec 6 (docs/e3/DECISIONS.md, 2026-09-25): every stream is a distinct
+    child of SeedSequence(seed).spawn; none is seeded with the integer seed."""
+    rng_streams = load_experiment_module("E3_worldmodel_4zones", "rng_streams.py", "conformance_rng_streams")
+    for seed in (0, 5):
+        env = e3_env(seed=seed)
+        actions = run_mini.seed_streams(seed, device=__import__("torch").device("cpu"))["collect"]
+        dynamics = env._dynamics_rng
+        themes = rng_streams.spawn_streams(seed)["theme"]
+        states = [g.bit_generator.state["state"]["state"] for g in (actions, dynamics, themes)]
+        assert len(set(states)) == 3
+        assert all(g.bit_generator.state != np.random.default_rng(seed).bit_generator.state for g in (actions, dynamics, themes))
+
+
+def test_first_draws_of_the_action_and_dynamics_streams_differ():
+    for seed in (0, 1, 5):
+        env = e3_env(seed=seed)
+        actions = run_mini.seed_streams(seed, device=__import__("torch").device("cpu"))["collect"]
+        assert not np.array_equal(actions.integers(1 << 30, size=16), env._dynamics_rng.integers(1 << 30, size=16))
+
+
+def test_e3_streams_extend_e2s_spawned_streams():
+    """The first children of E3's spawn are E2's own streams for the same seed."""
+    e2_rng = load_experiment_module("E2_online_4zones", "rng.py", "conformance_e2_rng_prefix")
+    rng_streams = load_experiment_module("E3_worldmodel_4zones", "rng_streams.py", "conformance_rng_streams_prefix")
+    assert rng_streams.STREAM_NAMES[: len(e2_rng.STREAM_NAMES)] == tuple(e2_rng.STREAM_NAMES)
+    ours, theirs = rng_streams.spawn_streams(7), e2_rng.spawn_streams(7)
+    for name in e2_rng.STREAM_NAMES:
+        assert np.array_equal(ours[name].integers(1 << 30, size=8), theirs[name].integers(1 << 30, size=8)), name
+
+
+def test_environment_dynamics_seed_is_drawn_as_in_e2():
+    rng_streams = load_experiment_module("E3_worldmodel_4zones", "rng_streams.py", "conformance_rng_streams_env")
+    e2_rng = load_experiment_module("E2_online_4zones", "rng.py", "conformance_e2_rng_env")
+    env = e3_env(seed=4)
+    expected = np.random.default_rng(int(e2_rng.spawn_streams(4)["env_dynamics"].integers(2**31)))  # sweep.py's own draw
+    assert np.array_equal(env._dynamics_rng.integers(1 << 30, size=8), expected.integers(1 << 30, size=8))
+
+
+# ---------------------------------------------------------------- episode parameters read from the config
+
+
+def test_episode_parameters_come_from_the_config_and_equal_e2s():
+    import inspect
+
+    episode = run_mini.load_episode_config()
+    e2_step_reward = inspect.signature(e2_env.build_env).parameters["step_reward"].default
+    assert episode["goal_reward"] == e2_sweep.GOAL_REWARD
+    assert episode["step_reward"] == e2_step_reward
+    assert episode["max_steps"] == e2_sweep.H
+    assert episode["gamma"] == e2_sweep.GAMMA
+    env = e3_env()
+    assert env.max_steps == episode["max_steps"]
+    R = env.reward_vector()
+    assert set(R.tolist()) == {episode["goal_reward"], episode["step_reward"]}

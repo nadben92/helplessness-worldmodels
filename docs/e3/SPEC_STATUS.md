@@ -1,8 +1,10 @@
 # E3 — status of the initial prompt, section by section
 
-The initial E3 prompt (`prompt_e3_worldmodel.md`, sections §0–§11) is the
-reference for everything `docs/e3/DECISIONS.md` does not change. **When the
-two conflict, DECISIONS.md wins.**
+The initial E3 prompt ([`prompt_e3_worldmodel.md`](prompt_e3_worldmodel.md),
+sections §0–§11) is the reference for everything `docs/e3/DECISIONS.md`
+does not change. **When the two conflict, DECISIONS.md wins.** The prompt is
+kept verbatim in `docs/e3/prompt_e3_worldmodel.md` (added 2026-09-25,
+checked complete: §0–§11 and all their subsections).
 
 Each section is **unchanged**, **amended** or **under review**. For an
 amendment, the entry of DECISIONS.md that makes it is cited by its date and
@@ -17,9 +19,9 @@ Last updated: 2026-09-25.
 | 1 | Phase 0 — reading the repo | amended | 2026-09-23 Phase 0 validation, points 1 and 4 |
 | 2 | Pixel environment | amended (§2.2) | 2026-09-23 Phase 0 validation, point 5; 2026-09-23 T2 entries |
 | 3 | World model | amended (§3.1–§3.3) | 2026-09-24 and 2026-09-25 entries, see below |
-| 4 | Agent | amended (§4.3, §4.5, §4.6) | 2026-09-23 Phase 0 validation, points 1, 2, 8; 2026-09-25 episode starts |
-| 5 | Measures | under review (§5.1) | 2026-09-25 after the mini run, note on h0 |
-| 6 | Conditions, runs, seeds | amended; one deviation open | 2026-09-25 after the mini run; 2026-09-25 episode starts |
+| 4 | Agent | amended (§4.1, §4.3, §4.5, §4.6) | 2026-09-23 Phase 0 validation, points 1, 2, 8; 2026-09-25 episode starts; 2026-09-25 independent streams (reward convention) |
+| 5 | Measures | under review (§5.1); amended (§5.2) | 2026-09-25 after the mini run, note on h0; 2026-09-25 independent streams (Monte-Carlo counts) |
+| 6 | Conditions, runs, seeds | amended | 2026-09-25 after the mini run; 2026-09-25 episode starts; 2026-09-25 independent streams |
 | 7 | Phase 4 — calibration | amended | 2026-09-23 Phase 0 validation, point 8; 2026-09-24 lr 1e-4 failure |
 | 8 | Position / appearance diagnostic | amended | 2026-09-25 after the mini run (D1 rule) |
 | 9 | Shape tests | amended (T2) | 2026-09-23 T2 reformulated |
@@ -107,9 +109,17 @@ Last updated: 2026-09-25.
   - *Phase 0 validation, adjustment D; 2026-09-24 Phase 3 points 1-2.*
 - §3.5 replay ratio: unchanged (calibrated in Phase 4).
 
-### §4 — Agent — amended (§4.3, §4.5, §4.6); not implemented yet (Phase 5)
+### §4 — Agent — amended (§4.1, §4.3, §4.5, §4.6); not implemented yet (Phase 5)
 
-- §4.1, §4.2, §4.4: unchanged, not implemented yet.
+- **§4.1 goal head: amended.** The reward read from the goal head is
+  r = 50·p_goal − 1·(1 − p_goal), not r = 50·p_goal. This matches E2's
+  convention: +50 for the step that reaches the goal (the goal reward
+  *replaces* the step cost; `src/helplessness/envs/rewards/base.py:52-53`)
+  and −1 for every other step. **Decided** (user, 2026-09-25: E2's
+  convention confirmed, E3 aligns with it). *2026-09-25 independent
+  streams, point 5; 2026-09-25 theme sensitivity.* Not implemented yet
+  (Phase 5).
+- §4.2, §4.4: unchanged, not implemented yet.
 - **§4.3:** the tie-break tolerance is **relative**,
   `tol = max(1e-6, 0.01·std(Q))`. *Phase 0 validation, point 8.*
 - **§4.5:** E2 had **no burn-in**; E3 has none either. A minimal prefill
@@ -118,13 +128,13 @@ Last updated: 2026-09-25.
 - **§4.6 frozen E2 parameters:**
   - The grid is E2's 16 checkpoints. *Phase 0 validation, point 1.*
   - **Uniform starts over the non-terminal states** were specified but
-    not implemented until 2026-09-25: every earlier run started at
-    (0, 0). *2026-09-25 episode starts.*
+    not implemented until 2026-09-25: every earlier run started on the goal,
+    state 0 = (0, 0). *2026-09-25 episode starts.*
   - H = 36, ε = 0.1 (closed loop) and the 10⁶-step budget are unchanged.
     `tests/e3/test_e3_protocol_conformance.py` checks them against E2's
     code.
 
-### §5 — Measures — under review (§5.1)
+### §5 — Measures — under review (§5.1); amended (§5.2)
 
 - **§5.1 canonical probe: under review.**
   - The probe starts from h0, a context under-represented in training:
@@ -139,8 +149,10 @@ Last updated: 2026-09-25.
     a short standardised context, or replay contexts, based on the
     context dispersion.
   - *2026-09-25 after the mini run (note on h0); 2026-09-25 episode starts.*
-- §5.2 I in z-space: unchanged. The default is M = 4096; the configs use
-  2000, which DECISIONS.md does not cover (reported, to decide).
+- **§5.2 I in z-space: amended (Monte-Carlo count).** M = 2000 for the
+  diagnostics during training; M = 4096, the spec's value, for the final
+  measures and the calibration. *2026-09-25 independent streams, point 4.*
+  The estimator itself is unchanged.
 - §5.3 s-space kernel: unchanged. It is also used as the bridge for
   `Agent.transition_distribution`. *2026-09-24 Phase 3 points 1-2.*
 - §5.4–§5.7: unchanged.
@@ -149,18 +161,19 @@ Last updated: 2026-09-25.
 
 ### §6 — Conditions, runs, seeds — amended; one deviation open
 
-- **Dedicated generators.**
-  - Latent draws of the training step: a torch generator.
-  - Each measurement: its own streams.
-  - Episode starts: E2's `start_state` stream, by import.
+- **Every stream is derived by `SeedSequence(seed).spawn`, as in E2.** No
+  component receives the integer seed (`experiments/E3_worldmodel_4zones/rng_streams.py`).
+  - The first six children are E2's own streams (env_dynamics, explore,
+    tiebreak, start_state, matched_control, reference).
+  - E3 adds theme, network_init, replay_sample, latent_sample,
+    switch_pairs and measure.
   - Measuring more or less often never changes the training trajectory
     (tested).
-  - *2026-09-25 after the mini run (RNG streams); 2026-09-25 episode starts.*
-- **Open deviation, reported, not corrected:** the collection actions,
-  the environment dynamics and the themes are seeded with the same
-  integer. That gives identical bit streams, where the spec and E2 derive
-  them by `SeedSequence(seed).spawn`. *2026-09-25 episode starts, other
-  deviations, point 1.* Pinned by a strict xfail in the conformance test.
+  - *2026-09-25 after the mini run (RNG streams); 2026-09-25 episode
+    starts; 2026-09-25 independent streams, point 1.*
+- The earlier deviation (actions, dynamics and themes seeded with the
+  same integer) is corrected. Every run before the correction had
+  correlated streams, and their noisy-zone statistics are not reliable.
 - The conditions (E3-0, A, Ref, B, E2 null) and the 20 seeds are unchanged.
 
 ### §7 — Phase 4 calibration — amended
@@ -201,11 +214,13 @@ Last updated: 2026-09-25.
     guard fires.
   - *2026-09-25 after the mini run (run outputs).*
 - Checkpoints follow E2's 16-point grid. *Phase 0 validation, point 1.*
+- Metadata: config.yaml, commit, seed and random-stream names, plus the
+  permutation (rotation, quadrant assignment), the block class A/B, the
+  theme colours and the episode parameters in meta.yaml. *2026-09-25
+  independent streams, point 2.*
 - **Not implemented yet:**
   - model weights per checkpoint and `--resume` (Phase 4a, B5);
   - `transitions.parquet`;
-  - permutation, themes and block class A/B in meta.yaml (reported
-    2026-09-25);
   - aggregation scripts comparable to E2's.
 
 ### §11 — Order of the phases — amended

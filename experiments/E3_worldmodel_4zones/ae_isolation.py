@@ -302,8 +302,10 @@ def run(
     clip_norm: float | None = None,
     log_step_diagnostics: bool = False,
     legacy_snapshot_rng: bool = False,
+    themes=None,
 ) -> dict:
-    """k=None uses configs/e3/mini.yaml's own render scale. aid: keyword
+    """k=None uses configs/e3/mini.yaml's own render scale. themes: a fixed
+    Themes object instead of the seed's theme draw (run_mini.build_run). aid: keyword
     arguments of loop.ProbsPhaseAid (kind, eta_max); its ramp_steps is
     always the switch deadline."""
     # Loaded through the experiment loader, never a bare `import run_mini`:
@@ -316,7 +318,7 @@ def run(
         cfg["render"]["k"] = k
     k = cfg["render"]["k"]
     torch.manual_seed(seed)
-    _layout, _themes, _env, background, templates = run_mini.build_run(cfg, seed)
+    _layout, _themes, _env, background, templates = run_mini.build_run(cfg, seed, themes=themes)
     side = 12 * k
     rssm = RSSM(RSSMConfig(
         image_size=(side, side), base_depth=cfg["model"]["base_depth"], embed_dim=cfg["model"]["embed_dim"],

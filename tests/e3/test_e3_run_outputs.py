@@ -37,7 +37,7 @@ def tiny_config(separation_every: int, diagnostics_every: int | None) -> dict:
     cfg["train"].update(batch_size=4, seq_len=8, replay_ratio=1)
     cfg["train"]["latent_estimator"].update(switch_js_threshold=-1.0, switch_consecutive=2, switch_eval_every=5,
                                             switch_min_steps=10, switch_max_steps=60, collapse_js_threshold=float("-inf"))
-    cfg["measure"].update(iz_mc_samples=200, kernel_k_s=2, context_dispersion_n_samples=10, separation_every=separation_every,
+    cfg["measure"].update(iz_mc_samples_training=200, iz_mc_samples_final=300, kernel_k_s=2, context_dispersion_n_samples=10, separation_every=separation_every,
                           diagnostics_every=diagnostics_every, monitor_every=50)
     cfg["runtime"].update(num_threads=2, device="cpu")
     return cfg
@@ -176,3 +176,11 @@ def test_episode_starts_come_from_the_dedicated_stream_whatever_the_measurement_
 
     meta = yaml.safe_load((dir_often / "meta.yaml").read_text(encoding="utf-8"))
     assert meta["start_distribution"] == "uniform_non_terminal" and meta["collection_epsilon"] == 1.0
+    # spec 10: the permutation, the themes and the block class are in meta.yaml
+    assert meta["rotation"] == run_mini.e3_env.rotation_for_seed_index(0) and meta["block_class"] == "A"
+    assert meta["quadrant_assignment"] == {str(k): str(v) for k, v in
+                                           run_mini.e3_env.quadrant_assignment_for_rotation(meta["rotation"]).items()}
+    themes = run_mini.build_run(tiny_config(10, None), 0)[1]
+    assert meta["themes"]["zone_colors"] == {c: list(rgb) for c, rgb in themes.zone_colors.items()}
+    assert meta["themes"]["agent_marker_color"] == list(themes.agent_marker_color)
+    assert meta["episode"] == run_mini.load_episode_config()

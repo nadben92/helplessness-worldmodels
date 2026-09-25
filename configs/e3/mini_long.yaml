@@ -6,7 +6,7 @@
 # 1.6-1.9). Hypothesis: budget -- ~7 visits per (s, a) pair and 4000-5700
 # steps after the switch at lr 1e-4. Here: 20,000 environment steps at
 # epsilon=1 (~28 visits per pair), 40,000 gradient steps, switch deadline
-# 10,000 (absolute). Procedure unchanged: criterion switch, lr 1e-3 -> 1e-4
+# 25,000 (absolute; was 10,000). Procedure unchanged: criterion switch, lr 1e-3 -> 1e-4
 # at the switch, beta_rep ramp after it, no clipping, both guards active.
 # Model, render, loss and procedure blocks are identical to mini.yaml; only
 # budget, switch_max_steps, measure.diagnostics_every and seeds differ.
@@ -94,7 +94,7 @@ train:
     switch_consecutive: 5
     switch_eval_every: 50
     switch_min_steps: 500
-    switch_max_steps: 10000
+    switch_max_steps: 25000    # 62.5% of the 40,000-step budget (DECISIONS.md, 2026-09-25: theme sensitivity)
     switch_n_pairs: 64
     # Guard after the switch: the same label-free statistic falling back
     # below collapse_js_threshold bits on collapse_consecutive consecutive
@@ -104,7 +104,10 @@ train:
     collapse_consecutive: 5
 
 measure:
-  iz_mc_samples: 2000        # M for latent_controllability
+  # Monte-Carlo samples per I_z (DECISIONS.md, 2026-09-25): 2000 for the diagnostics during training,
+  # the spec's 4096 for the final measures (and for calibration).
+  iz_mc_samples_training: 2000
+  iz_mc_samples_final: 4096
   kernel_k_s: 16              # K_s draws for canonical_kernel_probe
   kernel_margin_threshold: 1.0e-3
   z_only_test_frac: 0.2

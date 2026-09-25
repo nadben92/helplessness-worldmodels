@@ -23,7 +23,28 @@ from __future__ import annotations
 
 from _experiment_loader import load_experiment_module
 
+from helplessness.envs.appearance.theme_sampling import Themes
+
 ae_isolation = load_experiment_module("E3_worldmodel_4zones", "ae_isolation.py", "test_ae_isolation_module")
+
+# Fixed themes (docs/e3/DECISIONS.md, 2026-09-25), so that this test does not depend on the theme
+# stream. Provenance: the draw this test was validated with --
+#   build_themes(ZONE_CATEGORIES, goal_state=0, rng=np.random.default_rng(0), min_dist=30.0, marker_min_dist=30.0)
+# i.e. seed 0's themes before every stream was derived by SeedSequence.spawn. With it, seed 0 switched at
+# step 2301 and ended at 0.999 in the estimator comparison. How much the switch step depends on the
+# colours: docs/e3/THEME_SENSITIVITY.md.
+FIXED_THEMES = Themes(
+    zone_colors={
+        "uncontrollable_deterministic": (217, 163, 130),
+        "controllable_noisy": (69, 78, 10),
+        "uncontrollable_noisy": (19, 4, 44),
+        "controllable_deterministic": (208, 166, 233),
+    },
+    agent_marker_color=(143, 239, 71),
+    goal_state=0,
+    corridor_color=(128, 128, 128),
+    goal_color=(255, 215, 0),
+)
 
 N_STEPS_CAP = 6000
 SWITCH_DEADLINE = 3600  # the comparison's deadline (60% of 6000)
@@ -35,7 +56,7 @@ BATCH = 32
 def test_categorical_autoencoder_with_the_retained_procedure_represents_all_144_states():
     result = ae_isolation.run(
         N_STEPS_CAP, LR, BATCH, seed=0, estimator="warmup_probs_until_separated",
-        switch_max_steps=SWITCH_DEADLINE, stop_after_switch=STOP_AFTER_SWITCH, eval_every=N_STEPS_CAP,
+        switch_max_steps=SWITCH_DEADLINE, stop_after_switch=STOP_AFTER_SWITCH, eval_every=N_STEPS_CAP, themes=FIXED_THEMES,
     )
     assert result["k"] == 6
     assert result["switch_step"] is not None

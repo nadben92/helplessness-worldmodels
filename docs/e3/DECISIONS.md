@@ -1331,3 +1331,144 @@ argument is the separation of the posterior and the learning of the
 kernel). The visitation of the earlier runs, however, was concentrated
 around the goal. The truncated mini_long run after the correction:
 570 starts over 140 of the 143 non-terminal states, none on the goal.
+
+## 2026-09-25 -- independent random streams (SeedSequence.spawn), metadata, episode parameters, Monte-Carlo counts, reward convention
+
+**1. Streams: deviation 1 corrected (user decision, blocking).**
+`experiments/E3_worldmodel_4zones/rng_streams.py` derives every stream of
+a run by `np.random.SeedSequence(seed).spawn`, as E2 does. No component
+receives the integer seed any more.
+- The first six children are **E2's own streams**, in E2's order,
+  imported from `experiments/E2_online_4zones/rng.py::STREAM_NAMES`:
+  env_dynamics, explore, tiebreak, start_state, matched_control,
+  reference. For the same seed they are the very generators of E2's
+  `spawn_streams(seed)` (tested).
+- E3 appends theme, network_init, replay_sample, latent_sample,
+  switch_pairs and measure.
+- Use:
+  - collection actions = explore;
+  - dynamics = `seed=int(env_dynamics.integers(2**31))`, exactly as E2's
+    sweep.py / pilot.py;
+  - episode starts = start_state;
+  - themes = theme;
+  - `torch.manual_seed` from network_init, just before the model is built;
+  - training minibatches = replay_sample;
+  - the training step's latent draws = a torch.Generator from
+    latent_sample;
+  - the switch statistic = switch_pairs;
+  - each measurement = its own child of measure (32 slots).
+- Tests (`tests/e3/test_e3_protocol_conformance.py`): the independence
+  test is now a normal test (it was a strict xfail). New tests: the first
+  draws of the action and dynamics streams differ for the same seed; E3's
+  first streams equal E2's; the dynamics seed is drawn as E2 draws it.
+
+**Every E3 run before this entry had correlated streams.** The collection
+actions (`default_rng(seed)`), the environment dynamics
+(`TorusZonedEnv(seed=seed)` -> `default_rng(seed)`) and the themes
+(`default_rng(seed)`) were identical bit streams. That covers the mini
+run of 2026-09-24 and its re-runs, and the truncated test runs. The
+action draws and the transition noise shared one underlying sequence.
+**The noisy-zone statistics of those runs (frequent outcome, kernel L1 in
+the noisy zones, I_z of the noisy zones) are not reliable.** The
+isolation test (ae_isolation.py) has no environment dynamics and no
+actions; its themes came from `default_rng(seed)`, the same integer that
+seeded its batch draws.
+
+**Consequences.**
+- Themes and trajectories change for every seed: runs made from now on
+  are not comparable seed-for-seed with the earlier ones.
+- Re-running `ae_isolation.py` now draws different themes (it builds its
+  images with `run_mini.build_run`), so the recorded results in
+  ESTIMATOR_COMPARISON.md are not bit-reproducible by a re-run. They stay
+  the record of what was run.
+
+**2. Metadata (deviation 2).** meta.yaml now records:
+- the rotation and the quadrant assignment (the permutation);
+- the block class A/B;
+- the theme colours (zones, agent marker, corridor, goal);
+- the names of the random streams;
+- the episode parameters.
+
+**3. Episode parameters (deviation 3).** `run_mini.build_run` reads
+goal_reward, step_reward and max_steps (H) from
+`experiments/E3_worldmodel_4zones/config.yaml` (`episode`). There are no
+hard-coded values any more. The test compares them, and gamma, with E2:
+`sweep.GOAL_REWARD`, the default step_reward of E2's `build_env`,
+`sweep.H` and `sweep.GAMMA`.
+
+**4. Monte-Carlo sample counts (deviation 4).**
+- M = 2000 for the diagnostics during training
+  (`measure.iz_mc_samples_training`).
+- M = 4096, the spec's value, for the final measures
+  (`measure.iz_mc_samples_final`): the final canonical I_z, I(z;s), the
+  context dispersion, D1 and the failure diagnostic. Also for the
+  calibration (Phase 4).
+- Applied in mini.yaml and mini_long.yaml; each diagnostics record
+  carries its M.
+
+**5. Reward convention of E2, exactly.** The reward is given on ARRIVAL
+in s': `TorusZonedEnv.step` computes `reward = reward_fn(s_next)`
+(`src/helplessness/envs/torus_env.py:115`). With `GoalReward`, arriving
+at the goal gives goal_reward **in place of** the step reward, not added
+to it: `src/helplessness/envs/rewards/base.py:52-53` (`return
+self.goal_reward if int(s) == self.goal_state else self.step_reward`),
+docstring lines 34-38. The same convention is in
+`experiments/E2_online_4zones/env.py::reward_and_terminal`
+(`R = full(n_states, step_reward); R[goal_s] = goal_reward`), with E2's
+`build_env(..., step_reward=-1.0)` default and `sweep.GOAL_REWARD = 50`.
+So:
+- the step that reaches the goal is rewarded **+50** (not 49 = 50 - 1);
+- every other step is rewarded **-1**.
+**Amendment of spec 4.1 (goal head), user decision.** r = 50·p_goal is
+replaced by **r = 50·p_goal - 1·(1 - p_goal)**. It gives 50 when
+p_goal = 1 and -1 when p_goal = 0, i.e. exactly E2's convention. Not
+implemented yet (Phase 5).
+
+## 2026-09-25 -- theme sensitivity: pinned test themes, switch step as a covariate, longer deadline, prompt file, reward decided
+
+**Why.** Once the themes come from the theme stream, the isolation test
+(seed 0, lr 1e-3) switches at step 4901 instead of 2301. With the new
+colours of seed 0 it misses its 3600-step deadline, and 500 steps after
+the switch its accuracy is 0.786. The time the probabilities phase needs
+to separate the states depends strongly on the colour draw.
+
+**1. The isolation test's themes are pinned (user decision, option 2).**
+`tests/e3/test_e3_ae_isolation.py` passes a fixed `Themes` object, colours
+written out with their provenance: the draw the test was validated with,
+`build_themes(ZONE_CATEGORIES, goal_state=0, rng=np.random.default_rng(0),
+min_dist=30, marker_min_dist=30)`. The test no longer depends on the
+theme stream. Criterion and deadlines are unchanged, and it passes.
+`run_mini.build_run` and `ae_isolation.run` accept an optional `themes`
+for this.
+
+**2. The switch step is a covariate.** Every run must record its
+effective switch step, and every analysis must treat it as a covariate.
+This matters most in E4/E5, which manipulate the colours on purpose.
+Checked: the switch step is already recorded in
+- meta.yaml (`switch_step`, `switch_deadline`, `switch_margin`, written at
+  the end of a seed and on a guard failure);
+- results.json (`training_procedure.switch_step`, `switch_margin`);
+- the console and the report.
+The colour dependence is characterised in `docs/e3/THEME_SENSITIVITY.md`
+(10 theme draws in the isolation test).
+
+**3. Switch deadlines.**
+- mini_long.yaml: 25,000 steps (62.5% of its 40,000-step budget; it was
+  10,000).
+- mini.yaml: to be set from the distribution measured in
+  THEME_SENSITIVITY.md (at least the maximum observed x a justified
+  margin, at most 80% of its 10,512-step budget); a later entry records
+  it. mini.yaml is not being run meanwhile.
+
+**4. The prompt is in the repository.** `docs/e3/prompt_e3_worldmodel.md`,
+verbatim as provided. Checked: sections §0 to §11 and all 23
+subsections are present. Word by word, it matches the text of the first
+message of the E3 session; the only differences are the title line and
+the list numbering, so nothing is truncated. SPEC_STATUS.md points to
+it.
+
+**5. Reward convention decided.** E2's convention is confirmed: +50 on
+arrival at the goal (replacing the step cost) and -1 for every other
+step. E3 aligns with it: the environment already does, and the goal head
+will use r = 50·p_goal - 1·(1 - p_goal) (Phase 5). The spec 4.1
+amendment is marked "decided" in SPEC_STATUS.md.

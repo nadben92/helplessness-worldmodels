@@ -96,7 +96,10 @@ train:
     collapse_consecutive: 5
 
 measure:
-  iz_mc_samples: 2000        # M for latent_controllability
+  # Monte-Carlo samples per I_z (DECISIONS.md, 2026-09-25): 2000 for the diagnostics during training,
+  # the spec's 4096 for the final measures (and for calibration).
+  iz_mc_samples_training: 2000
+  iz_mc_samples_final: 4096
   kernel_k_s: 16              # K_s draws for canonical_kernel_probe
   kernel_margin_threshold: 1.0e-3
   z_only_test_frac: 0.2

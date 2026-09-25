@@ -48,6 +48,7 @@ import yaml
 
 import env as e3_env
 import probe as e3_probe
+import rng_streams as e3_rng
 
 from helplessness.agents.tabular import TabularModelBasedAgent
 from helplessness.agents.worldmodel.agent import categorical_mode
@@ -77,16 +78,16 @@ from helplessness.measures.diagnostics import (
     summarize_alpha_app,
 )
 from helplessness.measures.latent_controllability import latent_state_information
-from helplessness.experiment_loader import load_experiment_module
 from helplessness.runs import make_run_dir, make_run_name, write_run_meta
 
-# E2's own stream scheme (SeedSequence(seed).spawn), imported for the start_state stream.
-e2_rng = load_experiment_module("E2_online_4zones", "rng.py", "e3_run_mini_e2_rng")
 START_DISTRIBUTIONS = ("uniform_non_terminal",)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG = REPO_ROOT / "configs" / "e3" / "mini.yaml"
 DEFAULT_OUT_DIR = REPO_ROOT / "results"
+# Episode parameters (reward, step cost, horizon, gamma) come from the experiment's own
+# config, checked against E2's values by tests/e3/test_e3_protocol_conformance.py.
+EXPERIMENT_CONFIG_PATH = REPO_ROOT / "experiments" / "E3_worldmodel_4zones" / "config.yaml"
 EXPERIMENT_ID = "E3_worldmodel_4zones"
 ZONE_PRESET = "4zones"
 GRID_SHAPE = (12, 12)
@@ -261,36 +262,33 @@ class RunLog:
 
 
 def seed_streams(seed: int, device: torch.device) -> dict:
-    """Separate random streams (docs/e3/DECISIONS.md, 2026-09-25): changing
-    how often anything is MEASURED never changes the training trajectory.
-    Training consumes only "collect" (environment actions), "start_state"
-    (the uniform start of every episode -- E2's own stream, from
-    experiments/E2_online_4zones/rng.py::spawn_streams, derived by
-    SeedSequence(seed).spawn), "replay" (minibatch windows),
-    "switch_pairs" (the label-free switch statistic, evaluated on a fixed
-    schedule) and "latent" (every latent draw of the training step); the
-    network initialisation uses the global torch RNG, seeded just before
-    the model is built. Every measurement draws from its own streams,
-    created where it is used (measure_streams)."""
-
-    def torch_gen(key: int) -> torch.Generator:
-        gen = torch.Generator(device=device)
-        gen.manual_seed(int(np.random.SeedSequence([seed, key]).generate_state(1)[0]))
-        return gen
-
+    """The training streams of a seed (rng_streams.py: every stream derived
+    by SeedSequence(seed).spawn, as E2; docs/e3/DECISIONS.md, 2026-09-25).
+    Training consumes only "collect" (E2's explore stream: the collection
+    actions), "start_state" (E2's), "replay" (minibatch windows),
+    "switch_pairs" (the label-free switch statistic, on a fixed schedule)
+    and "latent" (every latent draw of the training step); the network
+    initialisation seeds the global torch RNG from network_init just before
+    the model is built. The theme and dynamics streams are taken by
+    build_run. Every measurement draws from its own child of the measure
+    stream (measure_streams), so measuring more or less often never
+    changes the training trajectory."""
+    streams = e3_rng.spawn_streams(seed)
+    seqs = e3_rng.spawn_sequences(seed)
     return {
-        "collect": np.random.default_rng(seed),  # environment actions
-        "start_state": e2_rng.spawn_streams(seed)["start_state"],
-        "replay": np.random.default_rng([seed, 1]),
-        "switch_pairs": np.random.default_rng([seed, 4]),
-        "latent": torch_gen(2),
-        "torch_gen": torch_gen,
+        "collect": streams["explore"],
+        "start_state": streams["start_state"],
+        "replay": streams["replay_sample"],
+        "switch_pairs": streams["switch_pairs"],
+        "latent": e3_rng.torch_generator(seqs["latent_sample"], device),
+        "network_init_seed": e3_rng.torch_seed(seqs["network_init"]),
+        "device": device,
     }
 
 
-def measure_streams(seed: int, key: int, streams: dict) -> tuple[np.random.Generator, torch.Generator]:
-    """A (numpy, torch) pair of streams owned by one measurement."""
-    return np.random.default_rng([seed, 100 + key]), streams["torch_gen"](100 + key)
+def measure_streams(seed: int, slot: int, streams: dict) -> tuple[np.random.Generator, torch.Generator]:
+    """A (numpy, torch) pair owned by one measurement (rng_streams.measure_streams)."""
+    return e3_rng.measure_streams(seed, slot, streams["device"])
 
 
 def _jsonable(obj):
@@ -355,18 +353,53 @@ def build_separation_switch(cfg: dict) -> tuple[SeparationSwitch, int]:
     return switch, est["switch_n_pairs"]
 
 
-def build_run(cfg: dict, seed: int):
+def load_episode_config() -> dict:
+    """experiments/E3_worldmodel_4zones/config.yaml's episode block:
+    goal_reward, step_reward, max_steps (H), gamma."""
+    with open(EXPERIMENT_CONFIG_PATH, encoding="utf-8") as f:
+        return yaml.safe_load(f)["episode"]
+
+
+def run_identity(seed: int, themes) -> dict:
+    """What defines a seed's world, for meta.yaml (spec section 10): the
+    rotation and quadrant assignment (the permutation), the block class A/B
+    and the theme colours."""
+    rotation = e3_env.rotation_for_seed_index(seed)
+    return {
+        "rotation": int(rotation),
+        "quadrant_assignment": {str(k): str(v) for k, v in e3_env.quadrant_assignment_for_rotation(rotation).items()},
+        "block_class": e3_env.block_class_for_seed(seed),
+        "themes": {
+            "zone_colors": {cat: list(map(int, rgb)) for cat, rgb in themes.zone_colors.items()},
+            "agent_marker_color": list(map(int, themes.agent_marker_color)),
+            "corridor_color": list(map(int, themes.corridor_color)),
+            "goal_color": list(map(int, themes.goal_color)),
+        },
+    }
+
+
+def build_run(cfg: dict, seed: int, themes=None):
     """Layout, themes, environment, background and the 144 templates of a
-    seed. Tensors are returned on the CPU; the caller moves them."""
+    seed. Themes come from the seed's theme stream and the dynamics seed
+    from its env_dynamics stream (rng_streams.py); the episode parameters
+    from experiments/E3_worldmodel_4zones/config.yaml. Tensors are returned
+    on the CPU; the caller moves them. themes (a Themes object) replaces the
+    seed's theme draw -- for tests that must not depend on the theme stream."""
     rotation = e3_env.rotation_for_seed_index(seed)
     assignment = e3_env.quadrant_assignment_for_rotation(rotation)
     layout = e3_env.build_layout(assignment)
     k = cfg["render"]["k"]
-    themes = build_themes(
-        e3_env.ZONE_CATEGORIES, goal_state=e3_env.goal_state(), rng=np.random.default_rng(seed),
-        min_dist=cfg["render"]["cielab_min_dist"], marker_min_dist=cfg["render"]["cielab_marker_min_dist"],
+    streams = e3_rng.spawn_streams(seed)
+    if themes is None:
+        themes = build_themes(
+            e3_env.ZONE_CATEGORIES, goal_state=e3_env.goal_state(), rng=streams["theme"],
+            min_dist=cfg["render"]["cielab_min_dist"], marker_min_dist=cfg["render"]["cielab_marker_min_dist"],
+        )
+    episode = load_episode_config()
+    env = e3_env.build_pixel_env(
+        layout, themes, goal_reward=episode["goal_reward"], step_reward=episode["step_reward"], max_steps=episode["max_steps"],
+        seed=e3_rng.env_seed(streams), k=k, grid_lines=cfg["render"]["grid_lines"],
     )
-    env = e3_env.build_pixel_env(layout, themes, goal_reward=50.0, seed=seed, k=k, grid_lines=cfg["render"]["grid_lines"])
     background = render_background(layout, themes, k=k)
     background_t = torch.as_tensor(background, dtype=torch.float32).permute(2, 0, 1) / 255.0
     templates_np = np.stack([render(s, layout, themes, k=k) for s in range(N_STATES)])
@@ -497,17 +530,19 @@ def save_collapse_grid(rssm: RSSM, templates: torch.Tensor, background: torch.Te
 
 def training_diagnostics(
     rssm: RSSM, templates_t: torch.Tensor, layout, P_true: np.ndarray, T_hat_B: np.ndarray, replay: ReplayBuffer, cfg: dict,
-    rng: np.random.Generator, generator: torch.Generator,
+    rng: np.random.Generator, generator: torch.Generator, M: int,
 ) -> tuple[dict, dict]:
     """One point of the training diagnostics (docs/e3/DECISIONS.md,
     2026-09-25), also used for the final measurement. Returns a JSON-able
     record and the full arrays it was computed from (reused by the final
-    report). All draws come from (rng, generator), owned by the caller."""
+    report). All draws come from (rng, generator), owned by the caller. M:
+    Monte-Carlo samples per I_z (measure.iz_mc_samples_training during
+    training, measure.iz_mc_samples_final at the end)."""
     m = cfg["measure"]
     was_training = rssm.training
     rssm.eval()
     t0 = time.perf_counter()
-    iz = e3_probe.canonical_iz(rssm, templates_t, M=m["iz_mc_samples"], rng=rng, generator=generator)
+    iz = e3_probe.canonical_iz(rssm, templates_t, M=M, rng=rng, generator=generator)
     probe = iz["probe"]
     kernel = e3_probe.canonical_kernel_probe(rssm, templates_t, K_s=m["kernel_k_s"], margin_threshold=m["kernel_margin_threshold"],
                                              probe=probe, generator=generator)
@@ -538,6 +573,7 @@ def training_diagnostics(
         "acc_canonical_hard": separation["acc_hard"],
         "acc_canonical_mode": separation["acc_mode"],
         "ghost_fraction_mean": float(np.nanmean(kernel["ghost_fraction"])),
+        "iz_mc_samples": M,
         "seconds": time.perf_counter() - t0,
     }
     return record, {"iz": iz, "probe": probe, "kernel": kernel, "l1_vs_p": l1_vs_p, "l1_vs_b": l1_vs_b, "l1_b_vs_p": l1_b_vs_p}
@@ -567,7 +603,7 @@ def d1_analysis(rssm: RSSM, layout, themes, I_z: np.ndarray, I_z_se: np.ndarray,
             if entry["accepted"]:
                 states = zone_states(layout, own)
                 for kind, global_swap in (("local", False), ("global", True)):
-                    swaps = [e3_probe.d1_alpha_app_for_state(rssm, layout, themes, s, target, I_by_category, M=m["iz_mc_samples"],
+                    swaps = [e3_probe.d1_alpha_app_for_state(rssm, layout, themes, s, target, I_by_category, M=m["iz_mc_samples_final"],
                                                              rng=rng, k=cfg["render"]["k"], contrast_threshold=0.0,
                                                              global_swap=global_swap) for s in states]
                     alpha, se = alpha_app_with_se(np.array([d["I_swap"] for d in swaps]), np.array([d["I_swap_se"] for d in swaps]),
@@ -599,8 +635,8 @@ def save_failure_diagnostic(fail_dir: Path, cfg: dict, seed: int, rssm: RSSM, op
     torch.save({"rssm": rssm.state_dict(), "optimizer": optimizer.state_dict(), "rssm_config": dataclasses.asdict(rssm.cfg),
                 "step": step}, fail_dir / "checkpoint.pt")
     rssm.eval()
-    diag = e3_probe.latent_usage_diagnostic(rssm, templates_t, M=cfg["measure"]["iz_mc_samples"],
-                                            rng=np.random.default_rng([seed, 3000]))
+    diag = e3_probe.latent_usage_diagnostic(rssm, templates_t, M=cfg["measure"]["iz_mc_samples_final"],
+                                            rng=e3_rng.measure_streams(seed, 7, next(rssm.parameters()).device)[0])
     record = {"seed": seed, "steps_done": step, "kind": kind, "error": str(error), **meta, "config": cfg,
               "switch_history": [list(map(float, h)) for h in switch.history], "diagnostic": diag}
     (fail_dir / "diagnostic.json").write_text(json.dumps(_jsonable(record), indent=1), encoding="utf-8")
@@ -628,6 +664,9 @@ def run_one_seed(cfg: dict, seed: int, run_dir: Path, device: torch.device, max_
     k = cfg["render"]["k"]
     streams = seed_streams(seed, device)
     layout, themes, env, background_t, templates_t = build_run(cfg, seed)
+    identity = run_identity(seed, themes)
+    write_run_meta(run_dir, seed, status="running", **identity, rng_streams=list(e3_rng.STREAM_NAMES),
+                   episode=load_episode_config())
     background_t, templates_t = background_t.to(device), templates_t.to(device)
     zone_class = e3_env.block_class_for_seed(seed)
     log(f"class {zone_class}; device {device}; torch {torch.__version__}; threads {torch.get_num_threads()}; "
@@ -656,7 +695,7 @@ def run_one_seed(cfg: dict, seed: int, run_dir: Path, device: torch.device, max_
         h_dim=cfg["model"]["h_dim"], n_vars=cfg["model"]["n_vars"], n_classes=cfg["model"]["n_classes"],
         n_actions=N_ACTIONS, unimix=cfg["model"]["unimix"],
     )
-    torch.manual_seed(seed)  # network initialisation only: built on the CPU, then moved (same weights on every device)
+    torch.manual_seed(streams["network_init_seed"])  # initialisation only: built on the CPU, then moved (same weights on every device)
     rssm = RSSM(rssm_cfg).to(device)
     optimizer = torch.optim.Adam(rssm.parameters(), lr=cfg["train"]["lr"], eps=cfg["train"]["adam_eps"])
     loss_cfg = WorldModelLossConfig(
@@ -689,8 +728,13 @@ def run_one_seed(cfg: dict, seed: int, run_dir: Path, device: torch.device, max_
     lr_switch_step = None
     last_stat = float("nan")
 
-    def record_diagnostics(step: int) -> tuple[dict, dict]:
-        record, extras = training_diagnostics(rssm, templates_t, layout, P_true, T_hat_B, replay, cfg, diag_rng, diag_gen)
+    def record_diagnostics(step: int, final: bool = False) -> tuple[dict, dict]:
+        if final:
+            rng, gen = measure_streams(seed, 8, streams)
+            M = cfg["measure"]["iz_mc_samples_final"]
+        else:
+            rng, gen, M = diag_rng, diag_gen, cfg["measure"]["iz_mc_samples_training"]
+        record, extras = training_diagnostics(rssm, templates_t, layout, P_true, T_hat_B, replay, cfg, rng, gen, M)
         record = {"step": step, "switch_step": switch.switch_step, **record}
         diagnostics.append(record)
         with open(run_dir / "diagnostics.jsonl", "a", encoding="utf-8") as f:
@@ -763,12 +807,12 @@ def run_one_seed(cfg: dict, seed: int, run_dir: Path, device: torch.device, max_
 
     rssm.eval()
     log("final measurements (canonical probe, I_z, s-space kernel, template accuracies) ...")
-    final, extras = record_diagnostics(n_grad_steps)
+    final, extras = record_diagnostics(n_grad_steps, final=True)
     iz_result, probe, kernel_result = extras["iz"], extras["probe"], extras["kernel"]
 
     log("collapse diagnostics (I(z;s), posterior entropy, grid) ...")
     rng_izs, _ = measure_streams(seed, 3, streams)
-    izs = latent_state_information(probe["posterior_probs"], M=cfg["measure"]["iz_mc_samples"], rng=rng_izs)
+    izs = latent_state_information(probe["posterior_probs"], M=cfg["measure"]["iz_mc_samples_final"], rng=rng_izs)
     zone_categories = list(e3_env.ZONE_CATEGORIES)
     grid_states = [s for cat in zone_categories for s in zone_states(layout, cat)[:2]]
     grid_name = f"collapse_grid_seed{seed:02d}.png"
@@ -783,7 +827,7 @@ def run_one_seed(cfg: dict, seed: int, run_dir: Path, device: torch.device, max_
     log("context dispersion ...")
     rng_ctx, _ = measure_streams(seed, 5, streams)
     ctx_batch, ctx_labels = replay.sample(16, 32, rng_ctx)
-    ctx_result = e3_probe.context_dispersion(rssm, ctx_batch, ctx_labels, iz_result["I_z"], M=cfg["measure"]["iz_mc_samples"],
+    ctx_result = e3_probe.context_dispersion(rssm, ctx_batch, ctx_labels, iz_result["I_z"], M=cfg["measure"]["iz_mc_samples_final"],
                                              rng=rng_ctx, n_samples=cfg["measure"]["context_dispersion_n_samples"])
 
     log("D1 (every state of every zone with an accepted contrast) / D2 ...")
