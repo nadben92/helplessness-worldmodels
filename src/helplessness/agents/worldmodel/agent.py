@@ -25,7 +25,7 @@ import torch
 import torch.nn.functional as F
 
 from helplessness.agents.base import Agent
-from helplessness.agents.worldmodel.rssm import RSSM
+from helplessness.agents.worldmodel.rssm import RSSM, sample_categorical_index
 from helplessness.measures.kernel_probe import kernel_probe
 
 logger = logging.getLogger(__name__)
@@ -40,12 +40,12 @@ def categorical_mode(probs: torch.Tensor) -> torch.Tensor:
     return F.one_hot(idx, num_classes=probs.shape[-1]).to(probs.dtype)
 
 
-def sample_categorical_batch(probs: torch.Tensor, K: int) -> torch.Tensor:
+def sample_categorical_batch(probs: torch.Tensor, K: int, generator: torch.Generator | None = None) -> torch.Tensor:
     """probs: (n_vars, n_classes), a single product distribution.
-    Returns K independent one-hot samples: (K, n_vars, n_classes)."""
+    Returns K independent one-hot samples: (K, n_vars, n_classes).
+    generator: see rssm.sample_categorical_index (None: global torch RNG)."""
     n_vars, n_classes = probs.shape
-    dist = torch.distributions.Categorical(probs=probs.unsqueeze(0).expand(K, -1, -1))
-    idx = dist.sample()  # (K, n_vars)
+    idx = sample_categorical_index(probs.unsqueeze(0).expand(K, -1, -1), generator)  # (K, n_vars)
     return F.one_hot(idx, num_classes=n_classes).to(probs.dtype)
 
 

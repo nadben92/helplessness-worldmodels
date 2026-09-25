@@ -158,20 +158,33 @@ def apply_unimix(probs: torch.Tensor, ratio: float) -> torch.Tensor:
     return (1.0 - ratio) * probs + ratio * uniform
 
 
-def straight_through_sample(probs: torch.Tensor) -> torch.Tensor:
+def sample_categorical_index(probs: torch.Tensor, generator: torch.Generator | None = None) -> torch.Tensor:
+    """probs: (..., n_classes). One category index per leading position.
+    generator=None draws from the global torch RNG (Categorical.sample, the
+    historical path -- runs made before 2026-09-25 are bit-reproducible
+    only through it); a torch.Generator (on probs' device) draws through
+    torch.multinomial from that stream alone, so whoever else consumes
+    random numbers cannot shift it (docs/e3/DECISIONS.md, 2026-09-25)."""
+    if generator is None:
+        return torch.distributions.Categorical(probs=probs).sample()
+    flat = probs.detach().reshape(-1, probs.shape[-1])
+    return torch.multinomial(flat, 1, generator=generator).reshape(probs.shape[:-1])
+
+
+def straight_through_sample(probs: torch.Tensor, generator: torch.Generator | None = None) -> torch.Tensor:
     """probs: (..., n_vars, n_classes), already unimix'd. Returns a
     one-hot sample per variable with the straight-through gradient trick
     (spec 3.1): z = onehot(sample) + probs - sg(probs) -- forward value is
     a genuine one-hot draw, backward gradient flows through probs as if z
     == probs (the softmax relaxation), giving a non-zero gradient into
-    whatever produced probs (T0's own requirement)."""
-    dist = torch.distributions.Categorical(probs=probs)
-    sample = dist.sample()
+    whatever produced probs (T0's own requirement). generator: see
+    sample_categorical_index."""
+    sample = sample_categorical_index(probs, generator)
     one_hot = F.one_hot(sample, num_classes=probs.shape[-1]).to(probs.dtype)
     return one_hot + probs - probs.detach()
 
 
-def gumbel_softmax_straight_through(probs: torch.Tensor, tau: float) -> torch.Tensor:
+def gumbel_softmax_straight_through(probs: torch.Tensor, tau: float, generator: torch.Generator | None = None) -> torch.Tensor:
     """probs: (..., n_vars, n_classes), already unimix'd. Forward: the
     one-hot argmax of (log probs + Gumbel noise) -- an EXACT sample from
     Categorical(probs), the same law straight_through_sample draws from.
@@ -180,7 +193,11 @@ def gumbel_softmax_straight_through(probs: torch.Tensor, tau: float) -> torch.Te
     Gumbel-softmax"). Only the gradient estimator differs; the model's
     distribution does not."""
     logits = torch.log(probs.clamp_min(1e-20))
-    u = torch.rand_like(logits).clamp(1e-10, 1.0 - 1e-10)
+    if generator is None:
+        u = torch.rand_like(logits)
+    else:
+        u = torch.rand(logits.shape, generator=generator, device=logits.device, dtype=logits.dtype)
+    u = u.clamp(1e-10, 1.0 - 1e-10)
     y = F.softmax((logits - torch.log(-torch.log(u))) / tau, dim=-1)
     hard = F.one_hot(y.argmax(dim=-1), num_classes=probs.shape[-1]).to(y.dtype)
     return hard + y - y.detach()
@@ -219,7 +236,7 @@ class LatentEstimator:
             raise ValueError(f"rho must be in [0, 1], got {self.rho}")
 
 
-def partial_straight_through(probs: torch.Tensor, rho: float) -> torch.Tensor:
+def partial_straight_through(probs: torch.Tensor, rho: float, generator: torch.Generator | None = None) -> torch.Tensor:
     """probs: (..., n_vars, n_classes). For every leading index, exactly
     round(rho * n_vars) variables, drawn uniformly without replacement,
     get the straight-through sample (straight_through_sample); the others
@@ -230,19 +247,21 @@ def partial_straight_through(probs: torch.Tensor, rho: float) -> torch.Tensor:
     if n_sampled == 0:
         return probs
     if n_sampled == n_vars:
-        return straight_through_sample(probs)
-    ranks = torch.rand(probs.shape[:-1], device=probs.device).argsort(dim=-1).argsort(dim=-1)
+        return straight_through_sample(probs, generator)
+    ranks = torch.rand(probs.shape[:-1], device=probs.device, generator=generator).argsort(dim=-1).argsort(dim=-1)
     use_sample = (ranks < n_sampled).unsqueeze(-1).to(probs.dtype)  # (..., n_vars, 1)
-    return use_sample * straight_through_sample(probs) + (1.0 - use_sample) * probs
+    return use_sample * straight_through_sample(probs, generator) + (1.0 - use_sample) * probs
 
 
-def sample_posterior(probs: torch.Tensor, estimator: LatentEstimator) -> torch.Tensor:
+def sample_posterior(probs: torch.Tensor, estimator: LatentEstimator, generator: torch.Generator | None = None) -> torch.Tensor:
+    """generator: the stream every random draw of this estimator comes
+    from (None: the global torch RNG). See sample_categorical_index."""
     if estimator.kind == "straight_through":
-        return straight_through_sample(probs)
+        return straight_through_sample(probs, generator)
     if estimator.kind == "partial_straight_through":
-        return partial_straight_through(probs, estimator.rho)
+        return partial_straight_through(probs, estimator.rho, generator)
     if estimator.kind == "gumbel_st":
-        return gumbel_softmax_straight_through(probs, estimator.tau)
+        return gumbel_softmax_straight_through(probs, estimator.tau, generator)
     return probs
 
 
@@ -315,6 +334,7 @@ class RSSM(nn.Module):
         is_first: torch.Tensor,
         context: dict | None = None,
         estimator: LatentEstimator | None = None,
+        generator: torch.Generator | None = None,
     ) -> dict[str, torch.Tensor]:
         """One real (posterior) step: h_t = GRU(...), e_t = encode(x_t),
         z_t ~ posterior(h_t, e_t) (via `estimator`, default plain
@@ -344,7 +364,7 @@ class RSSM(nn.Module):
 
         e_t = self.encoder(x_t)
         post = self.posterior_probs(h_t, e_t)
-        z_t = sample_posterior(post, estimator or LatentEstimator())
+        z_t = sample_posterior(post, estimator or LatentEstimator(), generator)
 
         return {"h": h_t, "z": z_t, "prior_probs": prior, "post_probs": post, "embed": e_t}
 
@@ -354,6 +374,7 @@ class RSSM(nn.Module):
         z_prev: torch.Tensor,
         a_prev_onehot: torch.Tensor,
         context: dict | None = None,
+        generator: torch.Generator | None = None,
     ) -> dict[str, torch.Tensor]:
         """One imagined (prior-only) step -- no observation, no
         posterior. Used by the agent's one-step lookahead policy (spec
@@ -365,5 +386,5 @@ class RSSM(nn.Module):
         h_t = self.gru_step(h_prev, z_prev, a_prev_onehot)
         hook_h, hook_z = self.latent_hook(h_t, z_prev, context or {})
         prior = self.prior_probs(hook_h)
-        z_t = straight_through_sample(prior)
+        z_t = straight_through_sample(prior, generator)
         return {"h": h_t, "z": z_t, "prior_probs": prior}

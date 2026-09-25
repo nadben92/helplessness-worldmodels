@@ -224,3 +224,30 @@ def test_observation_step_probs_estimator_passes_the_posterior_through_unchanged
     out = rssm.observation_step(h0, z0, torch.zeros(3, cfg.n_actions), x, torch.ones(3, dtype=torch.bool),
                                 estimator=LatentEstimator(kind="probs"))
     assert torch.equal(out["z"], out["post_probs"])
+
+
+def test_generator_draws_are_isolated_from_the_global_rng_and_follow_the_law():
+    """sample_categorical_index with a torch.Generator (docs/e3/DECISIONS.md,
+    2026-09-25): same generator seed -> same draws, whatever else consumed
+    the global RNG in between; the draws follow Categorical(probs)."""
+    from helplessness.agents.worldmodel.rssm import sample_categorical_index
+
+    probs = torch.softmax(torch.randn(4, 8, 5), dim=-1)
+
+    def draws(consume_global: bool) -> torch.Tensor:
+        gen = torch.Generator().manual_seed(123)
+        first = sample_categorical_index(probs, gen)
+        if consume_global:
+            torch.rand(1000)
+            torch.distributions.Categorical(probs=probs).sample()
+        return torch.stack([first, sample_categorical_index(probs, gen)])
+
+    assert torch.equal(draws(False), draws(True))
+    p = torch.tensor([0.1, 0.2, 0.7])
+    gen = torch.Generator().manual_seed(0)
+    idx = sample_categorical_index(p.expand(20000, 3), gen)
+    freq = torch.bincount(idx, minlength=3).float() / idx.numel()
+    assert torch.allclose(freq, p, atol=0.015)  # ~5 binomial se at n=20000
+    one_hot = straight_through_sample(probs, torch.Generator().manual_seed(1))
+    assert torch.allclose(one_hot.detach().sum(-1), torch.ones(4, 8))  # one-hot + probs - sg(probs): 1 up to rounding
+    assert torch.allclose(one_hot.detach().max(-1).values, torch.ones(4, 8))

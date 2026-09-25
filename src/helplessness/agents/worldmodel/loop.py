@@ -278,7 +278,8 @@ class WorldModelLossConfig:
 
 
 def unroll_observation(
-    rssm: RSSM, x_seq: torch.Tensor, a_seq: torch.Tensor, is_first_seq: torch.Tensor, estimator: LatentEstimator | None = None
+    rssm: RSSM, x_seq: torch.Tensor, a_seq: torch.Tensor, is_first_seq: torch.Tensor, estimator: LatentEstimator | None = None,
+    generator: torch.Generator | None = None,
 ) -> dict[str, torch.Tensor]:
     """x_seq: (B, T, C, H, W) float in [0,1]. a_seq: (B, T) int action
     indices (a_seq[:, t] is the action taken AT step t, i.e. a_{t-1} for
@@ -296,7 +297,7 @@ def unroll_observation(
 
     hs, zs, priors, posts, decoded = [], [], [], [], []
     for t in range(T):
-        out = rssm.observation_step(h, z, a_prev, x_seq[:, t], is_first_seq[:, t], estimator=estimator)
+        out = rssm.observation_step(h, z, a_prev, x_seq[:, t], is_first_seq[:, t], estimator=estimator, generator=generator)
         h, z = out["h"], out["z"]
         hs.append(h)
         zs.append(z)
@@ -315,13 +316,15 @@ def unroll_observation(
 
 
 def world_model_loss(
-    rssm: RSSM, model_batch: ModelBatch, background: torch.Tensor, cfg: WorldModelLossConfig, estimator: LatentEstimator | None = None
+    rssm: RSSM, model_batch: ModelBatch, background: torch.Tensor, cfg: WorldModelLossConfig, estimator: LatentEstimator | None = None,
+    generator: torch.Generator | None = None,
 ) -> dict[str, torch.Tensor]:
-    return _world_model_loss_and_unroll(rssm, model_batch, background, cfg, estimator)[0]
+    return _world_model_loss_and_unroll(rssm, model_batch, background, cfg, estimator, generator)[0]
 
 
 def _world_model_loss_and_unroll(
-    rssm: RSSM, model_batch: ModelBatch, background: torch.Tensor, cfg: WorldModelLossConfig, estimator: LatentEstimator | None = None
+    rssm: RSSM, model_batch: ModelBatch, background: torch.Tensor, cfg: WorldModelLossConfig, estimator: LatentEstimator | None = None,
+    generator: torch.Generator | None = None,
 ) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
     """model_batch: replay.ModelBatch ONLY -- no label ever passed in.
     background: (C, H, W) float in [0, 1], the run's single fixed
@@ -332,7 +335,7 @@ def _world_model_loss_and_unroll(
     a_seq = torch.as_tensor(model_batch.a, dtype=torch.long, device=device)
     is_first_seq = torch.as_tensor(model_batch.is_first, dtype=torch.bool, device=device)
 
-    out = unroll_observation(rssm, x_seq, a_seq, is_first_seq, estimator=estimator)
+    out = unroll_observation(rssm, x_seq, a_seq, is_first_seq, estimator=estimator, generator=generator)
 
     B, T = x_seq.shape[0], x_seq.shape[1]
     bg = background.to(device).unsqueeze(0).unsqueeze(0).expand(B, T, -1, -1, -1)
@@ -376,6 +379,7 @@ def train_world_model_step(
     clip_norm: float | None = 1000.0,
     estimator: LatentEstimator | None = None,
     return_posteriors: bool = False,
+    generator: torch.Generator | None = None,
 ) -> dict:
     """One Adam step (lr/eps set on the optimizer by the caller, spec
     3.3: lr=1e-4, eps=1e-8) with gradient-norm clipping (clip_norm=None:
@@ -384,9 +388,11 @@ def train_world_model_step(
     detached scalar losses for logging; with return_posteriors=True, also
     "post_probs": this batch's posterior probabilities as a numpy array
     (B*T, n_vars, n_classes), computed by the same forward pass (for the
-    label-free separation statistic -- no label involved)."""
+    label-free separation statistic -- no label involved). generator: the
+    dedicated stream for the latent draws of this step (None: the global
+    torch RNG; see rssm.sample_categorical_index)."""
     optimizer.zero_grad()
-    losses, out = _world_model_loss_and_unroll(rssm, model_batch, background, cfg, estimator=estimator)
+    losses, out = _world_model_loss_and_unroll(rssm, model_batch, background, cfg, estimator=estimator, generator=generator)
     losses["total"].backward()
     grad_norm = torch.nn.utils.clip_grad_norm_(rssm.parameters(), max_norm=float("inf") if clip_norm is None else clip_norm)
     optimizer.step()
