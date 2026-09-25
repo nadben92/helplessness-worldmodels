@@ -1,0 +1,105 @@
+# "Mini" configuration -- the smallest config that runs the full pipeline (phase-3 point
+# 3b, docs/e3/DECISIONS.md): deliberately smaller than any Phase-4
+# calibration candidate ({8x8,16x16,32x32} at base_depth=32/h_dim=256),
+# purely so the FULL measures/diagnostics pipeline (canonical probe,
+# I_z, kernel-in-s-space, z-only probe, context dispersion, D1/D2) can
+# be exercised end-to-end on a real (if small) trained model.
+#
+# Profiled on this CPU-only machine (docs/e3/DECISIONS.md point 7), at
+# k=6 (72x72, restored 2026-09-24 -- k=2 made the agent marker a single
+# pixel): ~2.4 gradient steps/s at batch=8, seq_len=16 (it was ~8 at
+# k=2). run_mini.py runs TWO seeds (one class-A, one class-B rotation) at
+# (5000 + 256) * 2 = 10512 gradient steps each: ~73 min of training per
+# seed, ~2.5 h for the whole run including diagnostics. No longer "under
+# an hour" -- budget and replay_ratio deliberately left unchanged (not to
+# be tuned at this stage).
+
+model:
+  n_vars: 8
+  n_classes: 8
+  h_dim: 64
+  embed_dim: 64
+  base_depth: 8
+  unimix: 0.01
+
+render:
+  k: 6  # spec default (72x72). k=2 made the agent marker a single pixel -- not the design (DECISIONS.md, 2026-09-24)
+  grid_lines: false
+  cielab_min_dist: 30.0
+  cielab_marker_min_dist: 30.0
+
+budget:
+  total_steps: 5000        # reduced from E2's 1e6, "budget reduit"
+  prefill_steps: 256       # epsilon=0.1 policy in a real run; epsilon=1 here (E3-0 style, no policy yet)
+  checkpoints: [5000]      # single end checkpoint -- this is a smoke/shape config, not a calibration run
+
+train:
+  batch_size: 8
+  seq_len: 16
+  replay_ratio: 2
+  # Two-phase learning rate (DECISIONS.md, 2026-09-24): lr until the
+  # EFFECTIVE estimator switch (option (i): the probabilities phase does not
+  # separate at 1e-4), then lr_after_switch (the spec's 1e-4) for the rest
+  # of training, on every world-model parameter. lr is calibrated in Phase 4.
+  lr: 1.0e-3
+  lr_after_switch: 1.0e-4
+  adam_eps: 1.0e-8
+  # Global gradient clipping DISABLED (null; the key stays for the record).
+  # A global threshold does not act on the mechanism of the late collapse
+  # and a threshold of 500 broke the probabilities phase (DECISIONS.md,
+  # 2026-09-24). The lr drop at the switch is the retained guard.
+  clip_norm: null
+  w_patch: 10.0
+  beta_dyn: 0.5
+  beta_rep: 0.1
+  free_bits: 0.0             # stays 0: the collapse happens with no KL at all (DECISIONS.md, 2026-09-24)
+  free_bits_mode: per_step
+  # beta_dyn (KL(sg(q) || p)) runs at full weight from step 0: it only
+  # trains the prior, never pulls the posterior. beta_rep (KL(q || sg(p)))
+  # is 0 until the estimator switch, then ramps linearly to its full value
+  # over rep_warmup_steps; null = 20% of the budget left after the switch
+  # (docs/e3/DECISIONS.md, 2026-09-24).
+  rep_warmup_steps: null
+  # Posterior estimator (training procedure only), selected by the
+  # estimator comparison (docs/e3/ESTIMATOR_COMPARISON.md): the decoder
+  # receives the posterior probabilities, then plain straight-through
+  # samples once the posteriors are separated. The switch is triggered by
+  # a LABEL-FREE criterion: mean JS (bits) between the posteriors of
+  # switch_n_pairs random image pairs of the current training batch,
+  # evaluated every switch_eval_every steps; switch once it exceeds
+  # switch_js_threshold on switch_consecutive consecutive evaluations, not
+  # before switch_min_steps. Not reached by switch_max_steps (null = 60% of
+  # the training budget) -> the run stops with SeparationNotReachedError,
+  # never a silent switch.
+  latent_estimator:
+    kind: warmup_probs_until_separated
+    switch_js_threshold: 3.0
+    switch_consecutive: 5
+    switch_eval_every: 50
+    switch_min_steps: 500
+    switch_max_steps: null
+    switch_n_pairs: 64
+    # Guard after the switch: the same label-free statistic falling back
+    # below collapse_js_threshold bits on collapse_consecutive consecutive
+    # evaluations -> CollapseAfterSwitchError (checkpoint + diagnostic
+    # saved), never a silent collapse (DECISIONS.md, 2026-09-24).
+    collapse_js_threshold: 1.0
+    collapse_consecutive: 5
+
+measure:
+  iz_mc_samples: 2000        # M for latent_controllability
+  kernel_k_s: 16              # K_s draws for canonical_kernel_probe
+  kernel_margin_threshold: 1.0e-3
+  z_only_test_frac: 0.2
+  context_dispersion_n_samples: 100
+  contrast_threshold: 0.05    # spec 8's alpha_app definedness threshold
+  separation_every: 250       # training steps between canonical separation measurements (JS, accuracy)
+  monitor_every: 500          # console line: step, batch-pair JS, labelled JS, phase, beta_rep, recon_patch, grad_norm, lr
+
+runtime:
+  # torch.set_num_threads. Results are bit-exact only on the same machine
+  # with the same number of threads (DECISIONS.md, 2026-09-24). 6 = this
+  # machine's torch default, at which the throughput above was profiled.
+  num_threads: 6
+
+seeds: [0, 5]  # rotation 0 (class A) and rotation 1 (class B) -- see env.py::ROTATION_CLASS

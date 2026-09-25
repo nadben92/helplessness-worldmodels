@@ -18,6 +18,15 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0"]
+# E3 (world model, src/helplessness/agents/worldmodel/ + e3_worldmodel-side
+# scripts under experiments/E3_worldmodel_4zones/): the one place torch is
+# a dependency of this project, gated behind this extra so the tabular
+# phases (E0-E2) never need it. Install the CPU wheel from PyTorch's own
+# index (see docs/e3/ for the exact command) -- this project's default
+# PyPI-resolved "torch" wheel bundles CUDA runtimes this machine cannot
+# use; a GPU training machine reinstalls the matching CUDA wheel there,
+# same version pin, when phase 4 starts.
+e3 = ["torch>=2.2"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

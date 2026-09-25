@@ -25,12 +25,20 @@ greedy, Dirichlet prior restricted to geographically reachable successors.
 
 ## What carries over from the E0 prototype
 
-- The training loop (`helplessness.agents.online.loop.train_online`,
-  `train_online_with_burnin`) -- fully environment-agnostic already.
-- The Phase-1 burn-in fix and its rationale (see
-  `experiments/E0_offline_5x5/05_online_prototype/README.md`): a uniform-
-  random preamble that fixed a real exploration deadlock at the task's
-  default epsilon=0.1, applied identically across every training condition.
+- The training loop's general shape (fixed-epsilon, periodically
+  replanned value iteration) carries over conceptually from
+  `helplessness.agents.online.loop.train_online`. **Correction (was
+  inaccurate as written): E2's actual training loop is
+  `experiments/E2_online_4zones/loop.py::train_online_e2`, a distinct
+  function (E2's own start-state and replan-cadence requirements do not
+  fit `train_online`'s signature -- see that module's own docstring). It
+  never calls `train_online_with_burnin`, and E2's shipped sweep
+  (`experiments/E2_online_4zones/sweep.py`) runs with no burn-in preamble
+  at all.** The Phase-1 burn-in fix (a uniform-random preamble that fixed
+  a real exploration deadlock at the task's default epsilon=0.1) belongs
+  only to the E0 5x5 prototype (see
+  `experiments/E0_offline_5x5/05_online_prototype/README.md`) and was not
+  carried forward into E2 as run.
 - The recovery-protocol mechanics (`helplessness.agents.online.recovery`:
   `RecoveryTracker`, `recovery_time`) -- environment-agnostic, takes an
   `eval_env_factory` rather than assuming GridWorld.

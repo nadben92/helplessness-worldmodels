@@ -1,0 +1,44 @@
+# E3 environment configuration -- Phase 1 scope only (environment,
+# rendering, themes, permutation, reference). Model hyperparameters
+# (n_vars, n_classes, h_dim, w_patch, replay_ratio, prefill_steps) are
+# NOT here: they are calibrated in Phase 4 and then frozen into
+# configs/e3_frozen.yaml (spec section 7) -- this file never duplicates
+# that step.
+#
+# Zone geometry itself is not duplicated here either: grid_shape, goal,
+# corridor and block definitions come from configs/zones/e1_4zones.yaml
+# (loaded by env.py via helplessness.config.load_yaml_block), reused
+# unchanged from E1/E2 (frozen).
+
+direction: away_from_goal  # goal-relative drift resolution, same as E1/E2
+
+episode:
+  goal_reward: 50.0
+  step_reward: -1.0
+  max_steps: 36              # H, spec section 6
+  gamma: 0.9                 # matches E2's actual gamma (see docs/e3/DECISIONS.md), not the library default 0.95
+
+budget:
+  total_steps: 1_000_000
+  # E2's own 16-point log-spaced checkpoint grid (np.logspace(3, 6, 16),
+  # rounded to int, deduplicated) -- see docs/e3/DECISIONS.md point 1.
+  # Reproduced here as an explicit list (not a formula) so the resolved
+  # config dumped next to a run's results is literal, per
+  # helplessness.config.compose()'s own convention.
+  checkpoints:
+    [1000, 1585, 2512, 3981, 6310, 10000, 15849, 25119, 39811, 63096,
+     100000, 158489, 251189, 398107, 630957, 1000000]
+  prefill_steps: 1024        # counted inside total_steps, see docs/e3/DECISIONS.md point 2
+
+render:
+  k: 6                       # pixels per grid cell (72x72 for the 12x12 grid)
+  grid_lines: false
+  cielab_min_dist: 30.0      # pairwise zone-theme minimum CIELAB distance -- a
+                              # default pending explicit confirmation, not a
+                              # calibrated parameter (spec section 7 never lists it)
+  cielab_marker_min_dist: 30.0  # agent-marker distance from every theme/corridor/goal colour
+  pair_distance: null         # reserved for E4/E5 (spec 2.5), unused in E3
+
+seeds:
+  n_seeds: 20
+  seeds_per_rotation: 5       # E2's own counterbalancing cadence, reused as-is

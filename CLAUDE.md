@@ -33,7 +33,10 @@ src/helplessness/
     behavioural.py           Policy entropy, perseveration, cycle stats, outcome rates -- computed on trajectories.
   interventions/            Causal manipulation of a transition belief (the T_hat dial, component swaps).
                            Reused as-is by E6 (latent perturbations) -- do not fold into measures/ or analysis code.
-  planning/value_iteration.py   value_iteration(P, R, terminal, gamma). GAMMA = 0.95, the one definition.
+  planning/value_iteration.py   value_iteration(P, R, terminal, gamma). GAMMA = 0.95, the library default --
+                           every caller may override it explicitly; E2 does, passing gamma=0.9 throughout
+                           (experiments/E2_online_4zones/sweep.py), so "0.95" is not a claim about what any
+                           given experiment actually used.
   evaluation/               rollout.py (evaluate, draw_start_states), tiebreak.py (argmax_random_tie).
   config.py                 Dataclass configs (E0, online prototype) + compose()/FROZEN_BLOCKS (E1+, see below).
   runs.py                   Results-naming convention (E1+, see below).
