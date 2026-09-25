@@ -62,6 +62,8 @@ python experiments/E3_worldmodel_4zones/run_mini.py --config configs/e3/mini.yam
 The device actually used is printed at startup and recorded in `meta.yaml`.
 TF32 is disabled on purpose (see `docs/e3/DECISIONS.md`, 2026-09-25).
 
+On Windows, keep the default `--out-dir` to stay under the 260-character path limit (run directory names are long).
+
 To run seeds in parallel, start one process per seed (`--seeds N`), with
 `runtime.num_threads` in the config adjusted to the number of cores.
 Each seed writes its own directory, so parallel processes never collide.

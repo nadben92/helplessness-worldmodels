@@ -1187,3 +1187,22 @@ between the first diagnostic at or after the switch and the last one:
 - I_z of the conveyor decreasing;
 - I_z of the controllable-deterministic zone increasing.
 For the two I_z checks, a change within 3 combined se is "non concluant".
+
+**Note, no action yet -- the canonical probe starts from h0.** The
+canonical probe, which gives the main I_z measure, encodes every state's
+render from the learned initial state h0. Training shows the model that
+context less often than a real one, which explains the lower canonical
+template accuracy: 0.70-0.87, against 0.99 in real contexts (replay).
+Measured on mini.yaml, seed 0, 2000 x 8 sampled windows of seq_len 16:
+- h0 is the context of 10.8% of training steps (~1 in 9);
+- window starts contribute 1 in 16, and episode starts contribute 4.8%
+  of the buffer's steps;
+- episode starts always show the start cell, so the pairing the
+  canonical probe uses -- h0 with the render of an arbitrary state --
+  only occurs at window starts: ~6% of steps.
+The figure first put forward (~1 in 64) corresponds to the spec's
+seq_len of 64 without episode starts.
+The long run (mini_long.yaml) will show whether the gap closes. If it
+does not, the definition of the main measure is revisited in Phase 4a:
+a probe from a short standardised context, or from replay contexts,
+using the context-dispersion measure as the basis.
