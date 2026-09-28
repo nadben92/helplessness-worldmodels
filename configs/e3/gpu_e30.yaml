@@ -89,6 +89,16 @@ checkpoints:
 
 conditions: [experimental, reference]
 
+# Optional Weights & Biases tracking (experiments/E3_worldmodel_4zones/wandb_logger.py; never stops a
+# run). enabled: auto = on if WANDB_API_KEY is set; --wandb forces it on. WANDB_MODE, if set,
+# overrides mode (online | offline | disabled).
+logging:
+  wandb:
+    enabled: auto
+    project: helplessness-e3
+    entity: null
+    mode: online
+
 runtime:
   num_threads: 4     # 5 processes side by side on the A100 host
   device: cuda

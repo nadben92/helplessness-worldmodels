@@ -67,6 +67,7 @@ import yaml
 import env as e3_env
 import probe as e3_probe
 import rng_streams as e3_rng
+from wandb_logger import WandbLogger
 
 from helplessness.agents.tabular import TabularModelBasedAgent
 from helplessness.agents.worldmodel.agent import categorical_mode
@@ -1085,13 +1086,15 @@ def load_run_data(run_dir: Path, cfg: dict, seed: int, condition: str) -> tuple[
 
 
 def run_one_seed(cfg: dict, seed: int, run_dir: Path, device: torch.device, max_steps: int | None = None,
-                 condition: str = "experimental", resume: bool = False) -> dict:
+                 condition: str = "experimental", resume: bool = False, wandb: bool = False,
+                 wandb_artifact: bool = False) -> dict:
     """Trains and measures one (seed, condition), writing everything into
     run_dir. resume=True continues an interrupted run in run_dir from its
     last resume point (checkpoints/resume.pt; from step 0 on the saved
     replay if there is none). Raises SeparationNotReachedError /
     CollapseAfterSwitchError after saving the failure diagnostic
-    (run_dir/failure/)."""
+    (run_dir/failure/). wandb / wandb_artifact: optional W&B tracking
+    (wandb_logger.py; never stops the run)."""
     log = RunLog(run_dir / "console.log", f"[seed={seed} {condition}]")
     meta = environment_metadata(device)
     artifacts = run_dir / "artifacts"
@@ -1132,6 +1135,11 @@ def run_one_seed(cfg: dict, seed: int, run_dir: Path, device: torch.device, max_
                             episode_starts=np.asarray(episode_starts, dtype=np.int64))
         log(f"collection done in {time.perf_counter() - t0:.1f}s; {len(episode_starts)} episode starts over "
             f"{len(set(episode_starts))} distinct states; compact replay saved")
+    tracker = WandbLogger(log)
+    saved_meta = yaml.safe_load((run_dir / "meta.yaml").read_text(encoding="utf-8")) or {}
+    wandb_id = tracker.start(cfg, run_dir, saved_meta, force=wandb, resume_id=saved_meta.get("wandb_run_id") if resume else None)
+    if wandb_id is not None:
+        write_run_meta(run_dir, seed, status="running", wandb_run_id=wandb_id)
     layout, themes, templates_t = world.layout, world.themes, world.templates_t.to(device)
     world.templates_t, world.background_t = templates_t, world.background_t.to(device)
     background_t = world.background_t
@@ -1233,6 +1241,7 @@ def run_one_seed(cfg: dict, seed: int, run_dir: Path, device: torch.device, max_
         with open(run_dir / "diagnostics.jsonl", "a", encoding="utf-8") as f:
             f.write(json.dumps(_jsonable(record)) + "\n")
         save_training_diagnostics_figure(diagnostics, switch.switch_step, artifacts / f"training_diagnostics_seed{seed:02d}.png")
+        tracker.log(step, record, prefix="diagnostics")
         rc = record["real_context"]
         log(f"diagnostics @ {step}: real contexts: KL det {[round(rc['kl_by_zone'][z], 2) for z in DETERMINISTIC_ZONES]} bits, I_z "
             f"{ {z[:14]: round(rc['I_z_by_zone'][z]['mean'], 2) for z in e3_env.ZONE_CATEGORIES} } | acc replay/real/canonical-hard "
@@ -1246,6 +1255,8 @@ def run_one_seed(cfg: dict, seed: int, run_dir: Path, device: torch.device, max_
                                 condition)
         write_run_meta(run_dir, seed, status="failed", error=str(err), steps_done=steps_done, switch_step=switch.switch_step,
                        switch_deadline=switch.max_steps)
+        tracker.log(steps_done, {"failed": 1, "switch_step": switch.switch_step})
+        tracker.finish({"status": "failed", "steps_done": steps_done}, run_dir, artifact=wandb_artifact)
 
     t0 = time.perf_counter() - progress["training_seconds"]
     for step in range(start_step, n_grad_steps):
@@ -1289,6 +1300,7 @@ def run_one_seed(cfg: dict, seed: int, run_dir: Path, device: torch.device, max_
                 log(f">>> SWITCH to straight-through effective at step {switch.switch_step} (batch-pair JS "
                     f"{progress['last_stat']:.3f} bits); deadline {switch.max_steps}, margin {switch.max_steps - switch.switch_step} "
                     f"steps; beta_rep ramps 0 -> {loss_cfg.beta_rep} over {progress['rep_warmup_steps']} steps")
+                tracker.log(step, {"switch_step": switch.switch_step, "switch_margin": switch.max_steps - switch.switch_step})
         try:
             switch.check_deadline(step + 1)
         except SeparationNotReachedError as err:
@@ -1312,6 +1324,10 @@ def run_one_seed(cfg: dict, seed: int, run_dir: Path, device: torch.device, max_
                 f"bits | phase {phase:16s} | beta_rep {beta_rep:.4f} | recon_patch {history['recon_patch'][-1]:.4f} | "
                 f"grad_norm {history['grad_norm'][-1]:.3g} | lr {optimizer.param_groups[0]['lr']:g} | "
                 f"{time.perf_counter() - t0:.0f}s")
+            tracker.log(step, {"train": {**{key: history[key][-1] for key in (*LOSS_TERMS, "grad_norm")},
+                                         "lr": optimizer.param_groups[0]["lr"], "beta_rep": beta_rep,
+                                         "phase_straight_through": int(switch.switched), "batch_pair_js": progress["last_stat"],
+                                         "labelled_js": labelled_js, "seconds": time.perf_counter() - t0}})
     flush()
     training_done_now = start_step < n_grad_steps or not resume
     if training_done_now:
@@ -1373,6 +1389,9 @@ def run_one_seed(cfg: dict, seed: int, run_dir: Path, device: torch.device, max_
     write_run_meta(run_dir, seed, status="done", switch_step=switch.switch_step, switch_deadline=switch.max_steps,
                    switch_margin=margin, n_grad_steps=n_grad_steps, truncated_by_max_steps=n_grad_steps < planned_steps,
                    checkpoint_steps=ckpt_steps, training_seconds=round(progress["training_seconds"], 1))
+    tracker.finish(json.loads((run_dir / "results.json").read_text(encoding="utf-8")) | {"history": None, "diagnostics": None,
+                                                                                         "separation_curve": None},
+                   run_dir, artifact=wandb_artifact)
     log(f"run done; results in {run_dir}")
     return report
 
@@ -1875,6 +1894,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--max-steps", type=int, default=None, help="caps the number of gradient steps (smoke tests)")
     parser.add_argument("--resume", type=Path, default=None, help="continue the interrupted run in this directory")
     parser.add_argument("--combine", type=Path, nargs="+", default=None, help="write a combined report of finished runs")
+    parser.add_argument("--wandb", action="store_true", help="force W&B tracking on (default: on if WANDB_API_KEY is set)")
+    parser.add_argument("--wandb-artifact", action="store_true",
+                        help="upload the run directory (weights included, resume.pt excluded) as a W&B artifact at the end")
     return parser.parse_args(argv)
 
 
@@ -1888,7 +1910,8 @@ def _resume(args: argparse.Namespace) -> int:
     print(f"[run_mini] resume {run_dir} | device {device}", flush=True)
     try:
         run_one_seed(cfg, int(meta["seed"]), run_dir, device, max_steps=cfg["runtime"].get("max_steps"),
-                     condition=meta.get("condition", "experimental"), resume=True)
+                     condition=meta.get("condition", "experimental"), resume=True, wandb=args.wandb,
+                     wandb_artifact=args.wandb_artifact)
     except (SeparationNotReachedError, CollapseAfterSwitchError) as err:
         print(f"[run_mini] run STOPPED by a training guard ({type(err).__name__}); see {run_dir / 'failure'}", flush=True)
         return 1
@@ -1929,7 +1952,8 @@ def main(argv: list[str] | None = None) -> int:
         for condition in cfg["conditions"]:
             run_dir = make_seed_run_dir(args.out_dir, config_name, seed, condition)
             try:
-                reports.append(run_one_seed(cfg, seed, run_dir, device, max_steps=cfg["runtime"].get("max_steps"), condition=condition))
+                reports.append(run_one_seed(cfg, seed, run_dir, device, max_steps=cfg["runtime"].get("max_steps"), condition=condition,
+                                            wandb=args.wandb, wandb_artifact=args.wandb_artifact))
             except (SeparationNotReachedError, CollapseAfterSwitchError) as err:
                 failures.append((seed, condition, run_dir, err))
                 print(f"[run_mini] seed {seed} {condition} STOPPED by a training guard ({type(err).__name__}); checkpoint and "

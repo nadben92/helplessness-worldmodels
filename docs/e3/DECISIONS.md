@@ -1785,3 +1785,43 @@ skipped + 3 xfailed; the +17 are the new tests of that commit
 (test_replay_table 8, test_unroll_batched 1, test_e3_real_context 6,
 test_context_summary 2). With test_e3_gpu_configs (2): 740. Reports now
 give the full-suite count and name any subset.
+
+## 2026-09-28 -- optional W&B tracking; light results archive
+
+**W&B (user request; implementation choices by the implementer).**
+`experiments/E3_worldmodel_4zones/wandb_logger.py`, extra `wandb` in
+pyproject.toml, config block `logging.wandb` (enabled: auto | true | false,
+project, entity, mode), options `--wandb` and `--wandb-artifact`.
+- On if WANDB_API_KEY is set (enabled: auto), or with --wandb; WANDB_MODE
+  overrides the mode (offline runs are uploaded later with `wandb sync`).
+- W&B run name = run directory name; W&B config = resolved config +
+  meta.yaml; the W&B run id is written to meta.yaml, and a resumed run
+  continues the same W&B run.
+- Logged only where run_mini.py already synchronises, no new
+  synchronisation: the console line every `measure.monitor_every` steps
+  (1,000 in the GPU configs: losses, gradient norm, lr, beta_rep, phase,
+  batch-pair and labelled JS), the switch step, every diagnostic point (the
+  fields of diagnostics.jsonl, flattened), and at the end the scalars of
+  results.json (as the run summary), the figures and REPORT.md. The x axis
+  is `grad_step`, not W&B's own step, so a resumed run can log again from
+  its resume point.
+- `--wandb-artifact`: the run directory is uploaded as an artifact at the
+  end of the run (also after a guard failure), weights included,
+  checkpoints/resume.pt and the local wandb/ directory excluded.
+  launch_gpu_e30.sh passes it to the 5 processes, with WANDB_API_KEY and
+  WANDB_MODE; it has no effect when W&B is off.
+- Robustness: a failure of the import, the initialisation or any later call
+  prints one warning in the console and turns the tracking off for the rest
+  of the run; a run never stops because of W&B.
+- Tests (`tests/e3/test_e3_wandb.py`): losses, lr, beta_rep and switch step
+  bit-identical with and without W&B (real wandb, offline mode); a failing
+  wandb at init or at log only warns and the run finishes; the artifact
+  holds every file of the run directory except resume.pt and wandb/; off by
+  default without a key.
+
+**Results archive (RUN_GPU.md, section 4).** First a light archive, sent
+right away: the run directories without checkpoints/ and failure/*.pt,
+plus the logs. Measured on the smoke run of gpu_e30 (20 gradient steps):
+10.0 MB for one run. A full run adds its 60,000-step history to
+results.json (~5 MB compressed, upper estimate): ~15 MB per run, ~75 MB for
+the 5 runs. The full archive (with the weights, ~2 GB) only on request.

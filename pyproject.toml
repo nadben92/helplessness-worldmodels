@@ -27,6 +27,8 @@ dev = ["pytest>=7.0"]
 # use; a GPU training machine reinstalls the matching CUDA wheel there,
 # same version pin, when phase 4 starts.
 e3 = ["torch>=2.2"]
+# Optional Weights & Biases tracking of E3 runs (wandb_logger.py); a run never needs it.
+wandb = ["wandb>=0.17"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
