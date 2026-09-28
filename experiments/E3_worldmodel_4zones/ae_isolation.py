@@ -303,9 +303,15 @@ def run(
     log_step_diagnostics: bool = False,
     legacy_snapshot_rng: bool = False,
     themes=None,
+    replicate: int | None = None,
 ) -> dict:
     """k=None uses configs/e3/mini.yaml's own render scale. themes: a fixed
-    Themes object instead of the seed's theme draw (run_mini.build_run). aid: keyword
+    Themes object instead of the seed's theme draw (run_mini.build_run).
+    replicate (theme-sensitivity replicates, docs/e3/THEME_SENSITIVITY.md):
+    keeps the colours, the layout and the network initialisation of `seed`,
+    but re-seeds the torch RNG right after the model is built (latent draws)
+    and draws the minibatches from another stream, both keyed on
+    (seed, replicate). None = the historical streams of `seed`. aid: keyword
     arguments of loop.ProbsPhaseAid (kind, eta_max); its ramp_steps is
     always the switch deadline."""
     # Loaded through the experiment loader, never a bare `import run_mini`:
@@ -325,6 +331,10 @@ def run(
         h_dim=cfg["model"]["h_dim"], n_vars=cfg["model"]["n_vars"], n_classes=cfg["model"]["n_classes"],
         n_actions=5, unimix=cfg["model"]["unimix"],
     ))
+    batch_rng = np.random.default_rng(seed)
+    if replicate is not None:
+        torch.manual_seed(int(np.random.SeedSequence([seed, 1000 + replicate]).generate_state(1)[0]))
+        batch_rng = np.random.default_rng([seed, 2000 + replicate])
     schedule = make_schedule(estimator, n_steps, anneal_steps, warmup_steps, switch_max_steps)
     probs_aid = None
     if aid is not None:
@@ -333,14 +343,14 @@ def run(
         probs_aid = ProbsPhaseAid(**aid, ramp_steps=schedule.max_steps)
     out = train_autoencoder(
         rssm, templates, background, k=k, w_patch=cfg["train"]["w_patch"], n_steps=n_steps, lr=lr,
-        batch_size=batch_size, rng=np.random.default_rng(seed), schedule=schedule, eval_every=eval_every,
+        batch_size=batch_size, rng=batch_rng, schedule=schedule, eval_every=eval_every,
         n_eval_draws=n_eval_draws, pair_rng=np.random.default_rng([seed, 4]), stop_after_switch=stop_after_switch,
         aid=probs_aid, raise_on_deadline=raise_on_deadline, seed=seed, lr_after_switch=lr_after_switch,
         clip_norm=clip_norm, log_step_diagnostics=log_step_diagnostics, legacy_snapshot_rng=legacy_snapshot_rng,
     )
     final = out["curve"][-1]
     return {
-        "estimator": estimator, "seed": seed, "k": k, "n_steps": n_steps, "lr": lr, "batch_size": batch_size,
+        "estimator": estimator, "seed": seed, "replicate": replicate, "k": k, "n_steps": n_steps, "lr": lr, "batch_size": batch_size,
         "schedule": None if schedule is None else {k: v for k, v in schedule.__dict__.items() if k != "history"},
         "switch_step": schedule.switch_step if isinstance(schedule, SeparationSwitch) else None,
         "aid": None if probs_aid is None else dataclasses.asdict(probs_aid),

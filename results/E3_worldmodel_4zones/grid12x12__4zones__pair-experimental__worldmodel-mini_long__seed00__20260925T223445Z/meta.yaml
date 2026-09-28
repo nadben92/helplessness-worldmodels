@@ -1,0 +1,82 @@
+seed: 0
+git_commit: d74841661e92ac17d88544c2b45426b5cd6b093e
+started_at: '2026-09-25T22:34:45Z'
+status: done
+updated_at: '2026-09-26T05:37:10Z'
+start_distribution: uniform_non_terminal
+collection_epsilon: 1.0
+device: cpu
+python_version: 3.14.0
+platform: Windows-11-10.0.22631-SP0
+torch_version: 2.14.0+cpu
+cuda_version: null
+cudnn_version: null
+gpu_name: null
+num_threads: 6
+allow_tf32_matmul: false
+allow_tf32_cudnn: false
+deterministic_algorithms: false
+cudnn_deterministic: false
+cudnn_benchmark: false
+git_dirty: true
+git_n_changed_paths: 4
+rotation: 0
+quadrant_assignment:
+  nw: nw
+  ne: ne
+  se: se
+  sw: sw
+block_class: A
+themes:
+  zone_colors:
+    uncontrollable_deterministic:
+    - 94
+    - 29
+    - 224
+    controllable_noisy:
+    - 97
+    - 158
+    - 64
+    uncontrollable_noisy:
+    - 146
+    - 25
+    - 46
+    controllable_deterministic:
+    - 252
+    - 40
+    - 187
+  agent_marker_color:
+  - 93
+  - 38
+  - 140
+  corridor_color:
+  - 128
+  - 128
+  - 128
+  goal_color:
+  - 255
+  - 215
+  - 0
+rng_streams:
+- env_dynamics
+- explore
+- tiebreak
+- start_state
+- matched_control
+- reference
+- theme
+- network_init
+- replay_sample
+- latent_sample
+- switch_pairs
+- measure
+episode:
+  goal_reward: 50.0
+  step_reward: -1.0
+  max_steps: 36
+  gamma: 0.9
+switch_step: 4151
+switch_deadline: 25000
+switch_margin: 20849
+n_grad_steps: 40000
+truncated_by_max_steps: false

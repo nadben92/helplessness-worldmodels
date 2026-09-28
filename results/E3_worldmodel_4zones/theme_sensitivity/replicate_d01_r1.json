@@ -1,0 +1,9 @@
+{
+ "draw": 1,
+ "replicate": 1,
+ "train_seed": 0,
+ "status": "ok",
+ "switch_step": 4651,
+ "final_acc_hard": 0.9986111111111111,
+ "num_threads": 2
+}
