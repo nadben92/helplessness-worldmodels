@@ -1,7 +1,7 @@
 """Short check to run on the GPU machine BEFORE launching the runs of a
 config (a few minutes). One command:
 
-    python experiments/E3_worldmodel_4zones/preflight.py --config configs/e3/gpu_e30.yaml --device cuda
+    python experiments/E3_worldmodel_4zones/preflight.py --config configs/e3/gpu_e30.yaml         --extra-config configs/e3/gpu_e30_bridge.yaml --device cuda
 
 1. Device: CUDA present, the model's parameters, the pre-rendered table and
    a training minibatch all on the GPU; TF32 off; determinism flags.
@@ -10,8 +10,9 @@ config (a few minutes). One command:
    policy, docs/e3/DECISIONS.md 2026-09-28).
 3. Throughput of the real training step at the config's size (both
    estimator phases), alone and with --parallel processes side by side
-   (default 4, the number of runs launched together), peak GPU memory, and
-   the projected duration of one run of the config.
+   (default 5, the number of runs launched together: the --extra-config
+   runs, one process each, and --config for the rest), peak GPU memory,
+   and the projected duration of one run of each config.
 4. The real entry point, truncated: run_mini.py on seed 0 / experimental
    with --max-steps (default 200) into <out-dir>/preflight/, then checks
    that every output is written (meta.yaml says device cuda and status
@@ -159,7 +160,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
     parser.add_argument("--max-steps", type=int, default=200, help="gradient steps of the truncated real run")
     parser.add_argument("--bench-steps", type=int, default=30)
-    parser.add_argument("--parallel", type=int, default=4, help="processes side by side for the throughput measure")
+    parser.add_argument("--parallel", type=int, default=5, help="processes side by side for the throughput measure")
+    parser.add_argument("--extra-config", type=Path, nargs="*", default=[],
+                        help="configs launched alongside (one process each in the parallel measure), e.g. the bridge run")
     parser.add_argument("--out-dir", type=Path, default=run_mini.REPO_ROOT / "results" / "preflight")
     parser.add_argument("--bench-only", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
@@ -192,14 +195,20 @@ def main(argv: list[str] | None = None) -> int:
 
     summary["throughput_single"] = bench(cfg, device, args.bench_steps)
     print(f"[preflight] throughput, one process: {summary['throughput_single']}", flush=True)
-    if args.parallel > 1:
-        cmd = [sys.executable, str(Path(__file__).resolve()), "--config", str(args.config), "--device", args.device,
-               "--bench-only", "--bench-steps", str(args.bench_steps)]
-        procs = [subprocess.Popen(cmd, stdout=subprocess.PIPE, text=True) for _ in range(args.parallel)]
+    configs = [args.config] * max(args.parallel - len(args.extra_config), 0) + list(args.extra_config)
+    if len(configs) > 1:
+        procs = [subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "--config", str(c), "--device", args.device,
+                                   "--bench-only", "--bench-steps", str(args.bench_steps)], stdout=subprocess.PIPE, text=True)
+                 for c in configs]
         outs = [json.loads(p.communicate()[0].strip().splitlines()[-1]) for p in procs]
-        summary["throughput_parallel"] = {"n_processes": args.parallel,
-                                          "per_process": {ph: float(np.mean([o[ph] for o in outs])) for ph in ("probabilities", "straight-through")}}
-        print(f"[preflight] throughput, {args.parallel} processes side by side: {summary['throughput_parallel']}", flush=True)
+        per_config = {}
+        for c, o in zip(configs, outs):
+            per_config.setdefault(str(c), []).append(o)
+        summary["throughput_parallel"] = {
+            "n_processes": len(configs),
+            "per_process": {c: {ph: float(np.mean([o[ph] for o in os_])) for ph in ("probabilities", "straight-through")}
+                            for c, os_ in per_config.items()}}
+        print(f"[preflight] throughput, {len(configs)} processes side by side: {summary['throughput_parallel']}", flush=True)
 
     print(f"[preflight] truncated real run: run_mini.py --max-steps {args.max_steps} ...", flush=True)
     t0 = time.perf_counter()
@@ -225,16 +234,21 @@ def main(argv: list[str] | None = None) -> int:
         summary["recompute_identical"] = same
         if not all(same.values()):
             problems.append(f"recomputed final measures differ from the run's: {same}")
-        rate = summary.get("throughput_parallel", {}).get("per_process", summary["throughput_single"])
-        slowest = min(rate["probabilities"], rate["straight-through"])
-        hours = projected_hours(cfg, slowest, diag_seconds=final_seconds, final_seconds=summary["recompute_seconds"])
-        summary["projected_hours_per_run"] = hours
-        print(f"[preflight] projected duration of one run of {args.config.name}: {hours:.1f} h "
-              f"({slowest:.2f} gradient steps/s{' with ' + str(args.parallel) + ' processes side by side' if args.parallel > 1 else ''}; "
-              f"one diagnostic point {final_seconds:.0f} s)", flush=True)
-        if hours > TARGET_HOURS * 1.25:
-            print(f"[preflight] WARNING: above the ~{TARGET_HOURS:g} h target -- report it before launching (the budget is fixed "
-                  "in the config, not adjusted to the machine)", flush=True)
+        # Projection per config. The diagnostic-point and final-measure costs of the extra configs are taken
+        # from --config's truncated run (the spec-size model: an upper bound for the smaller bridge network).
+        summary["projected_hours_per_run"] = {}
+        for c in dict.fromkeys([args.config, *args.extra_config]):
+            rate = summary.get("throughput_parallel", {}).get("per_process", {}).get(str(c)) or summary["throughput_single"]
+            slowest = min(rate["probabilities"], rate["straight-through"])
+            hours = projected_hours(run_mini.load_mini_config(c), slowest, diag_seconds=final_seconds,
+                                    final_seconds=summary["recompute_seconds"])
+            summary["projected_hours_per_run"][str(c)] = hours
+            n = summary.get("throughput_parallel", {}).get("n_processes", 1)
+            print(f"[preflight] projected duration of one run of {Path(c).name}: {hours:.1f} h ({slowest:.2f} gradient steps/s with "
+                  f"{n} process(es) side by side; one diagnostic point {final_seconds:.0f} s)", flush=True)
+            if hours > TARGET_HOURS * 1.25:
+                print(f"[preflight] WARNING: {Path(c).name} is above the ~{TARGET_HOURS:g} h target -- report it before launching "
+                      "(the budget is fixed in the config, not adjusted to the machine)", flush=True)
         (run_dir / "preflight_summary.json").write_text(json.dumps(run_mini._jsonable(summary), indent=1), encoding="utf-8")
 
     if problems:

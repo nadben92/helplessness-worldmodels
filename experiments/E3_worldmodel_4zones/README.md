@@ -15,10 +15,13 @@ the CPU reference. No agent policy yet (Phase 5).
 ## First GPU run on the A100: `configs/e3/gpu_e30.yaml`
 
 E3-0 (fixed epsilon=1 data) in the experimental environment and in its
-reference, seeds 0 (class A) and 5 (class B): **4 runs**, one process each,
-side by side on the GPU. Budget: 100,000 environment steps, 60,000 gradient
-steps of 16 x 64, spec architecture with an 8x8 latent; target at most ~6 h
-per run (see `docs/e3/DECISIONS.md`, 2026-09-28).
+reference, seeds 0 (class A) and 5 (class B): **4 runs** of `gpu_e30.yaml`
+(spec architecture, 8x8 latent, batch 16 x 64), plus **1 bridge run** of
+`gpu_e30_bridge.yaml` (seed 0, experimental, mini_long's network and
+procedure) that relates the GPU results to the CPU reference: **5 processes**
+side by side on the GPU. Budget: 100,000 environment steps and 60,000
+gradient steps per run; target at most ~6 h per run (see
+`docs/e3/DECISIONS.md`, 2026-09-28).
 
 ### 1. Install (Linux, once)
 
@@ -40,13 +43,14 @@ then `pip install -e ".[e3,dev]"` again. Optional, a few minutes on the CPU:
 ### 2. Short test first (about 10-15 minutes)
 
 ```bash
-python experiments/E3_worldmodel_4zones/preflight.py --config configs/e3/gpu_e30.yaml --device cuda
+python experiments/E3_worldmodel_4zones/preflight.py --config configs/e3/gpu_e30.yaml --extra-config configs/e3/gpu_e30_bridge.yaml --device cuda
 ```
 
 It checks, in order: that the model, the pre-rendered images and a training
 minibatch are on the GPU; that the same 5 training steps run twice give
 bit-identical results (GPU determinism policy); the training speed alone
-and with 4 processes side by side, and the projected duration of one run;
+and with 5 processes side by side (4 of `gpu_e30`, 1 bridge), and the
+projected duration of one run of each config;
 then it runs the real entry point on seed 0 with `--max-steps 200` into
 `results/preflight/`, checks that every output is written (`meta.yaml`
 with `device: cuda` and `status: done`, the compact replay, the weights,
@@ -57,14 +61,15 @@ test run's directory. If it prints a WARNING about the projected duration,
 send the summary back before launching: the budget is fixed in the
 config, not adapted to the machine.
 
-### 3. The 4 runs
+### 3. The 5 runs
 
 ```bash
 bash experiments/E3_worldmodel_4zones/launch_gpu_e30.sh
 ```
 
-Four background processes (`nohup`: they survive the terminal closing),
-consoles in `logs/gpu_e30/seed{0,5}_{experimental,reference}.log`. Follow
+Five background processes (`nohup`: they survive the terminal closing),
+consoles in `logs/gpu_e30/seed{0,5}_{experimental,reference}.log` and
+`logs/gpu_e30/bridge_seed0_experimental.log`. Follow
 them with `tail -f logs/gpu_e30/*.log`; each prints a line every 1,000
 gradient steps and one per diagnostic point. The same run by hand, one
 process: `python experiments/E3_worldmodel_4zones/run_mini.py --config
@@ -91,13 +96,14 @@ results/E3_worldmodel_4zones/grid12x12__4zones__pair-experimental__worldmodel-gp
 results/E3_worldmodel_4zones/grid12x12__4zones__pair-control__worldmodel-gpu_e30__seed00__<UTC>/     (reference)
 results/E3_worldmodel_4zones/grid12x12__4zones__pair-experimental__worldmodel-gpu_e30__seed05__<UTC>/
 results/E3_worldmodel_4zones/grid12x12__4zones__pair-control__worldmodel-gpu_e30__seed05__<UTC>/     (reference)
+results/E3_worldmodel_4zones/grid12x12__4zones__pair-experimental__worldmodel-gpu_e30_bridge__seed00__<UTC>/   (bridge)
 logs/gpu_e30/
 ```
 
 Copy these directories whole (about 0.4 GB each, mostly the weights in
 `checkpoints/`), e.g. `tar czf gpu_e30_results.tgz results/E3_worldmodel_4zones/*gpu_e30* logs/gpu_e30`.
-Each has its `REPORT.md`. A combined report of the four:
-`python experiments/E3_worldmodel_4zones/run_mini.py --combine <dir1> <dir2> <dir3> <dir4>`.
+Each has its `REPORT.md`. A combined report:
+`python experiments/E3_worldmodel_4zones/run_mini.py --combine <dir1> <dir2> ...`.
 
 ## Install (development machine)
 
@@ -145,7 +151,8 @@ limit (run directory names are long).
 | config | runs | gradient steps | duration |
 |---|---|---|---|
 | `mini_long.yaml` | seed 0, experimental | 40,000 of 8 x 16 | ~7 h on this CPU (6 threads) |
-| `gpu_e30.yaml` | seeds 0, 5 x experimental, reference | 60,000 of 16 x 64 | target <= ~6 h per run on an A100, 4 side by side |
+| `gpu_e30.yaml` | seeds 0, 5 x experimental, reference | 60,000 of 16 x 64 | target <= ~6 h per run on an A100, 5 side by side |
+| `gpu_e30_bridge.yaml` | seed 0, experimental | 60,000 of 8 x 16 | shorter (small network, 16-step windows) |
 
 ## Where the results are
 

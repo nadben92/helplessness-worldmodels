@@ -1,0 +1,95 @@
+# Bridge run of the first GPU run (docs/e3/DECISIONS.md, 2026-09-28, second entry): seed 0,
+# experimental environment, with EXACTLY mini_long.yaml's `model:` block (and its procedure:
+# batch 8 x 16, lr, switch rule and deadline, losses). Purpose: relate the GPU results
+# (gpu_e30.yaml, spec architecture) to the CPU reference (mini_long), because the start-up
+# procedure (probabilities phase, label-free switch, lr drop) was validated on this small
+# network only.
+#
+# Differences from mini_long.yaml, and only these (tests/e3/test_e3_gpu_configs.py):
+#   - budget: 100,000 environment steps (as gpu_e30: same seed, same streams, so the SAME data as
+#     gpu_e30's seed 0 / experimental run) and 60,000 gradient steps (train.replay_ratio 0.6,
+#     as gpu_e30);
+#   - device / runtime: cuda, 4 threads, GPU determinism policy;
+#   - outputs: measured at the checkpoints of E2's grid instead of every 2,000 steps, console
+#     line every 1,000 steps, z-only probe windows of 64 steps.
+# Launched with the 4 gpu_e30 runs (launch_gpu_e30.sh: 5 processes side by side).
+
+model:
+  n_vars: 8
+  n_classes: 8
+  h_dim: 64
+  embed_dim: 64
+  base_depth: 8
+  unimix: 0.01
+
+render:
+  k: 6
+  grid_lines: false
+  cielab_min_dist: 30.0
+  cielab_marker_min_dist: 30.0
+
+budget:
+  total_steps: 99744       # + prefill 256 = 100,000 environment steps (as gpu_e30)
+  prefill_steps: 256
+  checkpoints: [99744]     # informational only; the saved checkpoints are the `checkpoints` block below
+
+collection:
+  start_distribution: uniform_non_terminal
+  epsilon: 1.0
+
+train:
+  batch_size: 8
+  seq_len: 16
+  replay_ratio: 0.6          # budget: 60,000 gradient steps (mini_long: 2 on 20,000 steps = 40,000)
+  lr: 1.0e-3
+  lr_after_switch: 1.0e-4
+  adam_eps: 1.0e-8
+  clip_norm: null
+  w_patch: 10.0
+  beta_dyn: 0.5
+  beta_rep: 0.1
+  free_bits: 0.0
+  free_bits_mode: per_step
+  rep_warmup_steps: null
+  latent_estimator:
+    kind: warmup_probs_until_separated
+    switch_js_threshold: 3.0
+    switch_consecutive: 5
+    switch_eval_every: 50
+    switch_min_steps: 500
+    switch_max_steps: 25000    # mini_long's (absolute)
+    switch_n_pairs: 64
+    collapse_js_threshold: 1.0
+    collapse_consecutive: 5
+
+measure:
+  iz_mc_samples_training: 2000
+  iz_mc_samples_final: 4096
+  kernel_k_s: 16
+  kernel_margin_threshold: 1.0e-3
+  z_only_test_frac: 0.2
+  z_only_seq_len: 64
+  context_dispersion_n_samples: 100
+  d1_contrast_min_bits: 0.25
+  separation_every: 1000
+  monitor_every: 1000
+  diagnostics_every: null
+  diagnostics_at_checkpoints: true
+  real_context:
+    window_len: null                 # = seq_len (16), as mini_long
+    burn_in: 8
+    max_per_state: 50
+    kernel_draws: 32
+
+checkpoints:
+  grid: e2
+  resume_every: 2000
+
+conditions: [experimental]
+
+runtime:
+  num_threads: 4
+  device: cuda
+  deterministic: true
+
+seeds: [0]

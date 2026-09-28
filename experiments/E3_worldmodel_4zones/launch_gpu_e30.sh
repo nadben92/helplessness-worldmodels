@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# The 4 runs of configs/e3/gpu_e30.yaml (seeds 0 and 5 x experimental / reference), one process
-# each, side by side on one GPU. Run from the repository root, after preflight.py has passed:
+# The first GPU run: the 4 runs of configs/e3/gpu_e30.yaml (seeds 0 and 5 x experimental /
+# reference) and the bridge run of configs/e3/gpu_e30_bridge.yaml (seed 0, experimental,
+# mini_long's network) -- 5 processes side by side on one GPU. Run from the repository root, after preflight.py has passed:
 #
 #     bash experiments/E3_worldmodel_4zones/launch_gpu_e30.sh
 #
 # Each process writes its own run directory under results/E3_worldmodel_4zones/ and its console
-# to logs/gpu_e30/<seed>_<condition>.log; nohup keeps the runs alive if the terminal closes.
+# to logs/gpu_e30/seed<N>_<condition>.log (bridge: bridge_seed0_experimental.log); nohup keeps the runs alive if the terminal closes.
 # The script prints the PIDs and returns at once. Wait for the runs with `wait` or
 #     tail -f logs/gpu_e30/*.log
 # An interrupted run is continued, in its own directory, with
@@ -29,4 +30,7 @@ for seed in 0 5; do
     sleep 2   # distinct UTC timestamps in the run names
   done
 done
-echo "4 runs launched. Results: results/E3_worldmodel_4zones/grid12x12__4zones__pair-*__worldmodel-gpu_e30__seed0{0,5}__*/"
+log="logs/gpu_e30/bridge_seed0_experimental.log"
+nohup "$PYTHON" experiments/E3_worldmodel_4zones/run_mini.py --config configs/e3/gpu_e30_bridge.yaml --device "$DEVICE"   --seeds 0 --conditions experimental > "$log" 2>&1 &
+echo "bridge seed 0 experimental: pid $! -> $log"
+echo "5 runs launched. Results: results/E3_worldmodel_4zones/grid12x12__4zones__pair-*__worldmodel-gpu_e30*__seed0{0,5}__*/"

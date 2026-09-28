@@ -1664,7 +1664,7 @@ recorded.
 ### GPU run: `configs/e3/gpu_e30.yaml`, budget and expected duration
 
 Seeds 0 (class A) and 5 (class B), experimental and reference: 4 runs,
-one process each, side by side on the A100 (`launch_gpu_e30.sh`).
+one process each, side by side on the A100 (`launch_gpu_e30.sh`). (A fifth, bridge run was added the same day: see the next entry.)
 - **Architecture: the spec's** (3.1: base depth 32, h_dim 256; embed_dim
   256, RSSMConfig's default) with the 8x8 latent of mini_long, and the
   spec's batch of 16 x 64 (3.3). The mini sizes were a CPU reduction; the
@@ -1750,3 +1750,38 @@ one process each, side by side on the A100 (`launch_gpu_e30.sh`).
 - `preflight.py` (one command, ~10-15 min), `launch_gpu_e30.sh` (4
   processes, nohup), `run_mini.py --combine` (combined report of finished
   runs); README updated for the A100.
+
+## 2026-09-28 -- bridge run for the first GPU run; test count
+
+**1. Bridge run (user decision).** gpu_e30's 4 runs keep the spec
+architecture. A fifth run is added: seed 0, experimental environment,
+with exactly mini_long.yaml's `model:` block
+(`configs/e3/gpu_e30_bridge.yaml`). **Why:** the start-up procedure
+(probabilities phase, label-free switch, lr 1e-3 -> 1e-4 at the switch)
+has only been validated on the small network (every isolation test, the
+mini run, mini_long); the bridge relates the GPU results to the CPU
+reference. It differs from mini_long.yaml only by:
+- the budget: 100,000 environment steps and 60,000 gradient steps
+  (`replay_ratio` 0.6), as gpu_e30. Same seed, same condition, same
+  streams: its data are exactly those of gpu_e30's seed 0 / experimental
+  run, so the two differ only by the network (and mini_long's batch of
+  8 x 16 and its switch deadline of 25,000);
+- the device and runtime (cuda, 4 threads, the GPU determinism policy);
+- the outputs: measured at the checkpoints of E2's grid instead of every
+  2,000 steps, console line every 1,000 steps, z-only windows of 64 steps.
+`tests/e3/test_e3_gpu_configs.py` checks that nothing else differs.
+`launch_gpu_e30.sh` starts 5 processes; `preflight.py --extra-config
+configs/e3/gpu_e30_bridge.yaml` measures the throughput with the 5
+processes side by side (4 gpu_e30, 1 bridge) and projects the duration of
+each config.
+
+**2. Test count (716 -> 327 -> 733).** No test was removed or moved: every
+test id collected at commit d748416 is still collected (checked by
+comparing the two collections). 716 was the full suite (`tests/`: 721
+collected = 716 passed + 2 skipped + 3 xfailed). 327 was a subset
+(`tests/agents/worldmodel tests/e3 tests/measures`), reported without
+saying so. Full suite after commit b52902e: 738 collected = 733 passed + 2
+skipped + 3 xfailed; the +17 are the new tests of that commit
+(test_replay_table 8, test_unroll_batched 1, test_e3_real_context 6,
+test_context_summary 2). With test_e3_gpu_configs (2): 740. Reports now
+give the full-suite count and name any subset.

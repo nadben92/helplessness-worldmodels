@@ -1,7 +1,7 @@
 # First GPU run (docs/e3/DECISIONS.md, 2026-09-28): E3-0 -- fixed epsilon=1 data, no loop --
 # in the experimental environment AND in its reference, seeds 0 (class A) and 5 (class B):
-# 4 runs, one process each (launch_gpu_e30.sh). Target: at most ~6 h per run on the lab A100,
-# the 4 runs side by side (budget justified in DECISIONS.md, 2026-09-28, from the CPU
+# 4 runs, one process each (launch_gpu_e30.sh, with the bridge run gpu_e30_bridge.yaml: 5
+# processes). Target: at most ~6 h per run on the lab A100, the 5 runs side by side (budget justified in DECISIONS.md, 2026-09-28, from the CPU
 # profile; preflight.py measures the real A100 rate and prints the projected duration).
 #
 # Architecture: the spec's (section 3.1: base depth 32, h_dim 256; embed_dim 256 = RSSMConfig's
@@ -90,7 +90,7 @@ checkpoints:
 conditions: [experimental, reference]
 
 runtime:
-  num_threads: 4     # 4 processes side by side on the A100 host
+  num_threads: 4     # 5 processes side by side on the A100 host
   device: cuda
   # GPU determinism policy (audit B7, DECISIONS.md 2026-09-28): deterministic algorithms (warn only),
   # cuDNN deterministic, no benchmark, CUBLAS_WORKSPACE_CONFIG=:4096:8, TF32 off.
