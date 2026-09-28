@@ -5,29 +5,103 @@ the 4-zone torus, and the measures of how much controllability its learned
 dynamics perceive. Experiment status: `docs/E3_worldmodel_4zones.md`.
 Decisions, in order, with their evidence: `docs/e3/DECISIONS.md`.
 
-**Status (2026-09-25): end of Phase 3.** The pipeline runs end to end on the
-mini configuration. A long diagnostic run (`configs/e3/mini_long.yaml`) comes
-next, then Phase 4a (calibration code). No agent policy yet (Phase 5).
+**Status (2026-09-28): first GPU run prepared (E3-0, `configs/e3/gpu_e30.yaml`).**
+The main measure is taken in real contexts (`docs/e3/DECISIONS.md`,
+2026-09-28); every run saves its weights on E2's checkpoint grid, its
+compact replay and its world, and `recompute_measures.py` recomputes every
+measure from a run directory. `mini.yaml` is retired; `mini_long.yaml` is
+the CPU reference. No agent policy yet (Phase 5).
 
-## Install
+## First GPU run on the A100: `configs/e3/gpu_e30.yaml`
 
-Python ≥ 3.10. From the repository root:
+E3-0 (fixed epsilon=1 data) in the experimental environment and in its
+reference, seeds 0 (class A) and 5 (class B): **4 runs**, one process each,
+side by side on the GPU. Budget: 100,000 environment steps, 60,000 gradient
+steps of 16 x 64, spec architecture with an 8x8 latent; target at most ~6 h
+per run (see `docs/e3/DECISIONS.md`, 2026-09-28).
 
-**Linux / macOS, GPU machine** (PyTorch ≥ 2.2; pip's default `torch` wheel on
-Linux is the CUDA build):
+### 1. Install (Linux, once)
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
+git clone https://github.com/nadben92/helplessness-worldmodels.git
+cd helplessness-worldmodels
+git checkout e3/worldmodel
+python -m venv .venv && source .venv/bin/activate
 pip install -e ".[e3,dev]"
-python -c "import torch; print(torch.__version__, torch.cuda.is_available(), torch.version.cuda)"
+python -c "import torch; print(torch.__version__, torch.version.cuda, torch.cuda.is_available(), torch.cuda.get_device_name(0))"
 ```
 
-If the machine's CUDA driver needs a specific build, install torch first
-from the matching index, e.g.
-`pip install torch --index-url https://download.pytorch.org/whl/cu121`,
-then `pip install -e ".[e3,dev]"`.
+The last line must print `True` and the A100's name. If it prints `False`,
+install the torch build matching the machine's CUDA driver first (e.g.
+`pip install torch --index-url https://download.pytorch.org/whl/cu121`),
+then `pip install -e ".[e3,dev]"` again. Optional, a few minutes on the CPU:
+`python -m pytest tests/agents/worldmodel tests/measures tests/e3 -q`.
 
+### 2. Short test first (about 10-15 minutes)
+
+```bash
+python experiments/E3_worldmodel_4zones/preflight.py --config configs/e3/gpu_e30.yaml --device cuda
+```
+
+It checks, in order: that the model, the pre-rendered images and a training
+minibatch are on the GPU; that the same 5 training steps run twice give
+bit-identical results (GPU determinism policy); the training speed alone
+and with 4 processes side by side, and the projected duration of one run;
+then it runs the real entry point on seed 0 with `--max-steps 200` into
+`results/preflight/`, checks that every output is written (`meta.yaml`
+with `device: cuda` and `status: done`, the compact replay, the weights,
+the resume point, the report) and recomputes the measures from that
+directory. It ends with **`PREFLIGHT PASSED`** or **`PREFLIGHT FAILED`**
+followed by the list of problems, and writes `preflight_summary.json` in the
+test run's directory. If it prints a WARNING about the projected duration,
+send the summary back before launching: the budget is fixed in the
+config, not adapted to the machine.
+
+### 3. The 4 runs
+
+```bash
+bash experiments/E3_worldmodel_4zones/launch_gpu_e30.sh
+```
+
+Four background processes (`nohup`: they survive the terminal closing),
+consoles in `logs/gpu_e30/seed{0,5}_{experimental,reference}.log`. Follow
+them with `tail -f logs/gpu_e30/*.log`; each prints a line every 1,000
+gradient steps and one per diagnostic point. The same run by hand, one
+process: `python experiments/E3_worldmodel_4zones/run_mini.py --config
+configs/e3/gpu_e30.yaml --device cuda --seeds 0 --conditions experimental`.
+
+If a process is interrupted (machine restart, killed job), continue it in
+its own directory, from its last resume point (at most 2,000 gradient steps
+lost):
+
+```bash
+python experiments/E3_worldmodel_4zones/run_mini.py --resume results/E3_worldmodel_4zones/<run directory>
+```
+
+A run that stops on a training guard (`SeparationNotReachedError`: no
+separation by the absolute deadline of 40,000 steps; `CollapseAfterSwitchError`)
+is a result: `meta.yaml` says `status: failed` and `failure/` holds the
+checkpoint and the diagnostic. It is reported as a failure, never re-run with
+another seed without it being recorded.
+
+### 4. Results to bring back
+
+```
+results/E3_worldmodel_4zones/grid12x12__4zones__pair-experimental__worldmodel-gpu_e30__seed00__<UTC>/
+results/E3_worldmodel_4zones/grid12x12__4zones__pair-control__worldmodel-gpu_e30__seed00__<UTC>/     (reference)
+results/E3_worldmodel_4zones/grid12x12__4zones__pair-experimental__worldmodel-gpu_e30__seed05__<UTC>/
+results/E3_worldmodel_4zones/grid12x12__4zones__pair-control__worldmodel-gpu_e30__seed05__<UTC>/     (reference)
+logs/gpu_e30/
+```
+
+Copy these directories whole (about 0.4 GB each, mostly the weights in
+`checkpoints/`), e.g. `tar czf gpu_e30_results.tgz results/E3_worldmodel_4zones/*gpu_e30* logs/gpu_e30`.
+Each has its `REPORT.md`. A combined report of the four:
+`python experiments/E3_worldmodel_4zones/run_mini.py --combine <dir1> <dir2> <dir3> <dir4>`.
+
+## Install (development machine)
+
+Python >= 3.10. From the repository root. **Linux / GPU machine**: see above.
 **Windows, CPU only** (PowerShell):
 
 ```powershell
@@ -41,67 +115,69 @@ from their own path.
 
 ## Run
 
-One command per run. It runs every seed of the config, one after the other.
+One command per configuration; it runs every (seed, condition) of the
+config, one after the other.
 
 ```bash
-python experiments/E3_worldmodel_4zones/run_mini.py --config configs/e3/mini.yaml --device auto
+python experiments/E3_worldmodel_4zones/run_mini.py --config configs/e3/mini_long.yaml --device auto
 ```
 
 ```powershell
-.venv\Scripts\python.exe experiments\E3_worldmodel_4zones\run_mini.py --config configs\e3\mini.yaml --device auto
+.venv\Scripts\python.exe experiments\E3_worldmodel_4zones\run_mini.py --config configs\e3\mini_long.yaml --device auto
 ```
 
 | option | default | meaning |
 |---|---|---|
-| `--config` | `configs/e3/mini.yaml` | configuration file. `configs/e3/mini_long.yaml`: the long diagnostic run |
-| `--device` | `runtime.device` of the config (`auto`) | `auto` (CUDA if available), `cpu`, `cuda` |
+| `--config` | `configs/e3/mini.yaml` (retired) | `mini_long.yaml`: CPU reference; `gpu_e30.yaml`: first GPU run |
+| `--device` | `runtime.device` of the config | `auto` (CUDA if available), `cpu`, `cuda` |
 | `--out-dir` | `results/` | results root |
-| `--seeds` | `seeds` of the config | e.g. `--seeds 0` to run one seed |
+| `--seeds` | `seeds` of the config | e.g. `--seeds 0` |
+| `--conditions` | `conditions` of the config | `experimental`, `reference` |
 | `--max-steps` | none | caps the number of gradient steps (smoke tests only; the report says so) |
+| `--resume DIR` | - | continue the interrupted run in DIR |
+| `--combine DIR...` | - | combined report of finished runs |
 
 The device actually used is printed at startup and recorded in `meta.yaml`.
 TF32 is disabled on purpose (see `docs/e3/DECISIONS.md`, 2026-09-25).
+On Windows, keep the default `--out-dir` to stay under the 260-character path
+limit (run directory names are long).
 
-On Windows, keep the default `--out-dir` to stay under the 260-character path limit (run directory names are long).
-
-To run seeds in parallel, start one process per seed (`--seeds N`), with
-`runtime.num_threads` in the config adjusted to the number of cores.
-Each seed writes its own directory, so parallel processes never collide.
-
-Keep a copy of the console with `... 2>&1 | tee run.log` (bash) or
-`... 2>&1 | Tee-Object run.log` (PowerShell). Each run directory also has
-its own `console.log`.
-
-| config | seeds | gradient steps | duration, this CPU (6 threads) |
+| config | runs | gradient steps | duration |
 |---|---|---|---|
-| `mini.yaml` | 0, 5 | 10,512 each | ~1.1-1.3 h per seed |
-| `mini_long.yaml` | 0 | 40,000 | ~5-5.5 h (see the config's header) |
+| `mini_long.yaml` | seed 0, experimental | 40,000 of 8 x 16 | ~7 h on this CPU (6 threads) |
+| `gpu_e30.yaml` | seeds 0, 5 x experimental, reference | 60,000 of 16 x 64 | target <= ~6 h per run on an A100, 4 side by side |
 
 ## Where the results are
 
-One directory per seed, never overwritten:
+One directory per (seed, condition), never overwritten:
 
 ```
-results/E3_worldmodel_4zones/grid12x12__4zones__pair-experimental__worldmodel-<config>__seed<NN>__<UTC timestamp>/
+results/E3_worldmodel_4zones/grid12x12__4zones__pair-<experimental|control>__worldmodel-<config>__seed<NN>__<UTC timestamp>/
     REPORT.md            the report; figures in artifacts/
     config.yaml          the resolved configuration (after command-line overrides)
-    meta.yaml            status (running / done / failed), seed, git commit and "working tree modified" flag,
-                         python / torch / CUDA / cuDNN / GPU, device, TF32 and determinism flags, threads,
-                         switch step, deadline and margin
+    meta.yaml            status (running / done / failed), seed, condition, git commit and "working tree modified"
+                         flag, python / torch / CUDA / cuDNN / GPU, device, TF32 and determinism flags, threads,
+                         permutation, themes, switch step, deadline and margin
+    world.json           seed, condition, permutation, themes, render, dynamics seed, hash of the 144 images
+    replay.npz           compact replay (s, a, r, flags, s_next), N[s,a,s'], episode starts
     console.log          everything printed
-    diagnostics.jsonl    training diagnostics, one JSON line per point, appended as soon as each one is computed
-                         (a crash loses at most the last interval)
-    results.json         scalars and curves of the seed, written when the seed ends
-    arrays.npz           counts N, twin T_hat_B, true P, kernel p_hat, I_z, canonical posteriors / priors, L1 arrays
-    failure/             only if a training guard stopped the seed: checkpoint.pt + diagnostic.json
+    diagnostics.jsonl    training diagnostics (real contexts + canonical probe), one JSON line per point
+    checkpoints/         weights_stepNNNNNNNN.pt (E2's grid), weights_final.pt, resume.pt, latest.json
+    results.json         scalars and curves, written when the run ends
+    arrays.npz           N, T_hat_B, P, real-context arrays (per state and per context), canonical arrays
+    recomputed/          outputs of recompute_measures.py, if run
+    failure/             only if a training guard stopped the run: checkpoint.pt + diagnostic.json
 ```
 
-With several seeds, a combined report is written to
-`results/E3_worldmodel_4zones/report__<config>__seeds<..>__<UTC>/REPORT.md`.
+**Recomputing the measures** from a run directory, without training:
+
+```bash
+python experiments/E3_worldmodel_4zones/recompute_measures.py <run dir> --checkpoint final     # or: all, failure, <gradient step>
+```
 
 **Training guards.** When they fire, the checkpoint and the diagnostic are
-saved automatically, the seed is marked `failed` in `meta.yaml`, and the
-remaining seeds still run. The exit code is 1 if a guard fired.
+saved automatically, the run is marked `failed` in `meta.yaml`, and the
+remaining runs of the process still run. The exit code is 1 if a guard fired.
 - `SeparationNotReachedError`: the posterior has not separated the states
   by the absolute deadline `switch_max_steps`.
 - `CollapseAfterSwitchError`: the separation is lost after the switch.
@@ -112,16 +188,17 @@ remaining seeds still run. The exit code is 1 if a guard fired.
 python -m pytest tests/agents/worldmodel tests/measures tests/e3 -q
 ```
 
-`tests/e3/test_e3_run_outputs.py` runs the real entry point on a tiny
-configuration (≈ 1 min). `tests/e3/test_e3_ae_isolation.py` is the slowest
-test (≈ 2 min).
-
-GPU smoke test (Colab T4): `docs/e3/GPU_SMOKE_TEST.md`.
+`tests/e3/test_e3_run_outputs.py` and `tests/e3/test_e3_real_context.py` run
+the real entry point on a tiny configuration (resume after an interruption,
+recomputation from the directory). `tests/e3/test_e3_ae_isolation.py` is the
+slowest test (about 2 min).
 
 ## What this directory contains
 
 - `run_mini.py`: the run entry point above.
-- `probe.py`: the canonical probe and every measurement built on it. The
+- `recompute_measures.py`: every measure recomputed from a run directory.
+- `preflight.py`, `launch_gpu_e30.sh`: the GPU check and the launcher of the first GPU run.
+- `probe.py`: the real-context measure, the canonical probe and every measurement built on them. The
   measures themselves (entropies, KL, α_app, JS, ghost classification)
   live in `src/helplessness/measures/`.
 - `env.py`: builds E3's pixel-observation `TorusZonedEnv` by importing

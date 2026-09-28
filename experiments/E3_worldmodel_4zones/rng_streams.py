@@ -19,6 +19,14 @@ after them:
 explore is the collection policy's action stream (E2's epsilon-greedy
 action choice); env_dynamics seeds the environment exactly as E2 does:
 seed=int(streams["env_dynamics"].integers(2**31)).
+
+Conditions (spec 6; docs/e3/DECISIONS.md, 2026-09-28). The experimental
+environment's streams derive from SeedSequence(seed), as above (E2's
+own). The reference environment shares ONLY the permutation (a function
+of the seed index) and the themes (the experimental seed's theme stream,
+taken by run_mini.build_run); every other stream of a reference run
+derives from its own root SeedSequence([seed, 1]), so no stream is
+correlated between an environment and its reference.
 """
 
 from __future__ import annotations
@@ -33,18 +41,28 @@ e2_rng = load_experiment_module("E2_online_4zones", "rng.py", "e3_rng_streams_e2
 E3_ONLY_STREAMS = ("theme", "network_init", "replay_sample", "latent_sample", "switch_pairs", "measure")
 STREAM_NAMES = tuple(e2_rng.STREAM_NAMES) + E3_ONLY_STREAMS
 N_MEASURE_SLOTS = 32
+CONDITIONS = ("experimental", "reference")
+_CONDITION_ENTROPY = {"reference": 1}
 
 
-def spawn_sequences(seed: int) -> dict[str, np.random.SeedSequence]:
-    children = np.random.SeedSequence(seed).spawn(len(STREAM_NAMES))
+def _root(seed: int, condition: str) -> np.random.SeedSequence:
+    if condition not in CONDITIONS:
+        raise ValueError(f"condition must be one of {CONDITIONS}, got {condition!r}")
+    if condition == "experimental":
+        return np.random.SeedSequence(seed)
+    return np.random.SeedSequence([int(seed), _CONDITION_ENTROPY[condition]])
+
+
+def spawn_sequences(seed: int, condition: str = "experimental") -> dict[str, np.random.SeedSequence]:
+    children = _root(seed, condition).spawn(len(STREAM_NAMES))
     return dict(zip(STREAM_NAMES, children))
 
 
-def spawn_streams(seed: int) -> dict[str, np.random.Generator]:
+def spawn_streams(seed: int, condition: str = "experimental") -> dict[str, np.random.Generator]:
     """One numpy Generator per name in STREAM_NAMES. Deterministic: every
     call returns fresh generators in the same initial state, so separate
     callers (build_run, run_one_seed) may each take the streams they own."""
-    return {name: np.random.default_rng(seq) for name, seq in spawn_sequences(seed).items()}
+    return {name: np.random.default_rng(seq) for name, seq in spawn_sequences(seed, condition).items()}
 
 
 def env_seed(streams: dict[str, np.random.Generator]) -> int:
@@ -63,12 +81,12 @@ def torch_generator(seq: np.random.SeedSequence, device: torch.device) -> torch.
     return gen
 
 
-def measure_streams(seed: int, slot: int, device: torch.device) -> tuple[np.random.Generator, torch.Generator]:
+def measure_streams(seed: int, slot: int, device: torch.device, condition: str = "experimental") -> tuple[np.random.Generator, torch.Generator]:
     """The (numpy, torch) pair owned by measurement `slot`: child `slot`
     of the measure stream. A measurement never draws from a training
     stream, so measuring more or less often never changes the training
     trajectory."""
     if not 0 <= slot < N_MEASURE_SLOTS:
         raise ValueError(f"measurement slot must be in [0, {N_MEASURE_SLOTS}), got {slot}")
-    child = spawn_sequences(seed)["measure"].spawn(N_MEASURE_SLOTS)[slot]
+    child = spawn_sequences(seed, condition)["measure"].spawn(N_MEASURE_SLOTS)[slot]
     return np.random.default_rng(child), torch_generator(child, device)

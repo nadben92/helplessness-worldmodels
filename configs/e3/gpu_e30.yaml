@@ -1,0 +1,99 @@
+# First GPU run (docs/e3/DECISIONS.md, 2026-09-28): E3-0 -- fixed epsilon=1 data, no loop --
+# in the experimental environment AND in its reference, seeds 0 (class A) and 5 (class B):
+# 4 runs, one process each (launch_gpu_e30.sh). Target: at most ~6 h per run on the lab A100,
+# the 4 runs side by side (budget justified in DECISIONS.md, 2026-09-28, from the CPU
+# profile; preflight.py measures the real A100 rate and prints the projected duration).
+#
+# Architecture: the spec's (section 3.1: base depth 32, h_dim 256; embed_dim 256 = RSSMConfig's
+# default) with the 8x8 latent of mini_long (the capacity sweep comes later); batch 16 x 64
+# (spec 3.3). Procedure unchanged from mini_long: criterion switch, lr 1e-3 -> 1e-4 at the
+# switch, beta_rep ramp after it, no clipping, both guards active. The switch deadline is
+# large and absolute. A run that does not separate is reported as a failure, never re-run
+# with another seed without it being recorded.
+#
+# Expected shapes: those of mini_long (run_mini.shape_verdicts), judged in REAL contexts
+# (the main measure since 2026-09-28), by dynamics type in the reference environment.
+
+model:
+  n_vars: 8
+  n_classes: 8
+  h_dim: 256
+  embed_dim: 256
+  base_depth: 32
+  unimix: 0.01
+
+render:
+  k: 6
+  grid_lines: false
+  cielab_min_dist: 30.0
+  cielab_marker_min_dist: 30.0
+
+budget:
+  total_steps: 99744       # + prefill 256 = 100,000 environment steps (~139 per (s, a) pair on average)
+  prefill_steps: 256
+  checkpoints: [99744]     # informational only; the saved checkpoints are the `checkpoints` block below
+
+collection:
+  start_distribution: uniform_non_terminal
+  epsilon: 1.0
+
+train:
+  batch_size: 16
+  seq_len: 64
+  # Gradient steps per environment step (run_mini's convention): 0.6 x 100,000 = 60,000 gradient
+  # steps, i.e. 60,000 x 16 x 64 / 100,000 = 614 replayed steps per environment step.
+  replay_ratio: 0.6
+  lr: 1.0e-3
+  lr_after_switch: 1.0e-4
+  adam_eps: 1.0e-8
+  clip_norm: null
+  w_patch: 10.0
+  beta_dyn: 0.5
+  beta_rep: 0.1
+  free_bits: 0.0
+  free_bits_mode: per_step
+  rep_warmup_steps: null
+  latent_estimator:
+    kind: warmup_probs_until_separated
+    switch_js_threshold: 3.0
+    switch_consecutive: 5
+    switch_eval_every: 50
+    switch_min_steps: 500
+    switch_max_steps: 40000   # absolute; 2/3 of the budget, > 2x the largest RSSM estimate from THEME_SENSITIVITY.md
+    switch_n_pairs: 64
+    collapse_js_threshold: 1.0
+    collapse_consecutive: 5
+
+measure:
+  iz_mc_samples_training: 2000
+  iz_mc_samples_final: 4096
+  kernel_k_s: 16
+  kernel_margin_threshold: 1.0e-3
+  z_only_test_frac: 0.2
+  z_only_seq_len: 64
+  context_dispersion_n_samples: 100
+  d1_contrast_min_bits: 0.25
+  separation_every: 1000
+  monitor_every: 1000
+  diagnostics_every: null            # measured at the checkpoints of the grid (below) and at the end
+  diagnostics_at_checkpoints: true
+  real_context:
+    window_len: null                 # = seq_len (64)
+    burn_in: 8
+    max_per_state: 50
+    kernel_draws: 32
+
+checkpoints:
+  grid: e2          # E2's grid points <= 100,000 env steps x 0.6: gradient steps 600, 951, ..., 37,858 (+ the end, 60,000)
+  resume_every: 2000
+
+conditions: [experimental, reference]
+
+runtime:
+  num_threads: 4     # 4 processes side by side on the A100 host
+  device: cuda
+  # GPU determinism policy (audit B7, DECISIONS.md 2026-09-28): deterministic algorithms (warn only),
+  # cuDNN deterministic, no benchmark, CUBLAS_WORKSPACE_CONFIG=:4096:8, TF32 off.
+  deterministic: true
+
+seeds: [0, 5]  # rotation 0 (class A) and rotation 1 (class B)

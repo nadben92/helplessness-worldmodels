@@ -29,10 +29,11 @@ import torch.nn.functional as F
 from helplessness.agents.worldmodel.agent import categorical_mode, sample_categorical_batch
 from helplessness.agents.worldmodel.loop import to_chw_float, unroll_observation
 from helplessness.agents.worldmodel.replay import ModelBatch, LabelBatch
-from helplessness.agents.worldmodel.rssm import RSSM, straight_through_sample
+from helplessness.agents.worldmodel.rssm import RSSM, categorical_kl, sample_categorical_index, straight_through_sample
+from helplessness.measures.context_summary import per_state_context_summary
 from helplessness.measures.diagnostics import alpha_app as alpha_app_fn
 from helplessness.measures.diagnostics import jensen_shannon_product, mean_pairwise_jensen_shannon
-from helplessness.measures.kernel_probe import kernel_probe
+from helplessness.measures.kernel_probe import kernel_from_matches, kernel_probe, match_templates
 from helplessness.measures.latent_controllability import latent_controllability, latent_state_information, per_variable_entropy
 
 
@@ -159,7 +160,7 @@ def template_match_accuracy(
     a_seq = torch.as_tensor(model_batch.a, dtype=torch.long, device=device)
     is_first_seq = torch.as_tensor(model_batch.is_first, dtype=torch.bool, device=device)
     with torch.no_grad():
-        out = unroll_observation(rssm, x_seq, a_seq, is_first_seq, generator=generator)
+        out = unroll_observation(rssm, x_seq, a_seq, is_first_seq, generator=generator, decode=False)
         decoded = rssm.decoder(out["h"].reshape(-1, rssm.cfg.h_dim), out["z"].reshape(-1, rssm.cfg.latent_dim))
     decoded_np = decoded.detach().cpu().numpy()
     templates_np = templates.detach().cpu().numpy()
@@ -182,26 +183,48 @@ def z_only_probe(
     that z "carries" the state, without claiming this proves the state
     is USED (see CLAUDE.md's own caveat, docs/E3_worldmodel_4zones.md).
     Pass replay.chronological_windows(...) to train on every available
-    posterior, not a small random subsample. Also returns the mean
-    posterior entropy (bits) over the same samples -- a collapse
-    diagnostic computed at no extra cost from the same unroll."""
+    posterior, not a small random subsample (or use z_only_probe_chunked
+    with replay.iter_chronological_windows for a large buffer). Also
+    returns the mean posterior entropy (bits) over the same samples -- a
+    collapse diagnostic computed at no extra cost from the same unroll."""
+    return z_only_probe_chunked(rssm, [(model_batch, label_batch)], n_states, test_frac, rng, epochs=epochs, lr=lr)
+
+
+def z_only_probe_chunked(
+    rssm: RSSM, chunks, n_states: int, test_frac: float, rng: np.random.Generator, epochs: int = 300, lr: float = 0.05,
+    generator: torch.Generator | None = None,
+) -> dict[str, float]:
+    """z_only_probe over an iterable of (ModelBatch, LabelBatch) chunks
+    (audit B4): each chunk is unrolled without decoding and only z (and
+    the posterior entropies) are kept, so the whole buffer never sits in
+    one image tensor. The same windows in one chunk or in several give
+    the same samples."""
     device = next(rssm.parameters()).device
-    x_seq = to_chw_float(model_batch.x, device)
-    a_seq = torch.as_tensor(model_batch.a, dtype=torch.long, device=device)
-    is_first_seq = torch.as_tensor(model_batch.is_first, dtype=torch.bool, device=device)
+    zs, labels, entropies = [], [], []
     with torch.no_grad():
-        out = unroll_observation(rssm, x_seq, a_seq, is_first_seq)
-    post_probs = out["post_probs"].reshape(-1, rssm.cfg.n_vars, rssm.cfg.n_classes).detach().cpu().numpy()
-    mean_posterior_entropy = float(per_variable_entropy(post_probs).mean())
-    z = out["z"].reshape(-1, rssm.cfg.latent_dim).to(device)
-    s = torch.as_tensor(label_batch.s.reshape(-1), dtype=torch.long, device=device)
+        for model_batch, label_batch in chunks:
+            x_seq = to_chw_float(model_batch.x, device)
+            a_seq = torch.as_tensor(model_batch.a, dtype=torch.long, device=device)
+            is_first_seq = torch.as_tensor(model_batch.is_first, dtype=torch.bool, device=device)
+            out = unroll_observation(rssm, x_seq, a_seq, is_first_seq, generator=generator, decode=False)
+            post = out["post_probs"].reshape(-1, rssm.cfg.n_vars, rssm.cfg.n_classes).detach().cpu().numpy()
+            entropies.append(per_variable_entropy(post))
+            zs.append(out["z"].reshape(-1, rssm.cfg.latent_dim))
+            labels.append(np.asarray(label_batch.s).reshape(-1))
+    mean_posterior_entropy = float(np.concatenate(entropies).mean())
+    z = torch.cat(zs).to(device)
+    s = torch.as_tensor(np.concatenate(labels), dtype=torch.long, device=device)
 
     n = z.shape[0]
     perm = torch.as_tensor(rng.permutation(n), device=device)
     n_test = int(n * test_frac)
     test_idx, train_idx = perm[:n_test], perm[n_test:]
 
-    classifier = torch.nn.Linear(rssm.cfg.latent_dim, n_states).to(device)
+    # The classifier's initial weights come from `rng` too (a forked CPU torch RNG seeded from it), never
+    # from the global torch RNG: the probe then gives the same numbers whatever ran before it.
+    with torch.random.fork_rng(devices=[]):
+        torch.manual_seed(int(rng.integers(2**63 - 1)))
+        classifier = torch.nn.Linear(rssm.cfg.latent_dim, n_states).to(device)
     optimizer = torch.optim.Adam(classifier.parameters(), lr=lr)
     for _ in range(epochs):
         optimizer.zero_grad()
@@ -246,7 +269,7 @@ def context_dispersion(
     a_seq = torch.as_tensor(model_batch.a, dtype=torch.long, device=device)
     is_first_seq = torch.as_tensor(model_batch.is_first, dtype=torch.bool, device=device)
     with torch.no_grad():
-        out = unroll_observation(rssm, x_seq, a_seq, is_first_seq)
+        out = unroll_observation(rssm, x_seq, a_seq, is_first_seq, decode=False)
     h_all = out["h"].reshape(-1, rssm.cfg.h_dim)
     z_all = out["z"].reshape(-1, rssm.cfg.n_vars, rssm.cfg.n_classes)
     s_all = label_batch.s.reshape(-1)
@@ -430,3 +453,262 @@ def latent_usage_diagnostic(rssm: RSSM, templates: torch.Tensor, M: int, rng: np
         "logit_norm_centered": float(centered.norm(dim=-1).mean()),
         "logit_norm_raw": float(logits.norm(dim=-1).mean()),
     }
+
+
+# ---------------------------------------------------------------------
+# the main measure in REAL contexts (docs/e3/DECISIONS.md, 2026-09-28):
+# the contexts (h_t, z_t) of replay windows unrolled with their true
+# history, instead of the learned initial state h0 of the canonical probe
+# (which the model rarely sees with an arbitrary state, and from which
+# the template accuracy was 0.40 against 0.98 in real contexts)
+# ---------------------------------------------------------------------
+
+
+def select_real_contexts(
+    s_all: np.ndarray, is_first_all: np.ndarray, window_len: int, burn_in: int, max_per_state: int, n_states: int,
+    rng: np.random.Generator,
+) -> dict[str, np.ndarray]:
+    """Which replay steps serve as contexts (labels in, positions out --
+    no model involved). The buffer (logical order) is cut into consecutive
+    windows of window_len steps, each followed by at least one more stored
+    step (so a context at a window's last step still has its next step):
+    n_windows = (n_steps - 1) // window_len. A step is eligible if it is
+    not among the first `burn_in` steps of its window and is not an
+    is_first step (both are the h0 regime). For each state, up to
+    max_per_state eligible steps are drawn without replacement from rng
+    (states in increasing order); every eligible step is kept when there
+    are fewer. Returns positions (n,) sorted by state then position,
+    states (n,), window (n,), t (n,), and n_eligible (n_states,)."""
+    s_all, is_first_all = np.asarray(s_all), np.asarray(is_first_all, dtype=bool)
+    n_windows = (len(s_all) - 1) // window_len
+    if n_windows <= 0:
+        raise ValueError(f"need more than window_len={window_len} stored steps, got {len(s_all)}")
+    positions = np.arange(n_windows * window_len)
+    t = positions % window_len
+    eligible = positions[(t >= burn_in) & ~is_first_all[: n_windows * window_len]]
+    eligible_states = s_all[eligible]
+    order = np.argsort(eligible_states, kind="stable")
+    eligible, eligible_states = eligible[order], eligible_states[order]
+    bounds = np.searchsorted(eligible_states, np.arange(n_states + 1))
+    chosen, n_eligible = [], np.zeros(n_states, dtype=np.int64)
+    for s in range(n_states):
+        cand = eligible[bounds[s]:bounds[s + 1]]
+        n_eligible[s] = cand.size
+        if cand.size > max_per_state:
+            cand = np.sort(rng.choice(cand, size=max_per_state, replace=False))
+        chosen.append(cand)
+    positions = np.concatenate(chosen).astype(np.int64)
+    return {"positions": positions, "states": s_all[positions].astype(np.int64), "window": positions // window_len,
+            "t": positions % window_len, "n_eligible": n_eligible}
+
+
+def real_context_probe(
+    rssm: RSSM, replay, window_len: int, burn_in: int, max_per_state: int, n_states: int, rng: np.random.Generator,
+    generator: torch.Generator | None = None, chunk: int = 256,
+) -> dict:
+    """The contexts of select_real_contexts, computed by unrolling their
+    windows (window_len + 1 steps, from the learned initial state at the
+    window's start, exactly as training unrolls a window) with hard
+    straight-through posterior samples drawn from `generator`. For each
+    context (step t of a window, true state s_t):
+      h, z          the context itself (torch, on the model's device): h_t
+                    and the posterior sample z_t of the unroll;
+      post_probs    q(z_t | h_t, e(x_t));
+      prior_probs   for every action a, p(z_{t+1} | GRU(h_t, z_t, a)) --
+                    the one-step predictions from the context
+                    (imagination_step, as the canonical probe);
+      h_next        GRU(h_t, z_t, a) for every action (torch);
+      kl_next_bits  KL(q_{t+1} || p_{t+1}) in bits for the transition the
+                    data actually took from the context (action a_t): the
+                    model's one-step prediction error from state s_t, the
+                    same pairing as the training loss; NaN when step t+1
+                    starts a new episode (no transition).
+    Labels select the contexts; they never enter the model."""
+    device = next(rssm.parameters()).device
+    s_all, is_first_all = replay.labels_and_flags()
+    sel = select_real_contexts(s_all, is_first_all, window_len, burn_in, max_per_state, n_states, rng)
+    n_ctx = sel["positions"].size
+    V, C, A, H = rssm.cfg.n_vars, rssm.cfg.n_classes, rssm.cfg.n_actions, rssm.cfg.h_dim
+    h_ctx = torch.zeros(n_ctx, H, device=device)
+    z_ctx = torch.zeros(n_ctx, V, C, device=device)
+    post_ctx = np.zeros((n_ctx, V, C))
+    kl_next = np.full(n_ctx, np.nan)
+    windows = np.unique(sel["window"])
+    with torch.no_grad():
+        for first in range(0, windows.size, chunk):
+            block = windows[first:first + chunk]
+            model_batch, _ = replay.windows(block * window_len, window_len + 1)
+            x_seq = to_chw_float(model_batch.x, device)
+            a_seq = torch.as_tensor(model_batch.a, dtype=torch.long, device=device)
+            is_first_seq = torch.as_tensor(model_batch.is_first, dtype=torch.bool, device=device)
+            out = unroll_observation(rssm, x_seq, a_seq, is_first_seq, generator=generator, decode=False)
+            members = np.flatnonzero(np.isin(sel["window"], block))
+            row_np, t_np = np.searchsorted(block, sel["window"][members]), sel["t"][members]
+            row, t = torch.as_tensor(row_np, device=device), torch.as_tensor(t_np, device=device)
+            member_t = torch.as_tensor(members, device=device)
+            h_ctx[member_t] = out["h"][row, t]
+            z_ctx[member_t] = out["z"][row, t]
+            post_ctx[members] = out["post_probs"][row, t].cpu().numpy()
+            kl = categorical_kl(out["post_probs"][row, t + 1], out["prior_probs"][row, t + 1]).cpu().numpy() / np.log(2.0)
+            kl_next[members] = np.where(np.asarray(model_batch.is_first)[row_np, t_np + 1], np.nan, kl)
+        prior_ctx = torch.zeros(n_ctx, A, V, C, device=device)
+        h_next = torch.zeros(n_ctx, A, H, device=device)
+        step = chunk * 16
+        for first in range(0, n_ctx, step):
+            sl = slice(first, min(first + step, n_ctx))
+            for a in range(A):
+                a_onehot = F.one_hot(torch.full((sl.stop - sl.start,), a, device=device, dtype=torch.long),
+                                     num_classes=A).to(z_ctx.dtype)
+                out_a = rssm.imagination_step(h_ctx[sl], z_ctx[sl], a_onehot, generator=generator)
+                prior_ctx[sl, a] = out_a["prior_probs"]
+                h_next[sl, a] = out_a["h"]
+    return {**sel, "h": h_ctx, "z": z_ctx, "post_probs": post_ctx, "prior_probs": prior_ctx.cpu().numpy(),
+            "prior_probs_t": prior_ctx, "h_next": h_next, "kl_next_bits": kl_next, "n_states": n_states,
+            "window_len": window_len, "burn_in": burn_in, "max_per_state": max_per_state}
+
+
+def real_context_iz(contexts: dict, M: int, rng: np.random.Generator) -> dict[str, np.ndarray]:
+    """I_z of every context (the same exact-density estimator as the
+    canonical probe, measures.latent_controllability), then per state
+    (measures.context_summary): mean over the state's contexts, sd, number
+    of contexts and the standard error of the mean. A state without a
+    context is NaN ("non mesuré")."""
+    n_ctx = contexts["positions"].size
+    I_ctx, se_ctx = np.empty(n_ctx), np.empty(n_ctx)
+    for i in range(n_ctx):
+        result = latent_controllability(contexts["prior_probs"][i], M=M, rng=rng)
+        I_ctx[i], se_ctx[i] = result["I_z"], result["se"]
+    summary = per_state_context_summary(I_ctx, contexts["states"], contexts["n_states"], mc_se=se_ctx)
+    return {"I_z_context": I_ctx, "se_context": se_ctx, "I_z": summary["mean"], "se": summary["se"], "sd": summary["sd"],
+            "n_contexts": summary["n"]}
+
+
+def real_context_kernel(
+    rssm: RSSM, contexts: dict, templates: torch.Tensor, draws: int, margin_threshold: float,
+    generator: torch.Generator | None = None, chunk: int = 1024,
+) -> dict[str, np.ndarray]:
+    """The s-space kernel (spec 5.3) from the real contexts: for every
+    measured state s and action a, `draws` samples z' ~ p(. | h_{t+1,a}),
+    the i-th draw from the state's (i mod n_s)-th context, decoded as
+    decode(h_{t+1,a}, z') and matched to the n_states templates
+    (measures.kernel_probe). p_hat (n_states, n_actions, n_states) and
+    ghost_fraction (n_states, n_actions) are NaN for a state without a
+    context."""
+    device = next(rssm.parameters()).device
+    n_states, A = contexts["n_states"], rssm.cfg.n_actions
+    templates_np = templates.detach().cpu().numpy()
+    p_hat = np.full((n_states, A, n_states), np.nan)
+    ghost = np.full((n_states, A), np.nan)
+    rows_ctx, rows_a, rows_owner = [], [], []
+    for s in range(n_states):
+        ctx_s = np.flatnonzero(contexts["states"] == s)
+        if ctx_s.size == 0:
+            continue
+        ctx = ctx_s[np.arange(draws) % ctx_s.size]
+        for a in range(A):
+            rows_ctx.append(ctx)
+            rows_a.append(np.full(draws, a))
+            rows_owner.append(np.full(draws, s * A + a))
+    if not rows_ctx:
+        return {"p_hat": p_hat, "ghost_fraction": ghost}
+    rows_ctx, rows_a, rows_owner = np.concatenate(rows_ctx), np.concatenate(rows_a), np.concatenate(rows_owner)
+    nearest = np.empty(rows_ctx.size, dtype=np.int64)
+    is_ghost = np.empty(rows_ctx.size, dtype=bool)
+    with torch.no_grad():
+        for first in range(0, rows_ctx.size, chunk):
+            sl = slice(first, min(first + chunk, rows_ctx.size))
+            c = torch.as_tensor(rows_ctx[sl], device=device)
+            a = torch.as_tensor(rows_a[sl], device=device)
+            probs = contexts["prior_probs_t"][c, a]
+            z = F.one_hot(sample_categorical_index(probs, generator), num_classes=probs.shape[-1]).to(probs.dtype)
+            decoded = rssm.decode(contexts["h_next"][c, a], z).cpu().numpy()
+            matched = match_templates(decoded, templates_np, margin_threshold)
+            nearest[sl], is_ghost[sl] = matched["nearest_state"], matched["is_ghost"]
+    for owner in np.unique(rows_owner):
+        idx = rows_owner == owner
+        result = kernel_from_matches(nearest[idx], is_ghost[idx], n_states)
+        s, a = divmod(int(owner), A)
+        p_hat[s, a], ghost[s, a] = result["p_hat"], result["ghost_fraction"]
+    return {"p_hat": p_hat, "ghost_fraction": ghost}
+
+
+def real_context_template_accuracy(rssm: RSSM, contexts: dict, templates: torch.Tensor, chunk: int = 1024) -> float:
+    """Template accuracy of the posterior reconstruction decode(h_t, z_t)
+    at the real contexts themselves (after the burn-in, no h0 step)."""
+    templates_np = templates.detach().cpu().numpy()
+    n_ctx = contexts["positions"].size
+    nearest = np.empty(n_ctx, dtype=np.int64)
+    with torch.no_grad():
+        for first in range(0, n_ctx, chunk):
+            sl = slice(first, min(first + chunk, n_ctx))
+            decoded = rssm.decode(contexts["h"][sl], contexts["z"][sl]).cpu().numpy()
+            nearest[sl] = match_templates(decoded, templates_np, margin_threshold=-np.inf)["nearest_state"]
+    return float((nearest == contexts["states"]).mean()) if n_ctx else float("nan")
+
+
+def real_context_d1_iswap(
+    rssm: RSSM, contexts: dict, layout, themes, s: int, target_category: str, k: int, global_swap: bool, M: int,
+    rng: np.random.Generator, generator: torch.Generator | None = None,
+) -> dict[str, float]:
+    """D1 in real contexts: in every context of state s, the observation
+    x_t is replaced by the counterfactual render (the agent's cell
+    re-themed as target_category, or -- global -- the two zones' themes
+    swapped on the whole map); the history h_t is kept. z_t is a hard
+    sample of q(. | h_t, e(x_cf)) and I_z is computed from the one-step
+    predictions, as for the real image. Returns I_swap (mean over the
+    contexts), its standard error (sd / sqrt(n); the MC se for a single
+    context) and n; NaN when s has no context."""
+    from helplessness.envs.observation.allocentric_pixel_backend import render_counterfactual
+
+    idx = np.flatnonzero(contexts["states"] == s)
+    if idx.size == 0:
+        return {"I_swap": float("nan"), "I_swap_se": float("nan"), "n": 0}
+    own_category = layout.zone_at(divmod(s, layout.grid_shape[1])).appearance.category
+    if global_swap:
+        img = render_counterfactual(s, layout, themes, k=k, global_category_swap=(own_category, target_category))
+    else:
+        img = render_counterfactual(s, layout, themes, k=k, cell_category_override=target_category)
+    device = next(rssm.parameters()).device
+    x = torch.as_tensor(img, dtype=torch.float32, device=device).permute(2, 0, 1).unsqueeze(0) / 255.0
+    A = rssm.cfg.n_actions
+    with torch.no_grad():
+        h = contexts["h"][torch.as_tensor(idx, device=device)]
+        e = rssm.encoder(x).expand(idx.size, -1)
+        z = straight_through_sample(rssm.posterior_probs(h, e), generator)
+        priors = []
+        for a in range(A):
+            a_onehot = F.one_hot(torch.full((idx.size,), a, device=device, dtype=torch.long), num_classes=A).to(z.dtype)
+            priors.append(rssm.imagination_step(h, z, a_onehot, generator=generator)["prior_probs"])
+        priors = torch.stack(priors, dim=1).cpu().numpy()  # (n, A, V, C)
+    values, mc_se = np.empty(idx.size), np.empty(idx.size)
+    for i in range(idx.size):
+        result = latent_controllability(priors[i], M=M, rng=rng)
+        values[i], mc_se[i] = result["I_z"], result["se"]
+    se = float(values.std(ddof=1) / np.sqrt(idx.size)) if idx.size >= 2 else float(mc_se[0])
+    return {"I_swap": float(values.mean()), "I_swap_se": se, "n": int(idx.size)}
+
+
+def d2_neighbor_distances_contexts(contexts: dict, layout) -> dict[str, np.ndarray]:
+    """D2 in real contexts: for each pair of neighbouring cells (s, s2),
+    the mean over i < min(n_s, n_s2) of the JS distance
+    (measures.diagnostics.jensen_shannon_product) between the posterior of
+    the i-th context of s and that of the i-th context of s2; pairs with an
+    unmeasured cell are left out. Split into "boundary" (different
+    appearance category) and "within_zone" pairs, as d2_neighbor_distances."""
+    n_rows, n_cols = layout.grid_shape
+    post = contexts["post_probs"]
+    ctx_of_state = [np.flatnonzero(contexts["states"] == s) for s in range(n_rows * n_cols)]
+    boundary, within_zone = [], []
+    for r in range(n_rows):
+        for c in range(n_cols):
+            s = r * n_cols + c
+            for dr, dc in ((0, 1), (1, 0)):
+                r2, c2 = (r + dr) % n_rows, (c + dc) % n_cols
+                s2 = r2 * n_cols + c2
+                n = min(ctx_of_state[s].size, ctx_of_state[s2].size)
+                if n == 0:
+                    continue
+                js = float(np.mean([jensen_shannon_product(post[ctx_of_state[s][i]], post[ctx_of_state[s2][i]]) for i in range(n)]))
+                same = layout.zone_at((r, c)).appearance.category == layout.zone_at((r2, c2)).appearance.category
+                (within_zone if same else boundary).append(js)
+    return {"boundary": np.array(boundary), "within_zone": np.array(within_zone)}

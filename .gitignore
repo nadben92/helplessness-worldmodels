@@ -49,3 +49,7 @@ results/**/failure/**/*.pt
 results/**/mini_failures/**/*.pt
 results/E3_worldmodel_4zones/**/arrays.npz
 results/_dryrun*/
+
+# Preflight runs and GPU launch logs (experiments/E3_worldmodel_4zones/preflight.py, launch_gpu_e30.sh)
+results/preflight/
+logs/

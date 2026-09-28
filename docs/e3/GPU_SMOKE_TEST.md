@@ -1,5 +1,7 @@
 # E3 — GPU smoke test (Google Colab, T4)
 
+**Superseded (2026-09-28): the Colab test was cancelled. The GPU check is now `experiments/E3_worldmodel_4zones/preflight.py` (see the E3 README, "First GPU run on the A100"). Kept as the record of the protocol prepared on 2026-09-25; its commands use the retired mini.yaml.**
+
 Goal: in about 15 minutes, check that the E3 code runs on CUDA, that
 everything is on the GPU, and that memory use and the first curves are
 plausible. **Bit-for-bit equality with the CPU is not expected**: the

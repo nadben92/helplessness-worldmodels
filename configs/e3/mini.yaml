@@ -1,3 +1,6 @@
+# RETIRED from current use (docs/e3/DECISIONS.md, 2026-09-28): mini_long.yaml is the CPU
+# reference. Kept runnable for the tests that derive their tiny configs from it.
+#
 # "Mini" configuration -- the smallest config that runs the full pipeline (phase-3 point
 # 3b, docs/e3/DECISIONS.md): deliberately smaller than any Phase-4
 # calibration candidate ({8x8,16x16,32x32} at base_depth=32/h_dim=256),
@@ -31,7 +34,7 @@ render:
 budget:
   total_steps: 5000        # reduced from E2's 1e6, "budget reduit"
   prefill_steps: 256       # epsilon=0.1 policy in a real run; epsilon=1 here (E3-0 style, no policy yet)
-  checkpoints: [5000]      # single end checkpoint -- this is a smoke/shape config, not a calibration run
+  checkpoints: [5000]      # informational only; the saved checkpoints are the `checkpoints` block below
 
 collection:
   # Episode starts: uniform over the non-terminal states, drawn at every reset from the
@@ -114,6 +117,26 @@ measure:
   # gradient steps; null = only the final point. Each point costs ~2.5 min at
   # this model size (mostly the s-space kernel, 144 x 5 x kernel_k_s decodes).
   diagnostics_every: null
+  # Main measure in REAL contexts (docs/e3/DECISIONS.md, 2026-09-28): contexts (h_t, z_t) of replay
+  # windows of window_len steps (null = train.seq_len) unrolled with their true history, excluding
+  # the first burn_in steps of each window and the is_first steps; up to max_per_state per state,
+  # drawn from the measurement stream. kernel_draws: prior samples decoded per (s, a) for the
+  # s-space kernel, spread over the state's contexts.
+  real_context:
+    window_len: null
+    burn_in: 8
+    max_per_state: 50
+    kernel_draws: 32
+  diagnostics_at_checkpoints: true
+
+# Weights saved at every checkpoint of E2's grid (E2 env-step grid x replay_ratio, gradient steps)
+# and at the end; resume.pt (model + optimizer + random states) at those checkpoints and every
+# resume_every gradient steps (docs/e3/DECISIONS.md, 2026-09-28).
+checkpoints:
+  grid: e2
+  resume_every: 2000
+
+conditions: [experimental]
 
 runtime:
   # torch.set_num_threads. Results are bit-exact only on the same machine

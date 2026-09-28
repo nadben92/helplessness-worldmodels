@@ -11,7 +11,7 @@ amendment, the entry of DECISIONS.md that makes it is cited by its date and
 title. "Not implemented yet" means unchanged but not built: the phase that
 builds it is given.
 
-Last updated: 2026-09-25.
+Last updated: 2026-09-28.
 
 | § | Section | Status | Where it changed (DECISIONS.md) |
 |---|---|---|---|
@@ -20,13 +20,13 @@ Last updated: 2026-09-25.
 | 2 | Pixel environment | amended (§2.2) | 2026-09-23 Phase 0 validation, point 5; 2026-09-23 T2 entries |
 | 3 | World model | amended (§3.1–§3.3) | 2026-09-24 and 2026-09-25 entries, see below |
 | 4 | Agent | amended (§4.1, §4.3, §4.5, §4.6) | 2026-09-23 Phase 0 validation, points 1, 2, 8; 2026-09-25 episode starts; 2026-09-25 independent streams (reward convention) |
-| 5 | Measures | under review (§5.1); amended (§5.2) | 2026-09-25 after the mini run, note on h0; 2026-09-25 independent streams (Monte-Carlo counts) |
-| 6 | Conditions, runs, seeds | amended | 2026-09-25 after the mini run; 2026-09-25 episode starts; 2026-09-25 independent streams |
+| 5 | Measures | amended (§5.1, §5.2, §5.3, §5.5, via §8) | 2026-09-28 first GPU run (real contexts); 2026-09-25 independent streams (Monte-Carlo counts) |
+| 6 | Conditions, runs, seeds | amended | 2026-09-25 after the mini run; 2026-09-25 episode starts; 2026-09-25 independent streams; 2026-09-28 first GPU run (reference streams) |
 | 7 | Phase 4 — calibration | amended | 2026-09-23 Phase 0 validation, point 8; 2026-09-24 lr 1e-4 failure |
 | 8 | Position / appearance diagnostic | amended | 2026-09-25 after the mini run (D1 rule) |
 | 9 | Shape tests | amended (T2) | 2026-09-23 T2 reformulated |
-| 10 | Logs and outputs | amended; parts not implemented yet | 2026-09-23 Phase 0 validation, point 1; 2026-09-25 after the mini run |
-| 11 | Order of the phases | amended (Phase 4 split) | 2026-09-24 and 2026-09-25 entries (Phase 4a / 4b) |
+| 10 | Logs and outputs | amended; parts not implemented yet | 2026-09-23 Phase 0 validation, point 1; 2026-09-25 after the mini run; 2026-09-28 first GPU run |
+| 11 | Order of the phases | amended (Phase 4 split; first GPU run = E3-0) | 2026-09-24 and 2026-09-25 entries (Phase 4a / 4b); 2026-09-28 first GPU run |
 
 ## Detail
 
@@ -100,14 +100,14 @@ Last updated: 2026-09-25.
   - TF32 disabled.
   - *2026-09-24 lr 1e-4 failure; (i) validated; 2026-09-25 global
     clipping disabled; 2026-09-25 after the mini run.*
-  - The batch (16 × 64) is unchanged for the real runs; the mini configs
+  - The batch (16 × 64) is unchanged for the real runs (gpu_e30 uses it); the mini configs
     use 8 × 16.
 - §3.4 replay: unchanged, and made stricter:
   - capacity is checked at startup;
   - a transition is never overwritten;
   - the model batch and the label batch are two separate objects.
   - *Phase 0 validation, adjustment D; 2026-09-24 Phase 3 points 1-2.*
-- §3.5 replay ratio: unchanged (calibrated in Phase 4).
+- §3.5 replay ratio: unchanged (calibrated in Phase 4). Note: run_mini's `replay_ratio` counts gradient steps per environment step, the spec's replayed steps per environment step; configs state both. *2026-09-28 first GPU run.*
 
 ### §4 — Agent — amended (§4.1, §4.3, §4.5, §4.6); not implemented yet (Phase 5)
 
@@ -136,26 +136,30 @@ Last updated: 2026-09-25.
 
 ### §5 — Measures — under review (§5.1); amended (§5.2)
 
-- **§5.1 canonical probe: under review.**
-  - The probe starts from h0, a context under-represented in training:
-    ~8.9% of the training steps show h0 with an arbitrary state
-    (seq_len 16, uniform starts); the spec's seq_len of 64 would give ~1/64.
-  - As a result the canonical template accuracy is lower than in real
-    contexts: 0.70–0.87 against 0.99.
-  - The long run (`configs/e3/mini_long.yaml`) says whether the gap
-    closes. That result is valid for the mini configuration only; it has
-    to be measured again with the full configuration in Phase 4a.
-  - If the gap does not close, the main measure is redefined in Phase 4a:
-    a short standardised context, or replay contexts, based on the
-    context dispersion.
-  - *2026-09-25 after the mini run (note on h0); 2026-09-25 episode starts.*
+- **§5.1 canonical probe: amended -- the main measure is taken in real contexts.**
+  - The canonical probe (h0) is not valid as the main measure: template
+    accuracy 0.40 from h0 against 0.98 in real contexts (mini_long), and
+    the agent almost never acts from h0.
+  - Main measure: for each state, the contexts (h_t, z_t) of replay windows
+    unrolled with their true history where s_t = s, excluding the first 8
+    steps of each window and the is_first steps; up to 50 per state, drawn
+    with the measurement stream. I_z per context (same exact densities),
+    averaged per state; contexts per state reported; a state without a
+    context is "non mesuré". KL by zone (one-step KL of the transition taken,
+    the training loss's pairing), the s-space kernel, L1 vs P and vs B,
+    p_hat(frequent outcome), alpha_app and D2 are all computed in this
+    regime.
+  - The canonical probe stays reported as secondary. Its "KL by zone" pairs
+    the posterior of s with the prior of s' and is not a fit measure.
+  - *2026-09-28 first GPU run.*
 - **§5.2 I in z-space: amended (Monte-Carlo count).** M = 2000 for the
   diagnostics during training; M = 4096, the spec's value, for the final
   measures and the calibration. *2026-09-25 independent streams, point 4.*
   The estimator itself is unchanged.
-- §5.3 s-space kernel: unchanged. It is also used as the bridge for
+- §5.3 s-space kernel: computed from the real contexts (main) and from the canonical probe (secondary); the estimator (decode, nearest template, ghosts) is unchanged. It is also used as the bridge for
   `Agent.transition_distribution`. *2026-09-24 Phase 3 points 1-2.*
-- §5.4–§5.7: unchanged.
+- §5.5 context dispersion: read from the real contexts (per zone, mean |I_real - I_canonical| and the sd over a state's contexts). *2026-09-28 first GPU run.*
+- §5.4, §5.6, §5.7: unchanged.
 - The measures are pure numpy functions in `src/helplessness/measures/`
   (the prompt's `measure/`). *Phase 0 validation, adjustment B.*
 
@@ -174,6 +178,7 @@ Last updated: 2026-09-25.
 - The earlier deviation (actions, dynamics and themes seeded with the
   same integer) is corrected. Every run before the correction had
   correlated streams, and their noisy-zone statistics are not reliable.
+- The reference environment's streams derive from their own root, SeedSequence([seed, 1]); only the permutation and the themes are shared with the experimental run. *2026-09-28 first GPU run.*
 - The conditions (E3-0, A, Ref, B, E2 null) and the 20 seeds are unchanged.
 
 ### §7 — Phase 4 calibration — amended
@@ -218,9 +223,13 @@ Last updated: 2026-09-25.
   permutation (rotation, quadrant assignment), the block class A/B, the
   theme colours and the episode parameters in meta.yaml. *2026-09-25
   independent streams, point 2.*
+- **Implemented 2026-09-28 first GPU run:** model weights at every checkpoint of E2's grid
+  (E3-0: grid point c -> gradient step round(c x replay_ratio)) and at the
+  end, `--resume`, the compact replay (`replay.npz`, which carries every
+  column of the spec's transitions table except the episode index), the
+  world (`world.json`) and `recompute_measures.py`.
 - **Not implemented yet:**
-  - model weights per checkpoint and `--resume` (Phase 4a, B5);
-  - `transitions.parquet`;
+  - `transitions.parquet` as such (the content is in `replay.npz`);
   - aggregation scripts comparable to E2's.
 
 ### §11 — Order of the phases — amended
@@ -231,6 +240,8 @@ Last updated: 2026-09-25.
   - 4b: calibration runs on the remote GPU machine, after the GPU
     determinism policy is set.
   - *2026-09-24 and 2026-09-25 entries (notes for Phase 4a / 4b).*
-- A long diagnostic run on the mini configuration (`mini_long.yaml`)
-  comes before 4a. *2026-09-25 after the mini run.*
+- A long diagnostic run on the mini configuration (`mini_long.yaml`) came
+  before 4a (done 2026-09-26; `mini.yaml` retired, `mini_long.yaml` is the CPU
+  reference). The first GPU run is E3-0 (`gpu_e30.yaml`: seeds 0 and 5,
+  environment and reference, 8x8 latent). *2026-09-25 after the mini run; 2026-09-28 first GPU run.*
 - P5, P6 and the CLAUDE.md update at the end of P6: unchanged.

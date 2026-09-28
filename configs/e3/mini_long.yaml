@@ -39,7 +39,7 @@ render:
 budget:
   total_steps: 19744       # + prefill 256 = 20,000 environment steps; x replay_ratio 2 = 40,000 gradient steps
   prefill_steps: 256       # epsilon=0.1 policy in a real run; epsilon=1 here (E3-0 style, no policy yet)
-  checkpoints: [19744]     # not read by run_mini.py yet (periodic checkpoints are Phase 4a, B5)
+  checkpoints: [19744]     # informational only; the saved checkpoints are the `checkpoints` block below
 
 collection:
   # Episode starts: uniform over the non-terminal states, drawn at every reset from the
@@ -122,6 +122,26 @@ measure:
   # gradient steps; null = only the final point. Each point costs ~2.5 min at
   # this model size (mostly the s-space kernel, 144 x 5 x kernel_k_s decodes).
   diagnostics_every: 2000
+  # Main measure in REAL contexts (docs/e3/DECISIONS.md, 2026-09-28): contexts (h_t, z_t) of replay
+  # windows of window_len steps (null = train.seq_len) unrolled with their true history, excluding
+  # the first burn_in steps of each window and the is_first steps; up to max_per_state per state,
+  # drawn from the measurement stream. kernel_draws: prior samples decoded per (s, a) for the
+  # s-space kernel, spread over the state's contexts.
+  real_context:
+    window_len: null
+    burn_in: 8
+    max_per_state: 50
+    kernel_draws: 32
+  diagnostics_at_checkpoints: true
+
+# Weights saved at every checkpoint of E2's grid (E2 env-step grid x replay_ratio, gradient steps)
+# and at the end; resume.pt (model + optimizer + random states) at those checkpoints and every
+# resume_every gradient steps (docs/e3/DECISIONS.md, 2026-09-28).
+checkpoints:
+  grid: e2
+  resume_every: 2000
+
+conditions: [experimental]
 
 runtime:
   # torch.set_num_threads. Results are bit-exact only on the same machine

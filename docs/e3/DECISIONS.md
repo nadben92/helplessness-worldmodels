@@ -11,6 +11,25 @@ reference for everything this log does not change. Section by section,
 `docs/e3/SPEC_STATUS.md` records which parts of the prompt are unchanged,
 amended (with the entry below that amends them) or under review.
 
+**Working mode (user, 2026-09-25).** The implementer decides alone, without
+asking, and records each decision in one line in this log (under
+"Engineering decisions" in the entry of the step), for:
+- implementation bugs, tests, refactorings, performance, documentation, tooling;
+- random streams, reproducibility, run infrastructure;
+- alignment with E2 where E2's behaviour is unambiguous;
+- fixes to tests broken by a legitimate change (keeping what the test checks).
+The implementer stops and reports to the user only:
+- anything that changes what is measured or how it is interpreted (I, b,
+  canonical probe, kernel, diagnostics);
+- any deviation from E2's protocol or from this log that is not a plain bug;
+- any hyperparameter or criterion chosen while looking at results;
+- any result that contradicts an expected shape;
+- any irreversible action or action outside the local repository (the push
+  stays with the user; commits are free).
+Reports: one per completed step, not one per decision, with three sections --
+results; scientific decisions to take (if any); engineering decisions taken
+alone (short list).
+
 ## 2026-09-23 — Phase 0 validation
 
 1. **Checkpoint grid.** The spec's "11 checkpoints" is corrected to E2's
@@ -1472,3 +1491,262 @@ arrival at the goal (replacing the step cost) and -1 for every other
 step. E3 aligns with it: the environment already does, and the goal head
 will use r = 50·p_goal - 1·(1 - p_goal) (Phase 5). The spec 4.1
 amendment is marked "decided" in SPEC_STATUS.md.
+
+## 2026-09-25 -- rule for mini.yaml's switch deadline, fixed before the theme-sensitivity results
+
+Set by the user before any result of the characterisation
+(THEME_SENSITIVITY.md: 10 colour draws in the isolation test, deadline
+8,000, censored draws reported as "> 8,000").
+
+1. **If no draw is censored:**
+   - mini.yaml's deadline = (maximum switch step observed in the
+     autoencoder) x (RSSM / autoencoder factor) x 1.25, capped at 80% of
+     mini's budget (0.8 x 10,512 = 8,409).
+   - The RSSM / autoencoder factor is the LARGER of the two available
+     pairs:
+     - seed 0, old themes: RSSM 4,801 / AE 2,301;
+     - seed 0, new themes: RSSM switch step of mini_long / AE 4,901.
+   - If the deadline exceeds the cap, **mini's budget is increased**; the
+     margin is never reduced.
+2. **If at least one draw is censored:**
+   - mini.yaml's deadline is set to the cap (8,409), with no other
+     adjustment.
+   - The case is treated as a **robustness problem of the start-up
+     procedure**, not as a deadline setting.
+   - The report gives the correlations with the colour statistics,
+     keeping the agent-theme contrast apart from the distances between
+     themes.
+   - No remedy is proposed before the user has read the report. If a
+     constraint is considered, it would bear on the agent-theme contrast,
+     never on the distances between themes (which E4/E5 manipulate).
+3. **In every case,** the report adds mini_long's switch step (when it
+   is available) and the RSSM / autoencoder factor it implies.
+
+## 2026-09-28 -- first GPU run (E3-0): main measure in real contexts, recomputation, themes closed, B4-B7, budget
+
+Change of plan (user): no re-run of mini_long, no Colab test. The first
+GPU run is E3-0 (epsilon = 1 data) in the environment and in its reference,
+on the lab A100, launched by the supervisor. Scientific decisions 1-5 below
+are the user's; the implementation choices under them and the engineering
+list are the implementer's.
+
+### Scientific decisions (user)
+
+**1. Main measure: real contexts (spec 5.1 amended).** The canonical probe
+(learned initial state h0) is not valid as the main measure: template
+accuracy 0.40 from h0 against 0.98 in real contexts on mini_long, and the
+agent almost never acts from h0. New main measure:
+- for each state s, the contexts (h_t, z_t) of replay windows unrolled
+  with their true history where s_t = s, excluding the first 8 steps of
+  each window and the is_first steps (the h0 regime); up to 50 contexts per
+  state (configurable), drawn with the measurement stream;
+- I_z computed in every context (same exact densities), then averaged per
+  state; the number of contexts per state is reported and a state with no
+  context is "non mesuré";
+- KL(posterior || prior) by zone, the s-space kernel (decoding prior
+  samples from these contexts), L1 vs P and vs B, p_hat(frequent outcome),
+  alpha_app and D2: all computed in this regime.
+The canonical probe stays in every report as secondary.
+
+**2. Everything recomputable without re-running.** Model weights at every
+checkpoint of E2's grid and at the end (and on failure, as before), the
+compact replay (state indices, actions, rewards, flags) and the theme
+configuration are saved; a script recomputes every measure from a run
+directory.
+
+**3. Theme sensitivity: conclusion by the criterion fixed in advance**
+(recorded as is in THEME_SENSITIVITY.md): the variability between
+replicates is of the same order as between colours, the correlations are
+not interpretable, and the switch step depends mostly on the randomness of
+training. The RSSM / autoencoder factor is not stable (2.09 and 0.85). 1
+run out of 16 did not separate before 8,000 steps: the start-up procedure
+is not fully robust. No further investigation for E3.
+
+**4. mini.yaml retired from current use**; mini_long.yaml is the CPU
+reference. No budget increase; mini's deadline rule (2026-09-25 entry) is
+closed without object.
+
+**5. GPU deadlines large and absolute.** A run that does not separate is
+reported as a failure, never re-run with another seed without it being
+recorded.
+
+### How decision 1 is implemented (`probe.py`, `run_mini.real_context_measures`)
+
+- **Windows.** The replay (logical order) is cut into consecutive windows
+  of `measure.real_context.window_len` steps (null = the training seq_len:
+  16 in mini_long, 64 in gpu_e30), each followed by at least one stored step
+  (n_windows = (n_steps - 1) // window_len). Each window is unrolled from
+  the learned initial state at its start, exactly as training unrolls a
+  window, with hard straight-through posterior samples from the measurement
+  generator. Selection uses the labels only (`select_real_contexts`: pure
+  function, tested); labels never enter the model.
+- **z_t of a context** is the unroll's own posterior sample (the value the
+  recurrence carried forward), not the posterior mode used by the canonical
+  probe. The one-step predictions from a context are
+  p(z_{t+1} | GRU(h_t, z_t, a)) for the 5 actions (imagination_step, as the
+  canonical probe).
+- **Standard error of a state's mean**: sd over its contexts / sqrt(n) (the
+  spread already contains each estimate's Monte-Carlo noise); the context's
+  own MC se when n = 1 (`measures/context_summary.py`, tested). Zone means
+  are over the measured states, se = sqrt(sum se_s^2) / n_measured. These
+  se's are the ones the D1 rule, the orderings and the shape checks use.
+- **KL(posterior || prior) in real contexts** is KL(q_{t+1} || p_{t+1}) for
+  the transition the data actually took from the context (action a_t) --
+  the training loss's pairing -- NaN when step t+1 starts an episode;
+  averaged per state, then per zone. **Finding, reported:** the canonical
+  "KL by zone" (`kl_post_prior_by_zone`, since Phase 3) compares the
+  posterior of the CURRENT state s at h0 with the prior predicted for the
+  NEXT state after each action. The two describe different states whenever
+  s' != s, so the quantity is large even for a perfect model (with 1%
+  unimix, one latent variable that differs costs ~9.6 bits). The "9-18
+  bits" of the mini run and the KL shape checks of mini_long were judged on
+  it: they were not a measure of the prior's fit. The canonical KL is kept,
+  labelled as such, in the secondary section.
+- **s-space kernel**: for every measured state and action, 32 prior samples
+  (`kernel_draws`), the i-th from the state's (i mod n)-th context, decoded
+  from h_{t+1,a} and matched to the 144 templates (the same
+  measures.kernel_probe functions).
+- **D1**: in every context of s, x_t is replaced by the counterfactual render
+  (local or global), the history h_t is kept, z_t is a hard sample of
+  q(. | h_t, e(x_cf)); I_swap(s) = mean over the contexts, se = sd / sqrt(n).
+  Zone means and their se's from the real-context I_z. Only measured states
+  of L enter; a pair with an unmeasured zone is "non mesuré".
+- **D2**: for neighbouring cells (s, s2), the mean over i < min(n_s, n_s2)
+  of the JS distance between the posteriors of their i-th contexts.
+- **Context dispersion (spec 5.5)** is now read from the same contexts: per
+  zone, the mean |I_real(s) - I_canonical(s)| and the mean sd of I_z over a
+  state's contexts (the old 100-sample version is superseded).
+- **The goal (state 0) is never measured in real contexts**, by
+  construction: it is terminal, so it is never the current state of a
+  stored step (an episode ends on arrival and the next step is a reset).
+  Every report lists it as "non mesuré"; the canonical probe still covers it.
+- **Template accuracy** gets a fourth labelled number: decode(h_t, z_t) at
+  the real contexts themselves.
+- **Shape checks** (unchanged rules, fixed 2026-09-25) are judged in real
+  contexts, the canonical ones printed as secondary. In the reference
+  environment the rules bear on the dynamics: "deterministic zone" and the
+  two I_z rules select zones by their dynamics type there, so the
+  conveyor-looking zone (controllable-deterministic in the reference) falls
+  under "I_z increasing" and "I_z of the conveyor decreasing" has no zone;
+  the checklist's conveyor ordering is "non applicable". This is the direct
+  application of the rules to the reference, not a new expected shape; it
+  is flagged in the report.
+- Cost at gpu_e30's size, measured on this CPU with the mini model: one
+  training-diagnostic point ~2-3 min (7,200 I_z at M = 2000, 23,040 decodes).
+
+### How decision 2 is implemented
+
+- `replay.npz` (after collection): s int16, a int8, r float32, terminal,
+  truncated, is_first, the true s_next of every step (the next stored step
+  is a reset state at an episode's end, so N is only recoverable with it),
+  N and the episode starts. `world.json`: seed, condition, permutation,
+  theme colours, render settings, the dynamics seed and the sha256 of the
+  144 pre-rendered images (a rebuild must reproduce it, or the recomputation
+  stops).
+- `checkpoints/weights_stepNNNNNNNN.pt` at every checkpoint of E2's grid,
+  `weights_final.pt`, and `failure/checkpoint.pt` as before. **E3-0 mapping
+  of the grid**: all data is collected first, so grid point c (environment
+  steps, c <= the run's total) maps to gradient step round(c x replay_ratio)
+  -- "the training a run at this ratio would have done after c environment
+  steps". gpu_e30: 600, 951, 1,507, 2,389, 3,786, 6,000, 9,509, 15,071,
+  23,887, 37,858, and the end (60,000). The training diagnostics are taken
+  at these points (`measure.diagnostics_at_checkpoints`).
+- `recompute_measures.py <run dir> --checkpoint final|all|failure|<step>`
+  runs the same `run_mini.measure_final` with the same measurement streams:
+  on the same device and threads it reproduces the run's own final arrays
+  bit for bit (tested, and printed by the script).
+- The z-only probe's linear classifier was initialised from the global
+  torch RNG; it is now initialised from its measurement stream (a forked
+  RNG), so a probe gives the same numbers whatever ran before it.
+- **mini_long cannot be recomputed**: its weights were not saved. Its
+  report stays the record of what was measured then.
+
+### GPU run: `configs/e3/gpu_e30.yaml`, budget and expected duration
+
+Seeds 0 (class A) and 5 (class B), experimental and reference: 4 runs,
+one process each, side by side on the A100 (`launch_gpu_e30.sh`).
+- **Architecture: the spec's** (3.1: base depth 32, h_dim 256; embed_dim
+  256, RSSMConfig's default) with the 8x8 latent of mini_long, and the
+  spec's batch of 16 x 64 (3.3). The mini sizes were a CPU reduction; the
+  capacity sweep comes later. Procedure unchanged from mini_long.
+- **Data: 100,000 environment steps** (99,744 + 256 prefill), ~139 visits
+  per (s, a) on average (mini_long: 28), enough for C-b's N[s,a] >= 100 on
+  most pairs, and a point of E2's grid.
+- **Training: 60,000 gradient steps** (`replay_ratio: 0.6` gradient steps
+  per environment step = 614 replayed steps per environment step; mini_long
+  had 256). **Note (convention):** run_mini's `replay_ratio` has always
+  been gradient steps per environment step; the spec (3.5) defines it as
+  replayed steps per environment step. Both numbers are given here; the
+  code's meaning is unchanged.
+- **Switch deadline 40,000** (absolute): more than twice the largest RSSM
+  estimate available (6,401 x 2.09 = 13,400 from THEME_SENSITIVITY.md), and
+  leaves 20,000 steps after a switch at the deadline.
+- **Duration, extrapolated from the CPU profile** (no GPU here):
+  - a training step at this size is ~12,000 aten calls (torch.profiler,
+    after 7.1) and ~0.32 TFLOP (encoder + decoder, forward and backward,
+    1,024 images of 72x72);
+  - host side (eager dispatch, ~5-10 us per call): 0.06-0.12 s per step;
+    device side (FP32 convolutions, TF32 off, ~6-8 TFLOP/s effective on an
+    A100): ~0.05 s; the two overlap, so one process alone: ~0.1-0.15 s per
+    step; four processes sharing the GPU: up to ~0.25 s per step each;
+  - training: 60,000 x 0.1-0.25 s = 1.7-4.2 h; 10 diagnostic points x
+    ~3 min = 0.5 h; final measures (real contexts, z-only probe, D1 in real
+    contexts) ~0.3 h; collection ~2 min;
+  - **total: ~2.5-5 h per run, the 4 side by side**, under the ~6 h target
+    at the pessimistic end.
+  `preflight.py` measures the real rates (alone and 4 side by side) and
+  prints the projected duration before launch; the budget is not adjusted
+  to the machine after the fact.
+
+### Engineering decisions taken alone (audit step B and follow-ups)
+
+- **B4** -- `z_only_probe_chunked`: the buffer is unrolled 256 windows at
+  a time without decoding; only z and the entropies are kept. The same
+  windows give the same samples in one chunk or several (tested).
+- **B5** -- checkpoints as above; `checkpoints/resume.pt` (model, Adam,
+  switch state, progress, loss history, curves, diagnostics, every training
+  and measurement random state, torch global RNG) written atomically at
+  every checkpoint and every `checkpoints.resume_every` steps (2,000),
+  `latest.json` pointer; `run_mini.py --resume <run dir>` continues in the
+  same directory. Tested: a run crashed after its resume point and resumed
+  gives bit-identical losses, switch step, diagnostics and final measures
+  to an uninterrupted run (CPU).
+- **B6** -- `ReplayBuffer(capacity, table=...)`: a private int16 index into
+  the run's 144 pre-rendered images instead of the pixels; `add()` asserts
+  x == table[s] bit for bit (`ObservationTableMismatch`); `to_device()` puts
+  the table on the GPU and minibatches are gathered there (no image crosses
+  the host-device link). Same windows as pixel mode for the same stream
+  (tested); pixel mode kept for tests and tools whose images are not
+  renders. 100,000 steps: ~2 MB instead of 1.6 GB.
+- **B7 -- GPU determinism policy**: `runtime.deterministic: true` sets
+  `torch.use_deterministic_algorithms(True, warn_only=True)`,
+  cuDNN deterministic, no cuDNN benchmark, `CUBLAS_WORKSPACE_CONFIG=:4096:8`
+  (set before CUDA starts), TF32 off; all recorded in meta.yaml.
+  warn_only: an op without a deterministic CUDA implementation warns in the
+  console instead of killing a multi-hour run. The target is bit-exact
+  reproduction on the same GPU model and software stack, not across devices;
+  `preflight.py` checks it (same 5 steps twice).
+- **7.1** (done, the profile shows it is needed): the encoder runs once on
+  a window's B x T images before the recurrence and the decoder once after
+  it. Same samples for a given generator, values equal up to reduction
+  order (tested against the step-by-step version). CPU, 16 x 64: encoder +
+  decoder 3.2 s batched against 6.1 s step by step; a full training step
+  of the spec model 4.6-4.8 s against 8.8 s (under load). On a GPU the
+  step-by-step version adds ~2T small kernel launches per step. **New runs
+  are not bit-comparable to mini_long** (float reduction order).
+- **7.2** (done): `train_world_model_step(sync=False)` returns device
+  tensors; run_mini converts the per-step losses in one transfer every 50
+  steps (at the switch evaluations) instead of 8 synchronisations per step.
+  Same values.
+- uint8 images cross to the device and are converted there (audit 1.8).
+- Reference-condition streams: the experimental run's streams derive from
+  SeedSequence(seed) (E2's, unchanged); the reference's from
+  SeedSequence([seed, 1]), except the themes, always the experimental
+  seed's theme stream (spec 6: only the permutation and the themes are
+  shared). Run names use `pair-control` for the reference
+  (`runs.make_run_name`'s vocabulary).
+- NaN values are written as null in the JSON outputs (they were written
+  as the non-standard token NaN).
+- `preflight.py` (one command, ~10-15 min), `launch_gpu_e30.sh` (4
+  processes, nohup), `run_mini.py --combine` (combined report of finished
+  runs); README updated for the A100.

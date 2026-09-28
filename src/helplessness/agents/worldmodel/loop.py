@@ -71,9 +71,13 @@ def collect_fixed_policy_data(
         obs = obs_next
 
 
-def to_chw_float(x: np.ndarray, device: torch.device) -> torch.Tensor:
-    """(B, T, H, W, C) uint8 -> (B, T, C, H, W) float32 in [0, 1]."""
-    t = torch.as_tensor(x, dtype=torch.float32, device=device) / 255.0
+def to_chw_float(x, device: torch.device) -> torch.Tensor:
+    """(B, T, H, W, C) uint8 (numpy array or torch tensor) -> (B, T, C, H,
+    W) float32 in [0, 1] on `device`. The uint8 values cross to the device
+    first and are converted there (4x fewer bytes than converting on the
+    host -- audit 1.8); x / 255 of an exact integer is correctly rounded
+    on every device, so the values are the same bits either way."""
+    t = torch.as_tensor(x).to(device).to(torch.float32) / 255.0
     return t.permute(0, 1, 4, 2, 3)
 
 
@@ -302,40 +306,54 @@ class WorldModelLossConfig:
 
 def unroll_observation(
     rssm: RSSM, x_seq: torch.Tensor, a_seq: torch.Tensor, is_first_seq: torch.Tensor, estimator: LatentEstimator | None = None,
-    generator: torch.Generator | None = None,
+    generator: torch.Generator | None = None, decode: bool = True,
 ) -> dict[str, torch.Tensor]:
     """x_seq: (B, T, C, H, W) float in [0,1]. a_seq: (B, T) int action
     indices (a_seq[:, t] is the action taken AT step t, i.e. a_{t-1} for
     the transition INTO step t is a_seq[:, t-1] -- see the shift below).
     is_first_seq: (B, T) bool. Runs RSSM.observation_step across the
     window, returning stacked h, z, prior_probs, post_probs, decoded
-    images -- each (B, T, ...)."""
+    images -- each (B, T, ...); decode=False skips the decoder (measures
+    that only need the latents; no "decoded" key then).
+
+    The encoder (a function of x_t alone) runs once on the B*T images
+    before the recurrence, and the decoder (a function of (h_t, z_t)) once
+    after it: the same computation as encoding/decoding step by step, with
+    two large calls instead of 2T small ones (audit 7.1 -- on a GPU the
+    step-by-step version is bound by kernel launches). The latent draws
+    happen in the same order, so a given generator gives the same samples;
+    only the floating-point reduction order of the convolutions can
+    differ from the step-by-step version."""
     batch, T = x_seq.shape[0], x_seq.shape[1]
     device = x_seq.device
     n_actions = rssm.cfg.n_actions
     a_onehot_seq = F.one_hot(a_seq.clamp(min=0), num_classes=n_actions).to(x_seq.dtype)
+    embeds = rssm.encoder(x_seq.reshape(batch * T, *x_seq.shape[2:])).reshape(batch, T, -1)
 
     h, z = rssm.initial_state(batch, device)
     a_prev = torch.zeros(batch, n_actions, device=device, dtype=x_seq.dtype)
 
-    hs, zs, priors, posts, decoded = [], [], [], [], []
+    hs, zs, priors, posts = [], [], [], []
     for t in range(T):
-        out = rssm.observation_step(h, z, a_prev, x_seq[:, t], is_first_seq[:, t], estimator=estimator, generator=generator)
+        out = rssm.observation_step(h, z, a_prev, None, is_first_seq[:, t], estimator=estimator, generator=generator,
+                                    embed=embeds[:, t])
         h, z = out["h"], out["z"]
         hs.append(h)
         zs.append(z)
         priors.append(out["prior_probs"])
         posts.append(out["post_probs"])
-        decoded.append(rssm.decode(h, z))
         a_prev = a_onehot_seq[:, t]
 
-    return {
+    result = {
         "h": torch.stack(hs, dim=1),
         "z": torch.stack(zs, dim=1),
         "prior_probs": torch.stack(priors, dim=1),
         "post_probs": torch.stack(posts, dim=1),
-        "decoded": torch.stack(decoded, dim=1),
     }
+    if decode:
+        decoded = rssm.decode(result["h"].reshape(batch * T, -1), result["z"].reshape(batch * T, *result["z"].shape[2:]))
+        result["decoded"] = decoded.reshape(batch, T, *decoded.shape[1:])
+    return result
 
 
 def world_model_loss(
@@ -403,6 +421,7 @@ def train_world_model_step(
     estimator: LatentEstimator | None = None,
     return_posteriors: bool = False,
     generator: torch.Generator | None = None,
+    sync: bool = True,
 ) -> dict:
     """One Adam step (lr/eps set on the optimizer by the caller, spec
     3.3: lr=1e-4, eps=1e-8) with gradient-norm clipping (clip_norm=None:
@@ -413,13 +432,20 @@ def train_world_model_step(
     (B*T, n_vars, n_classes), computed by the same forward pass (for the
     label-free separation statistic -- no label involved). generator: the
     dedicated stream for the latent draws of this step (None: the global
-    torch RNG; see rssm.sample_categorical_index)."""
+    torch RNG; see rssm.sample_categorical_index). sync=False returns the
+    scalars as detached 0-d tensors on the model's device instead of
+    Python floats: each float() forces a device synchronisation, so a
+    caller that logs every step converts them in batches (audit 7.2;
+    same values)."""
     optimizer.zero_grad()
     losses, out = _world_model_loss_and_unroll(rssm, model_batch, background, cfg, estimator=estimator, generator=generator)
     losses["total"].backward()
     grad_norm = torch.nn.utils.clip_grad_norm_(rssm.parameters(), max_norm=float("inf") if clip_norm is None else clip_norm)
     optimizer.step()
-    result = {k: float(v.detach()) for k, v in losses.items()} | {"grad_norm": float(grad_norm)}
+    if sync:
+        result = {k: float(v.detach()) for k, v in losses.items()} | {"grad_norm": float(grad_norm)}
+    else:
+        result = {k: v.detach() for k, v in losses.items()} | {"grad_norm": grad_norm.detach()}
     if return_posteriors:
         post = out["post_probs"]
         result["post_probs"] = post.reshape(-1, *post.shape[2:]).detach().cpu().numpy()

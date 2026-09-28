@@ -39,6 +39,7 @@ def tiny_config(separation_every: int, diagnostics_every: int | None) -> dict:
                                             switch_min_steps=10, switch_max_steps=60, collapse_js_threshold=float("-inf"))
     cfg["measure"].update(iz_mc_samples_training=200, iz_mc_samples_final=300, kernel_k_s=2, context_dispersion_n_samples=10, separation_every=separation_every,
                           diagnostics_every=diagnostics_every, monitor_every=50)
+    cfg["measure"]["real_context"].update(window_len=16, burn_in=8, max_per_state=5, kernel_draws=4)
     cfg["runtime"].update(num_threads=2, device="cpu")
     return cfg
 
@@ -105,15 +106,23 @@ def test_run_directory_contents(two_runs):
 
 
 def test_d1_entries_follow_the_acceptance_rule(two_runs):
+    """Real contexts (main D1): a zone with no measured state is "not measured"; an accepted pair covers
+    the MEASURED states of the own zone. Canonical D1 (secondary): every state of the zone (25)."""
     (report, _), _ = two_runs
-    for d in report["d1"]:
-        assert d["threshold"] == pytest.approx(max(0.25, 3 * d["combined_se"]))
-        assert d["accepted"] == (abs(d["contrast"]) > d["threshold"])
-        if d["accepted"]:
-            for kind in ("local", "global"):
-                assert d[kind]["n_kept"] + d[kind]["n_anomalies"] == d[kind]["n_states"] == 25
-        else:
-            assert "local" not in d and "global" not in d
+    measured = {cat: sum(1 for s in range(144) if report["zone_of_state"][s] == cat and report["n_contexts"][s] > 0)
+                for cat in report["zone_categories"]}
+    for d1, n_of in ((report["d1"], lambda cat: measured[cat]), (report["d1_canonical"], lambda cat: 25)):
+        for d in d1:
+            if d.get("not_measured"):
+                assert not d["accepted"] and n_of(d["own_category"]) * n_of(d["target_category"]) == 0
+                continue
+            assert d["threshold"] == pytest.approx(max(0.25, 3 * d["combined_se"]))
+            assert d["accepted"] == (abs(d["contrast"]) > d["threshold"])
+            if d["accepted"]:
+                for kind in ("local", "global"):
+                    assert d[kind]["n_kept"] + d[kind]["n_anomalies"] == d[kind]["n_states"] == n_of(d["own_category"])
+            else:
+                assert "local" not in d and "global" not in d
 
 
 def test_max_steps_truncates_and_is_recorded(tmp_path):

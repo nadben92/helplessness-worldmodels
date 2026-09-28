@@ -335,6 +335,7 @@ class RSSM(nn.Module):
         context: dict | None = None,
         estimator: LatentEstimator | None = None,
         generator: torch.Generator | None = None,
+        embed: torch.Tensor | None = None,
     ) -> dict[str, torch.Tensor]:
         """One real (posterior) step: h_t = GRU(...), e_t = encode(x_t),
         z_t ~ posterior(h_t, e_t) (via `estimator`, default plain
@@ -343,7 +344,9 @@ class RSSM(nn.Module):
         True, h_prev/z_prev/a_prev_onehot are replaced by the learned
         initial state / zeros before the GRU step (spec 3.1's episode-
         start convention), never mixed with the previous episode's
-        state.
+        state. embed: e_t already computed (the encoder depends on x_t
+        alone, so a window's images can be encoded in one pass -- audit
+        7.1); x_t is then not used and may be None.
         """
         batch = h_prev.shape[0]
         device = h_prev.device
@@ -362,7 +365,7 @@ class RSSM(nn.Module):
         hook_h, _ = self.latent_hook(h_t, torch.zeros_like(z_prev), context or {})
         prior = self.prior_probs(hook_h)
 
-        e_t = self.encoder(x_t)
+        e_t = self.encoder(x_t) if embed is None else embed
         post = self.posterior_probs(h_t, e_t)
         z_t = sample_posterior(post, estimator or LatentEstimator(), generator)
 

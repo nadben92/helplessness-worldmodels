@@ -1,6 +1,6 @@
 # E3 — World model validation, 4 zones
 
-**Status: not started.** No world-model agent exists yet.
+**Status (2026-09-28): Phases 0-3 done; long CPU diagnostic run done (mini_long); first GPU run (E3-0, `configs/e3/gpu_e30.yaml`: seeds 0 and 5, environment and reference) prepared, not yet run.** Main measure in real contexts. No agent policy yet (Phase 5). Details: `docs/e3/SPEC_STATUS.md`, `docs/e3/DECISIONS.md`, `experiments/E3_worldmodel_4zones/README.md`.
 
 ## What it tests
 
