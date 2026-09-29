@@ -28,7 +28,11 @@ config (a few minutes). One command:
    report), and recomputes the final measures from the directory with
    recompute_measures.py (identical numbers expected).
 Prints PREFLIGHT PASSED or PREFLIGHT FAILED (exit code 1) and writes
-preflight_summary.json next to the run.
+preflight_summary.json next to the run. Always ends with the machine-readable
+verdict (docs/e3/DECISIONS.md, 2026-09-30 (3)): <out-dir>/preflight_verdict.json
+(passed, problems, memory_problems, warnings, parallel, projected_batch_hours,
+decision) and a last line "PREFLIGHT DECISION: launch | retry-max-parallel-<N> |
+stop", the launch rule of RUN_GPU.md step 3 (decide()).
 """
 
 from __future__ import annotations
@@ -251,6 +255,31 @@ def batch_hours(hours_per_run: list[float], parallel: int) -> float:
     return max(slots)
 
 
+def decide(verdict: dict, max_batch_hours: float, fallback_parallel: int) -> str:
+    """RUN_GPU.md step 3 (docs/e3/DECISIONS.md, 2026-09-30 (3)):
+      "launch"                    passed, no warning, projected_batch_hours finite and <= max_batch_hours;
+      "retry-max-parallel-<N>"    the only problems are the memory test's, at a parallelism above N;
+      "stop"                      anything else (another failure, a warning, a missing or longer projection)."""
+    hours = verdict.get("projected_batch_hours")
+    if verdict["passed"] and not verdict["warnings"]:
+        return "launch" if hours is not None and np.isfinite(hours) and hours <= max_batch_hours else "stop"
+    only_memory = verdict["memory_problems"] and len(verdict["memory_problems"]) == len(verdict["problems"])
+    if only_memory and verdict["parallel"] > fallback_parallel:
+        return f"retry-max-parallel-{fallback_parallel}"
+    return "stop"
+
+
+def write_verdict(out_dir: Path, problems: list[str], memory_problems: list[str], warnings: list[str], parallel: int,
+                  hours: float | None, max_batch_hours: float, fallback_parallel: int) -> str:
+    verdict = {"passed": not problems, "problems": problems, "memory_problems": memory_problems, "warnings": warnings,
+               "parallel": parallel, "projected_batch_hours": hours, "max_batch_hours": max_batch_hours,
+               "fallback_parallel": fallback_parallel}
+    verdict["decision"] = decide(verdict, max_batch_hours, fallback_parallel)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "preflight_verdict.json").write_text(json.dumps(run_mini._jsonable(verdict), indent=1), encoding="utf-8")
+    return verdict["decision"]
+
+
 def projected_hours(cfg: dict, steps_per_s: float, diag_seconds: float, final_seconds: float) -> float:
     planned = int(round((cfg["budget"]["total_steps"] + cfg["budget"]["prefill_steps"]) * cfg["train"]["replay_ratio"]))
     n_points = len(run_mini.checkpoint_steps(cfg, planned)) if cfg["measure"].get("diagnostics_at_checkpoints") else 0
@@ -291,6 +320,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--batch-runs", nargs="*", default=None, metavar="CONFIG=N",
                         help="the launch's runs per config (default: the --parallel mix); with more runs than --parallel, the "
                              "batch's wall time counts the queue")
+    parser.add_argument("--max-batch-hours", type=float, default=20.0, help="launch rule: projected batch wall time at most this")
+    parser.add_argument("--fallback-parallel", type=int, default=4, help="launch rule: parallelism to retry at after a memory failure")
     parser.add_argument("--bench-only", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--memory-only", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--barrier", type=Path, default=None, help=argparse.SUPPRESS)
@@ -301,8 +332,12 @@ def main(argv: list[str] | None = None) -> int:
     cfg = run_mini.load_mini_config(args.config)
     cfg["runtime"]["device"] = args.device
     if args.device == "cuda" and not torch.cuda.is_available():
-        print("PREFLIGHT FAILED: --device cuda but torch.cuda.is_available() is False "
-              f"(torch {torch.__version__}, built for CUDA {torch.version.cuda})", flush=True)
+        problem = (f"--device cuda but torch.cuda.is_available() is False (torch {torch.__version__}, "
+                   f"built for CUDA {torch.version.cuda})")
+        print(f"PREFLIGHT FAILED: {problem}", flush=True)
+        if not (args.bench_only or args.memory_only):
+            decision = write_verdict(args.out_dir, [problem], [], [], args.parallel, None, args.max_batch_hours, args.fallback_parallel)
+            print(f"PREFLIGHT DECISION: {decision}", flush=True)
         return 1
     device = run_mini.configure_runtime(cfg)
     if args.bench_only:
@@ -318,9 +353,12 @@ def main(argv: list[str] | None = None) -> int:
     summary["cpus"] = {"requested": args.cpus, **effective_cpus()}
     print(f"[preflight] {summary}", flush=True)
     problems: list[str] = []
+    memory_problems: list[str] = []
+    warnings: list[str] = []
     if args.cpus is not None and summary["cpus"]["usable"] != args.cpus:
-        print(f"[preflight] WARNING: {args.cpus} CPU(s) requested but {summary['cpus']['usable']} usable here "
-              f"({summary['cpus']}): the throughput and the projection are measured on the latter", flush=True)
+        warnings.append(f"{args.cpus} CPU(s) requested but {summary['cpus']['usable']} usable here ({summary['cpus']}): the "
+                        "throughput and the projection are measured on the latter")
+        print(f"[preflight] WARNING: {warnings[-1]}", flush=True)
 
     summary["on_device"] = device_check(cfg, device)
     print(f"[preflight] on {device}: {summary['on_device']}", flush=True)
@@ -373,7 +411,7 @@ def main(argv: list[str] | None = None) -> int:
         peaks = {k: r[k] and round(r[k]["peak_reserved_mib"]) for k in ("training", "diagnostic_point", "final_measures")}
         print(f"[preflight] memory {Path(r['config']).name}: peak reserved MiB {peaks}; diagnostic point "
               f"{r['diagnostic_point_seconds']:.0f} s, final measures {r['final_measures_seconds']:.0f} s", flush=True)
-    problems += [f"memory test process failed (out of memory?): {m}" for m in mem_failed]
+    memory_problems += [f"memory test process failed (out of memory?): {m}" for m in mem_failed]
     if device.type == "cuda" and mem_results and not mem_failed:
         verdict = memory_verdict(mem_results, mem_results[0]["total_mib"])
         summary["memory_parallel"]["verdict"] = verdict
@@ -381,9 +419,10 @@ def main(argv: list[str] | None = None) -> int:
               f"{verdict['budget_mib']:.0f} MiB budget ({1 - MEMORY_HEADROOM:.0%} of {verdict['total_mib']:.0f}): "
               f"{'fits' if verdict['fits'] else 'DOES NOT FIT'}", flush=True)
         if not verdict["fits"]:
-            problems.append(f"{len(configs)} processes at their measurement peaks need {verdict['sum_mib']:.0f} MiB, above "
-                            f"{verdict['budget_mib']:.0f} MiB: lower --parallel (launcher --max-parallel) or "
-                            "measure.max_images_per_forward")
+            memory_problems.append(f"{len(configs)} processes at their measurement peaks need {verdict['sum_mib']:.0f} MiB, above "
+                                   f"{verdict['budget_mib']:.0f} MiB: lower --parallel (launcher --max-parallel) or "
+                                   "measure.max_images_per_forward")
+    problems += memory_problems
 
     print(f"[preflight] truncated real run: run_mini.py --max-steps {args.max_steps} ...", flush=True)
     t0 = time.perf_counter()
@@ -421,9 +460,9 @@ def main(argv: list[str] | None = None) -> int:
             n = summary.get("throughput_parallel", {}).get("n_processes", 1)
             print(f"[preflight] projected duration of one run of {Path(c).name}: {hours:.1f} h ({slowest:.2f} gradient steps/s with "
                   f"{n} process(es) side by side; one diagnostic point {final_seconds:.0f} s)", flush=True)
-            if hours > TARGET_HOURS * 1.25:
-                print(f"[preflight] WARNING: {Path(c).name} is above the ~{TARGET_HOURS:g} h target -- report it before launching "
-                      "(the budget is fixed in the config, not adjusted to the machine)", flush=True)
+            if hours > TARGET_HOURS * 1.25:  # informational since 2026-09-30: the launch rule bears on the whole batch
+                print(f"[preflight] note: one run of {Path(c).name} is above ~{TARGET_HOURS:g} h (the budget is fixed in the "
+                      "config, not adjusted to the machine)", flush=True)
         # The whole batch: --batch-runs (default: the parallel mix), at most --parallel at once.
         per_run = {Path(c).as_posix(): h for c, h in summary["projected_hours_per_run"].items()}
         counts = ({Path(c).as_posix(): int(n) for c, n in (item.rsplit("=", 1) for item in args.batch_runs)} if args.batch_runs
@@ -443,11 +482,17 @@ def main(argv: list[str] | None = None) -> int:
               flush=True)
         (run_dir / "preflight_summary.json").write_text(json.dumps(run_mini._jsonable(summary), indent=1), encoding="utf-8")
 
+    if not problems and "projected_batch_hours" not in summary:
+        problems.append("no duration projection (the truncated run did not finish)")
     if problems:
         print("PREFLIGHT FAILED:\n  - " + "\n  - ".join(problems), flush=True)
-        return 1
-    print("PREFLIGHT PASSED", flush=True)
-    return 0
+    else:
+        print("PREFLIGHT PASSED", flush=True)
+    decision = write_verdict(args.out_dir, problems, memory_problems, warnings, len(configs), summary.get("projected_batch_hours"),
+                             args.max_batch_hours, args.fallback_parallel)
+    print(f"PREFLIGHT DECISION: {decision}  (rule of RUN_GPU.md step 3; details in {args.out_dir / 'preflight_verdict.json'})",
+          flush=True)
+    return 1 if problems else 0
 
 
 if __name__ == "__main__":

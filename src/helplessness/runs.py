@@ -22,8 +22,6 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
-import yaml
-
 _VALID_PAIR_ROLES = ("experimental", "control")
 
 
@@ -60,12 +58,14 @@ def git_commit_hash(cwd: str | Path | None = None) -> str:
 
 
 # The code and configs a run depends on: what source_tree_hash covers. On a clean checkout these are
-# exactly the files git tracks under these paths (caches and build metadata excluded below).
+# exactly the files git tracks under these paths, minus caches, build metadata and the Markdown
+# documentation (which does not change a run -- and RUN_GPU.md states the hash, so it cannot be hashed).
 SOURCE_SCOPE = ("src", "experiments", "configs", "pyproject.toml")
 
 
 def _outside_source(rel: Path) -> bool:
-    return any(part == "__pycache__" or part.endswith(".egg-info") for part in rel.parts) or rel.suffix in (".pyc", ".pyo")
+    return (any(part == "__pycache__" or part.endswith(".egg-info") for part in rel.parts)
+            or rel.suffix in (".pyc", ".pyo", ".md"))
 
 
 def source_tree_hash(root: str | Path, scope: tuple[str, ...] = SOURCE_SCOPE) -> dict | None:
@@ -150,6 +150,8 @@ def write_run_meta(run_dir: str | Path, seed: int, status: str = "running", **ex
     """Writes/overwrites meta.yaml in run_dir -- call again with a new
     status ("done", "failed") as the run progresses; git commit and
     started_at are only set on first write."""
+    import yaml  # here, not at the top: source_tree_hash must run with the standard library alone (RUN_GPU.md step 1)
+
     run_dir = Path(run_dir)
     meta_path = run_dir / "meta.yaml"
     if meta_path.exists():

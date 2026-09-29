@@ -24,9 +24,12 @@ the CPU reference. No agent policy yet (Phase 5).
 
 ## Running on the GPU (A100)
 
-**To launch the first GPU runs, follow [`RUN_GPU.md`](RUN_GPU.md)** (install, short check,
-launch, results to send back; includes the UCL ARC Kubeflow `submit_kubeflow.py` wrapper).
-What they are: the 4 runs of `configs/e3/gpu_e30.yaml`
+**To launch the current GPU batch (gpu_e30b), follow [`RUN_GPU.md`](RUN_GPU.md) from top to bottom**
+(UCL ARC Kubeflow only: code check, preflight, decision rule, follow-up, handoff). The instructions of
+the earlier batches are kept in [`RUN_GPU_HISTORY.md`](RUN_GPU_HISTORY.md), not to be used for the
+current batch.
+
+The first GPU batch: the 4 runs of `configs/e3/gpu_e30.yaml`
 (seeds 0 and 5, experimental and reference environments, spec architecture) and the bridge
 run `configs/e3/gpu_e30_bridge.yaml` (seed 0, mini_long's network); budget and reasons in
 `docs/e3/DECISIONS.md` (2026-09-28). The rest of this README is for development.
@@ -136,7 +139,8 @@ slowest test (about 2 min).
 - `action_in_latent.py`, `is_pooling_check.py`: diagnostics of 2026-09-29/30 (does z' carry the action at fixed arrival state; I_s per context vs pooled).
 - `submit_kubeflow.py`: the Kubeflow wrapper and local supervisor (`--batch gpu_e30 | gpu_e30b`, `--runs`, `--max-parallel`).
 - `wandb_logger.py`: the optional W&B tracking (never stops a run).
-- `preflight.py`, `launch_gpu_e30.sh`, `RUN_GPU.md`: the GPU check, the launcher and the instructions of the first GPU run.
+- `preflight.py` (ends with a machine-readable verdict and the launch decision), `RUN_GPU.md` (the current batch),
+  `RUN_GPU_HISTORY.md` and `launch_gpu_e30.sh` (earlier batches, server launcher), `make_handoff.py` (the results handoff).
 - `probe.py`: the real-context measure, the canonical probe and every measurement built on them. The
   measures themselves (entropies, KL, α_app, JS, ghost classification)
   live in `src/helplessness/measures/`.

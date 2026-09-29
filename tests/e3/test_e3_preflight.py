@@ -5,6 +5,7 @@ the side-by-side processes measure together."""
 from __future__ import annotations
 
 import itertools
+import json
 import threading
 
 import pytest
@@ -54,3 +55,29 @@ def test_batch_hours_counts_the_queue():
 def test_effective_cpus_reports_a_usable_count():
     cpus = preflight.effective_cpus()
     assert cpus["usable"] >= 1 and cpus["cpu_count"] >= cpus["usable"]
+
+
+def _verdict(problems=(), memory=(), warnings=(), parallel=8, hours=12.0):
+    return {"passed": not (list(problems) + list(memory)), "problems": list(problems) + list(memory), "memory_problems": list(memory),
+            "warnings": list(warnings), "parallel": parallel, "projected_batch_hours": hours}
+
+
+def test_launch_rule_of_run_gpu_step_3():
+    """docs/e3/DECISIONS.md, 2026-09-30 (3): launch only on a clean pass within 20 h; retry at 4 on a
+    memory-only failure at a higher parallelism; stop otherwise."""
+    assert preflight.decide(_verdict(), 20, 4) == "launch"
+    assert preflight.decide(_verdict(hours=20.0), 20, 4) == "launch"
+    assert preflight.decide(_verdict(hours=20.5), 20, 4) == "stop"
+    assert preflight.decide(_verdict(hours=float("nan")), 20, 4) == "stop"
+    assert preflight.decide(_verdict(hours=None), 20, 4) == "stop"
+    assert preflight.decide(_verdict(warnings=["cpu"]), 20, 4) == "stop"
+    assert preflight.decide(_verdict(memory=["oom"]), 20, 4) == "retry-max-parallel-4"
+    assert preflight.decide(_verdict(memory=["oom"], parallel=4), 20, 4) == "stop"
+    assert preflight.decide(_verdict(problems=["determinism"], memory=["oom"]), 20, 4) == "stop"
+    assert preflight.decide(_verdict(problems=["determinism"]), 20, 4) == "stop"
+
+
+def test_verdict_file(tmp_path):
+    decision = preflight.write_verdict(tmp_path, [], [], [], 8, 11.5, 20.0, 4)
+    verdict = json.loads((tmp_path / "preflight_verdict.json").read_text(encoding="utf-8"))
+    assert decision == verdict["decision"] == "launch" and verdict["projected_batch_hours"] == 11.5

@@ -2161,3 +2161,38 @@ The user committed and pushed the state of 2026-09-30 (merge with origin/main in
 existing history.** At the end of each step it gives the list of files to add and a commit
 message, **without any Co-Authored-By line or mention of Claude**; the user runs git add, commit
 and push.
+
+## 2026-09-30 (3) -- RUN_GPU.md for an unattended executor; preflight verdict; handoff script
+
+**User decision.** RUN_GPU.md holds only the current batch (gpu_e30b), by the Kubeflow path only,
+to be followed from top to bottom by the supervisor's AI assistant on the GPU environment: rules
+for the executor (no change to tracked files, no relaunch of a failed run, no weights committed, stop
+and report on anything unforeseen), code check (git pull, source hash), preflight (`--batch gpu_e30b
+--max-parallel 8 --cpu 5`), an automatic decision rule (launch if PREFLIGHT PASSED and
+projected_batch_hours <= 20; after a memory failure at 8, the preflight again at 4 and the same rule;
+stop otherwise), follow-up commands, and the handoff committed alone to main. W&B is left out of this
+batch (no Secret configured). Everything else (first batch, server launcher, manual install, W&B by
+`export`) moved to RUN_GPU_HISTORY.md, marked as history not to be used for the current batch.
+
+**Engineering needed for the rule to be applied without judgement (implementer's decisions):**
+- `preflight.py` ends with `<out-dir>/preflight_verdict.json` (passed, problems, memory_problems,
+  warnings, parallel, projected_batch_hours, decision) and a last line `PREFLIGHT DECISION: launch |
+  retry-max-parallel-4 | stop`, computed by `preflight.decide` -- the rule of RUN_GPU.md step 3
+  (`--max-batch-hours 20`, `--fallback-parallel 4`; tested). The memory test's problems are kept
+  apart so that "the memory test failed" is readable. A missing projection is a failure.
+- The per-run "above the ~6 h target" message of the first batch becomes an informational note: it
+  would have fired for every win64 run and blocked the launch, while the launch rule bears on the
+  batch (<= 20 h). The CPU mismatch stays a warning (it stops the launch).
+- `runs.source_tree_hash` leaves out the Markdown files: RUN_GPU.md states the expected hash, so it
+  cannot be part of it, and documentation does not change a run. `runs.py` imports yaml only where
+  it writes meta.yaml, so the hash command runs on the standard library alone (the notebook's Python).
+  No run had recorded a hash before, so no recorded value changes meaning.
+- `make_handoff.py`: from the supervisor's status.json and the run directories, handoff.md (status,
+  exit code, gradient steps, switch step, error of every run; the preflight's decision), one light
+  archive per run (no .pt, no checkpoints/, no wandb/) and logs.tgz, each below 90 MB (GitHub refuses
+  files over 100 MB; one archive for 8 runs of ~16 MB each would approach it); refuses to overwrite.
+  Also without a training (after a stop).
+- `tests/e3/test_e3_run_gpu_doc.py` reads RUN_GPU.md: every submission and handoff command parses with
+  its options, the hash command runs with `python -S` (no site-packages) and prints the hash the file
+  states, and the decision lines are the preflight's. **Any change to the code or configs changes the
+  hash: that test then fails until RUN_GPU.md is updated.**

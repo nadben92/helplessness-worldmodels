@@ -104,6 +104,7 @@ def test_source_tree_hash_covers_the_code_only_and_ignores_line_endings(tmp_path
     assert source_tree_hash(tmp_path) == first
     (tmp_path / "src" / "pkg" / "__pycache__" / "mod.cpython-312.pyc").write_bytes(b"other")
     (tmp_path / "results" / "big.npz").write_bytes(b"other")
+    (tmp_path / "configs" / "README.md").write_bytes(b"docs, not code")  # documentation is outside the hash
     assert source_tree_hash(tmp_path) == first
     (tmp_path / "src" / "pkg" / "mod.py").write_bytes(b"x = 1\r\n")  # a Windows checkout of the same file
     assert source_tree_hash(tmp_path) == first
