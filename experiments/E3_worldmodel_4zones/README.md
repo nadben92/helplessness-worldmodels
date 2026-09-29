@@ -5,7 +5,17 @@ the 4-zone torus, and the measures of how much controllability its learned
 dynamics perceive. Experiment status: `docs/E3_worldmodel_4zones.md`.
 Decisions, in order, with their evidence: `docs/e3/DECISIONS.md`.
 
-**Status (2026-09-28): first GPU run prepared (E3-0, `configs/e3/gpu_e30.yaml`).**
+**Status (2026-09-28, 22:44 UTC): batch finished; seed 0 reference completed
+60,000 steps with a final report. Two main runs stopped at the separation
+deadline; two runs exited with CUDA OOM.** The bridge completed training and
+saved final weights before OOM in final measurements; its report remains
+incomplete. Seed 5 experimental stopped at the first diagnostic checkpoint,
+with step-600 weights but no full-state resume. UCL ARC TrainJob `m3e9461fad23`
+is marked Failed because four workers exited nonzero; no failed run has been
+restarted. See `reports/E3_GPU_2026-09-28.md` for the handoff and retrieved files.
+Preflight projected 9.7 hours per main run and 3.1 hours for the bridge, but did
+not establish safety for simultaneous diagnostic memory peaks.
+Live log locations and preflight checks: `docs/E3_worldmodel_4zones.md`.
 The main measure is taken in real contexts (`docs/e3/DECISIONS.md`,
 2026-09-28); every run saves its weights on E2's checkpoint grid, its
 compact replay and its world, and `recompute_measures.py` recomputes every
@@ -15,7 +25,8 @@ the CPU reference. No agent policy yet (Phase 5).
 ## Running on the GPU (A100)
 
 **To launch the first GPU runs, follow [`RUN_GPU.md`](RUN_GPU.md)** (install, short check,
-launch, results to send back). What they are: the 4 runs of `configs/e3/gpu_e30.yaml`
+launch, results to send back; includes the UCL ARC Kubeflow `submit_kubeflow.py` wrapper).
+What they are: the 4 runs of `configs/e3/gpu_e30.yaml`
 (seeds 0 and 5, experimental and reference environments, spec architecture) and the bridge
 run `configs/e3/gpu_e30_bridge.yaml` (seed 0, mini_long's network); budget and reasons in
 `docs/e3/DECISIONS.md` (2026-09-28). The rest of this README is for development.

@@ -2,6 +2,58 @@
 
 Hands-on time: about 20 minutes. The runs then take a few hours on their own.
 
+## UCL ARC Kubeflow
+
+Use `submit_kubeflow.py` instead of the server launcher below. Run the submission
+commands from a Kubeflow notebook with the Trainer SDK installed. Keep this checkout
+on `scratch-volume`, mounted at `/scratch`, and do not edit it while a job is running.
+The wrapper uses the cluster's PyTorch image, an isolated `.venv-cluster` retaining
+the image's CUDA torch, and a writable `.cluster-home` in the checkout. It requests
+one GPU, 3 CPUs and 64 GiB RAM; the notebook must fit in the remaining namespace
+quota (currently 5 CPUs, 120 GiB and one A100 in total).
+
+```bash
+cd /scratch/helplessness-worldmodels
+python experiments/E3_worldmodel_4zones/submit_kubeflow.py --phase preflight
+```
+
+Submission returns a job ID, not proof of execution. Check its pod with
+`kubectl get pods`, then `kubectl logs -f <pod-name>`. Setup/GPU messages appear
+in pod logs; the preflight's full output is in the printed persistent output
+directory's `preflight.log`. `status.json` records child exit codes; the adjacent
+`*.submission.json` records the job ID. Preflight outputs are under that directory's
+`runs/`. W&B is disabled for preflight. Send the preflight output and duration
+projection back before proceeding.
+
+Only after preflight review:
+
+```bash
+python experiments/E3_worldmodel_4zones/submit_kubeflow.py --phase train
+```
+
+This supervises all five processes on the same GPU, waits for every exit and returns
+a failure if any run fails. It never silently retries a scientific failure.
+Do not use `launch_gpu_e30.sh` as the container entry point: it backgrounds its
+children and exits. Kubernetes needs a foreground supervisor. The five processes
+each retain their configured four CPU threads; the preflight measures contention
+under the job's actual CPU allocation rather than changing the experiment.
+
+Training results remain under `results/E3_worldmodel_4zones/` on the volume.
+Resume one interrupted run with:
+
+```bash
+python experiments/E3_worldmodel_4zones/submit_kubeflow.py --phase resume \
+  --resume /scratch/helplessness-worldmodels/results/E3_worldmodel_4zones/<run-directory>
+```
+
+Optional W&B: provision a namespace Secret containing the key `WANDB_API_KEY`,
+then add `--wandb-secret <secret-name>` to train/resume submissions. Never include
+the credential in committed files or command arguments. The Secret is mounted
+read-only and read inside the worker because this cluster rejects container `env`
+patches. Confirm `logging.wandb.entity` in both configs for the intended W&B team.
+Without a Secret, tracking is disabled. Retain the persistent volume even with
+artifact uploads: W&B artifacts exclude `resume.pt`.
+
 ## 1. Install (once)
 
     git clone https://github.com/nadben92/helplessness-worldmodels.git

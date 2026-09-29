@@ -35,6 +35,8 @@ Thumbs.db
 
 # virtual environments
 .venv/
+.venv-cluster/
+.cluster-home/
 venv/
 env/
 
@@ -49,6 +51,8 @@ results/**/failure/**/*.pt
 results/**/mini_failures/**/*.pt
 results/E3_worldmodel_4zones/**/arrays.npz
 results/_dryrun*/
+# Cluster GPU outputs are downloaded as a complete, unversioned dataset.
+results/E3_worldmodel_4zones/*worldmodel-gpu_e30*/
 
 # Preflight runs and GPU launch logs (experiments/E3_worldmodel_4zones/preflight.py, launch_gpu_e30.sh)
 results/preflight/
