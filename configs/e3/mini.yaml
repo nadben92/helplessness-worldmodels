@@ -106,6 +106,7 @@ measure:
   kernel_k_s: 1358   # K_s: expected L1 floor of an exact kernel <= 0.02 in a 0.9/4x0.025 zone (DECISIONS 2026-09-29; was 16)
   kernel_k_s_training: 256           # canonical kernel, training diagnostics (as kernel_draws_training)
   is_bootstrap: 200                  # parametric-bootstrap replicates for the se and bias of I_s (DECISIONS 2026-09-30)
+  is_per_context: {states_per_zone: 4, contexts: 10, draws: 512}   # secondary: I_s per context vs pooled (DECISIONS 2026-09-30)
   kernel_margin_threshold: 1.0e-3
   z_only_test_frac: 0.2
   context_dispersion_n_samples: 100

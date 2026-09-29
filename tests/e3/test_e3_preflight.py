@@ -43,3 +43,14 @@ def test_barrier_waits_for_every_process(tmp_path, monkeypatch):
     assert len(released) == 2
     with pytest.raises(TimeoutError):
         preflight._wait_barrier(tmp_path / "c", 2, timeout_s=0.3)
+
+
+def test_batch_hours_counts_the_queue():
+    assert preflight.batch_hours([10, 10, 10, 10, 6, 6, 6, 6], 8) == 10
+    assert preflight.batch_hours([10] * 4 + [6] * 4, 4) == 16
+    assert preflight.batch_hours([5, 3, 3], 2) == 6  # longest first, into the slot that frees first
+
+
+def test_effective_cpus_reports_a_usable_count():
+    cpus = preflight.effective_cpus()
+    assert cpus["usable"] >= 1 and cpus["cpu_count"] >= cpus["usable"]

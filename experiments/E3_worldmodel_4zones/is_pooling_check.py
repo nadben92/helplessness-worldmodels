@@ -11,9 +11,11 @@ their real contexts, `draws` prior draws per context and action, decoded:
 
   per-context   mean over the contexts of I_s(context's own kernel);
   pooled        I_s of the kernel pooling the same contexts' draws;
-  gap           per-context - pooled (>= 0 up to sampling);
+  gap           pooled - per-context (<= 0 up to sampling);
 
-with the bootstrap bias of each (measures.controllability).
+with the bootstrap bias of each: run_mini.per_context_is_check, the same
+secondary diagnostic every final measurement reports (measure.is_per_context);
+this script runs it on any checkpoint, with other sizes.
 
 Usage, from the repo root:
     python experiments/E3_worldmodel_4zones/is_pooling_check.py <run dir> [--checkpoint final] [--draws 512]
@@ -29,25 +31,15 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-import numpy as np
 import torch
 import yaml
 
 from helplessness.experiment_loader import load_experiment_module
-from helplessness.measures.controllability import controllability_bootstrap, controllability_per_state
 
 run_mini = load_experiment_module("E3_worldmodel_4zones", "run_mini.py", "is_pooling_run_mini")
 e3_probe = load_experiment_module("E3_worldmodel_4zones", "probe.py", "is_pooling_probe")
 
-SLOT_IS_POOLING = 12  # measurement slot of this diagnostic (run_mini: 1-4, 6-9, 11; action_in_latent: 10)
-
-
-def kernels_from_samples(samples: dict, n_ctx: int, n_actions: int, n_states: int) -> np.ndarray:
-    """(n_ctx, n_actions, n_states) kernels from the non-ghost draws of each context and action."""
-    keep = ~samples["is_ghost"]
-    counts = np.zeros((n_ctx, n_actions, n_states))
-    np.add.at(counts, (samples["context"][keep], samples["a"][keep], samples["s_next"][keep]), 1.0)
-    return counts / counts.sum(axis=-1, keepdims=True)
+SLOT_IS_POOLING = run_mini.SLOT_PER_CONTEXT  # the same measurement slot as the final measures' check
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -83,56 +75,23 @@ def main(argv: list[str] | None = None) -> int:
     rc = run_mini.real_context_settings(cfg)
     ctx = e3_probe.real_context_probe(rssm, replay, window_len=rc["window_len"], burn_in=rc["burn_in"], max_per_state=rc["max_per_state"],
                                       n_states=run_mini.N_STATES, rng=rng, generator=gen, max_images=run_mini.max_images_per_forward(cfg))
-    chosen_states, chosen_ctx = [], []
-    for cat in run_mini.e3_env.ZONE_CATEGORIES:
-        candidates = [s for s in run_mini.zone_states(world.layout, cat) if (ctx["states"] == s).sum() >= args.contexts]
-        for s in sorted(rng.choice(candidates, size=min(args.states_per_zone, len(candidates)), replace=False)):
-            chosen_states.append(int(s))
-            chosen_ctx.append(np.sort(rng.choice(np.flatnonzero(ctx["states"] == s), size=args.contexts, replace=False)))
-    idx = np.concatenate(chosen_ctx)
-    idx_t = torch.as_tensor(idx, device=device)
-    sub = {"positions": ctx["positions"][idx], "states": ctx["states"][idx], "prior_probs_t": ctx["prior_probs_t"][idx_t],
-           "h_next": ctx["h_next"][idx_t]}
-    samples = e3_probe.real_context_action_samples(rssm, sub, world.templates_t, draws=args.draws,
-                                                   margin_threshold=cfg["measure"]["kernel_margin_threshold"], generator=gen)
-    A = rssm.cfg.n_actions
-    per_ctx = kernels_from_samples(samples, idx.size, A, run_mini.N_STATES)  # (n_sub, A, S)
-    zone_of = {s: run_mini.zone_of_state(world.layout, s) for s in chosen_states}
-    rows = []
-    for k, s in enumerate(chosen_states):
-        block = slice(k * args.contexts, (k + 1) * args.contexts)
-        kernels = per_ctx[block]
-        valid = np.isfinite(kernels).all(axis=(1, 2))
-        I_ctx = controllability_per_state(kernels[valid])
-        bias_ctx = controllability_bootstrap(kernels[valid], args.draws, 200, rng)["bias"]
-        pooled = kernels[valid].mean(axis=0, keepdims=True)  # equal draws per context: the pooled kernel
-        I_pool = float(controllability_per_state(pooled)[0])
-        bias_pool = float(controllability_bootstrap(pooled, args.draws * int(valid.sum()), 200, rng)["bias"][0])
-        rows.append({"s": s, "zone": zone_of[s], "n_contexts": int(valid.sum()), "per_context_mean": float(I_ctx.mean()),
-                     "per_context_sd": float(I_ctx.std(ddof=1)), "per_context_bias": float(np.mean(bias_ctx)),
-                     "pooled": I_pool, "pooled_bias": bias_pool, "gap": float(I_ctx.mean() - I_pool)})
-    by_zone = {}
-    for cat in run_mini.e3_env.ZONE_CATEGORIES:
-        zr = [r for r in rows if r["zone"] == cat]
-        by_zone[cat] = {key: float(np.mean([r[key] for r in zr])) for key in
-                        ("per_context_mean", "per_context_bias", "pooled", "pooled_bias", "gap")} | {"n_states": len(zr)}
-        gaps = np.array([r["gap"] for r in zr])
-        by_zone[cat]["gap_se_over_states"] = float(gaps.std(ddof=1) / np.sqrt(gaps.size)) if gaps.size > 1 else float("nan")
+    check = run_mini.per_context_is_check(rssm, world, ctx, cfg, rng, gen, args.states_per_zone, args.contexts, args.draws)
+    by_zone, rows = check["by_zone"], check["states"]
 
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     out_dir = run_dir / "analysis" / f"is_pooling__{label}__{stamp}"
     out_dir.mkdir(parents=True)
     record = {"run_dir": str(run_dir), "checkpoint": label, "step": int(state["step"]), "draws_per_context_action": args.draws,
-              "contexts_per_state": args.contexts, "ghost_fraction": float(samples["is_ghost"].mean()),
+              "contexts_per_state": args.contexts, "ghost_fraction": check.get("ghost_fraction"),
               "zone_kinds": world.zone_kinds, "by_zone": by_zone, "states": rows}
     (out_dir / "results.json").write_text(json.dumps(run_mini._jsonable(record), indent=1), encoding="utf-8")
     lines = [f"# I_s per context vs pooled -- {run_dir.name}, {label}", "",
-             f"{len(chosen_states)} states ({args.states_per_zone} per zone), {args.contexts} real contexts each, {args.draws} prior draws "
+             f"{len(rows)} states ({args.states_per_zone} per zone), {args.contexts} real contexts each, {args.draws} prior draws "
              f"per context and action; ghost fraction {record['ghost_fraction']:.4f}. Bits; bias = parametric-bootstrap plug-in bias.", "",
-             "| zone | dynamics | per-context mean I_s (bias) | pooled I_s (bias) | gap per-context - pooled [se over states] |",
+             "| zone | dynamics | per-context mean I_s (bias) | pooled I_s (bias) | gap pooled - per-context [se over states] |",
              "|---|---|---|---|---|"]
     for cat, z in by_zone.items():
-        lines.append(f"| {cat} | {world.zone_kinds[cat]} | {z['per_context_mean']:.4f} ({z['per_context_bias']:.4f}) | "
+        lines.append(f"| {cat} | {world.zone_kinds[cat]} | {z['per_context']:.4f} ({z['per_context_bias']:.4f}) | "
                      f"{z['pooled']:.4f} ({z['pooled_bias']:.4f}) | {z['gap']:+.4f} [{z['gap_se_over_states']:.4f}] |")
     (out_dir / "SUMMARY.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print("\n".join(lines), flush=True)

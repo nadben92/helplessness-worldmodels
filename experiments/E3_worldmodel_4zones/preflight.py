@@ -219,6 +219,38 @@ def device_check(cfg: dict, device: torch.device) -> dict:
     return on_device
 
 
+def effective_cpus() -> dict:
+    """The CPUs this process can use: the container's cgroup quota when there is one (cgroup v2 cpu.max, or
+    v1 cfs quota / period), the scheduler affinity, and os.cpu_count() (the node's, inside a container)."""
+    import math
+
+    quota = None
+    try:
+        text = Path("/sys/fs/cgroup/cpu.max").read_text().split()
+        if text and text[0] != "max":
+            quota = int(text[0]) / int(text[1])
+    except (OSError, ValueError, IndexError):
+        try:
+            q = int(Path("/sys/fs/cgroup/cpu/cpu.cfs_quota_us").read_text())
+            period = int(Path("/sys/fs/cgroup/cpu/cpu.cfs_period_us").read_text())
+            quota = q / period if q > 0 else None
+        except (OSError, ValueError):
+            pass
+    affinity = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else None
+    usable = [v for v in (quota, affinity) if v]
+    return {"cgroup_quota": quota, "affinity": affinity, "cpu_count": os.cpu_count(),
+            "usable": math.floor(min(usable) + 1e-9) if usable else os.cpu_count()}
+
+
+def batch_hours(hours_per_run: list[float], parallel: int) -> float:
+    """Wall time of a batch whose runs start as slots free up, at most `parallel` at once: the runs taken
+    longest first, each into the slot that frees first (the supervisor's queue)."""
+    slots = [0.0] * max(1, parallel)
+    for h in sorted(hours_per_run, reverse=True):
+        slots[slots.index(min(slots))] += h
+    return max(slots)
+
+
 def projected_hours(cfg: dict, steps_per_s: float, diag_seconds: float, final_seconds: float) -> float:
     planned = int(round((cfg["budget"]["total_steps"] + cfg["budget"]["prefill_steps"]) * cfg["train"]["replay_ratio"]))
     n_points = len(run_mini.checkpoint_steps(cfg, planned)) if cfg["measure"].get("diagnostics_at_checkpoints") else 0
@@ -253,6 +285,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--extra-config", type=Path, nargs="*", default=[],
                         help="configs launched alongside (one process each in the parallel measure), e.g. the bridge run")
     parser.add_argument("--out-dir", type=Path, default=run_mini.REPO_ROOT / "results" / "preflight")
+    parser.add_argument("--cpus", type=int, default=None,
+                        help="CPUs requested for the job (submit_kubeflow.py --cpu): recorded, checked against the container's "
+                             "limit, and stated with the projection (measured under this allocation)")
+    parser.add_argument("--batch-runs", nargs="*", default=None, metavar="CONFIG=N",
+                        help="the launch's runs per config (default: the --parallel mix); with more runs than --parallel, the "
+                             "batch's wall time counts the queue")
     parser.add_argument("--bench-only", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--memory-only", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--barrier", type=Path, default=None, help=argparse.SUPPRESS)
@@ -277,8 +315,12 @@ def main(argv: list[str] | None = None) -> int:
 
     summary: dict = {"config": str(args.config), "device": str(device), "torch": str(torch.__version__), "cuda": torch.version.cuda,
                      "gpu": torch.cuda.get_device_name(device) if device.type == "cuda" else None}
+    summary["cpus"] = {"requested": args.cpus, **effective_cpus()}
     print(f"[preflight] {summary}", flush=True)
     problems: list[str] = []
+    if args.cpus is not None and summary["cpus"]["usable"] != args.cpus:
+        print(f"[preflight] WARNING: {args.cpus} CPU(s) requested but {summary['cpus']['usable']} usable here "
+              f"({summary['cpus']}): the throughput and the projection are measured on the latter", flush=True)
 
     summary["on_device"] = device_check(cfg, device)
     print(f"[preflight] on {device}: {summary['on_device']}", flush=True)
@@ -382,6 +424,23 @@ def main(argv: list[str] | None = None) -> int:
             if hours > TARGET_HOURS * 1.25:
                 print(f"[preflight] WARNING: {Path(c).name} is above the ~{TARGET_HOURS:g} h target -- report it before launching "
                       "(the budget is fixed in the config, not adjusted to the machine)", flush=True)
+        # The whole batch: --batch-runs (default: the parallel mix), at most --parallel at once.
+        per_run = {Path(c).as_posix(): h for c, h in summary["projected_hours_per_run"].items()}
+        counts = ({Path(c).as_posix(): int(n) for c, n in (item.rsplit("=", 1) for item in args.batch_runs)} if args.batch_runs
+                  else {Path(c).as_posix(): configs.count(c) for c in dict.fromkeys(configs)})
+        # a config of the launch left out of the parallel mix is costed as the slowest measured one (upper bound)
+        runs_hours = [per_run.get(c, max(per_run.values())) for c, n in counts.items() for _ in range(n)]
+        unmeasured = [c for c in counts if c not in per_run]
+        if unmeasured:
+            print(f"[preflight] not in the parallel mix, costed as the slowest measured config: {unmeasured}", flush=True)
+        n_runs = len(runs_hours)
+        summary["projected_batch_hours"] = batch_hours(runs_hours, len(configs))
+        cpus = summary["cpus"]
+        print(f"[preflight] projected wall time of the batch: {summary['projected_batch_hours']:.1f} h for {n_runs} run(s), "
+              f"{len(configs)} at a time, on {cpus['usable']} usable CPU(s)"
+              + (f" ({args.cpus} requested)" if args.cpus is not None else "")
+              + "; upper bound: every diagnostic point is costed as the final one (the training points use the reduced K)",
+              flush=True)
         (run_dir / "preflight_summary.json").write_text(json.dumps(run_mini._jsonable(summary), indent=1), encoding="utf-8")
 
     if problems:

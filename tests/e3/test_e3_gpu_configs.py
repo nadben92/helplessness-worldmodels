@@ -71,3 +71,4 @@ def test_every_e3_config_measures_at_the_corrected_k_with_a_reduced_training_k()
         assert m["kernel_k_s"] == m["real_context"]["kernel_draws"] == 1358, name
         assert m["kernel_k_s_training"] == m["real_context"]["kernel_draws_training"] == 256, name
         assert m["is_bootstrap"] == 200, name
+        assert m["is_per_context"] == {"states_per_zone": 4, "contexts": 10, "draws": 512}, name

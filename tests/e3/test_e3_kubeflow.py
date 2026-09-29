@@ -166,3 +166,19 @@ def test_worker_passes_the_batch_and_one_blas_thread(tmp_path, monkeypatch):
     worker = calls[-1]
     assert worker[worker.index("--batch") + 1] == "gpu_e30b" and "--runs" not in worker
     assert os.environ["OMP_NUM_THREADS"] == "1"
+
+
+def test_cpu_request_reaches_the_preflight_and_the_worker(tmp_path, monkeypatch):
+    command = cluster.commands("preflight", "python", tmp_path, batch="gpu_e30b", max_parallel=4, cpus=5)[0][1]
+    assert command[command.index("--cpus") + 1] == "5"
+    i = command.index("--batch-runs")
+    assert command[i + 1:i + 3] == [f"{cluster.WIN64_CONFIG}=4", f"{cluster.WIN16_CONFIG}=4"]
+    assert cluster.commands("preflight", "python", tmp_path)[0][1][cluster.commands("preflight", "python", tmp_path)[0][1].index("--cpus") + 1] == "3"
+    calls = []
+    monkeypatch.setattr(cluster.subprocess, "run", lambda c, **kwargs: calls.append(c))
+    monkeypatch.setenv("RANK", "0")
+    for name in ("HOME", "USER", "LOGNAME", "PYTHONUNBUFFERED", "CUBLAS_WORKSPACE_CONFIG", "MPLBACKEND", "XDG_CACHE_HOME",
+                 "WANDB_MODE", "WANDB_API_KEY", "OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
+        monkeypatch.setenv(name, os.environ.get(name, ""))
+    cluster._run_e3(str(tmp_path), "preflight", str(tmp_path / "logs"), "", "", batch="gpu_e30b", cpus=5)
+    assert calls[-1][calls[-1].index("--cpu") + 1] == "5"

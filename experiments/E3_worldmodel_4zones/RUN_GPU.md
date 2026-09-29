@@ -59,6 +59,18 @@ python experiments/E3_worldmodel_4zones/submit_kubeflow.py --phase train --batch
 
 If the preflight's memory test fails at 8, run both commands with `--max-parallel 4`.
 
+**CPUs.** `--cpu N` sets the job's CPU request (default 3, as the first batch). Pass the
+same N to the preflight and to the training: the preflight runs under that allocation,
+checks it against the container's limit (a warning if they differ) and prints the
+projected wall time of the whole batch for it (`projected_batch_hours`, counting the
+queue when `--max-parallel` is below the number of runs). The request must fit in the
+namespace quota (5 CPUs in all, the notebook included). Example with 5 CPUs:
+
+```bash
+python experiments/E3_worldmodel_4zones/submit_kubeflow.py --phase preflight --batch gpu_e30b --max-parallel 8 --cpu 5
+python experiments/E3_worldmodel_4zones/submit_kubeflow.py --phase train --batch gpu_e30b --max-parallel 8 --cpu 5
+```
+
 **Code version.** A run records its git commit, and always a sha256 of the
 contents of `src/`, `experiments/`, `configs/` and `pyproject.toml`
 (`meta.yaml`: `source_sha256`); it refuses to start with neither. The container

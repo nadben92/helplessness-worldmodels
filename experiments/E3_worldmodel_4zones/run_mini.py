@@ -139,6 +139,7 @@ ACC_LABELS = {
 # Measurement slots (rng_streams.measure_streams): each measurement owns one.
 SLOT_SEPARATION, SLOT_DIAG, SLOT_IZS, SLOT_ZONLY, SLOT_D1_REAL, SLOT_FAILURE, SLOT_FINAL, SLOT_D1_CANONICAL = 1, 2, 3, 4, 6, 7, 8, 9
 SLOT_HONLY = 11  # the h-only probe (2026-09-30); slot 10 is action_in_latent.py's
+SLOT_PER_CONTEXT = 12  # the per-context I_s check (2026-09-30, also is_pooling_check.py)
 
 
 # ---------------------------------------------------------------------
@@ -741,6 +742,67 @@ def controllability_of_kernel(p_hat: np.ndarray) -> np.ndarray:
     return out
 
 
+def per_context_is_check(rssm: RSSM, world: World, contexts: dict, cfg: dict, rng: np.random.Generator,
+                         generator: torch.Generator, states_per_zone: int, n_contexts: int, draws: int) -> dict:
+    """I_s per context vs pooled over the same contexts (docs/e3/DECISIONS.md,
+    2026-09-30): the SECONDARY diagnostic reported with every final
+    measurement. The main I_s pools the decoded draws of a state's contexts
+    into one kernel (as E2's per-state kernel and the tabular twin B: one
+    kernel per state, histories merged); here, for states_per_zone states per
+    zone (drawn from `rng` among those with >= n_contexts contexts) and
+    n_contexts of their contexts, `draws` prior draws per context and action
+    (probe.real_context_action_samples) give each context its own kernel:
+      per_context   mean over the contexts of I_s(context's kernel);
+      pooled        I_s of the kernel pooling the same contexts' draws;
+      gap           pooled - per_context (<= 0 up to sampling: mutual
+                    information is convex in the channel);
+    with the bootstrap bias of each, per state and by zone."""
+    layout = world.layout
+    chosen_states, chosen_ctx = [], []
+    for cat in e3_env.ZONE_CATEGORIES:
+        candidates = [s for s in zone_states(layout, cat) if (contexts["states"] == s).sum() >= n_contexts]
+        for s in sorted(rng.choice(candidates, size=min(states_per_zone, len(candidates)), replace=False)) if candidates else []:
+            chosen_states.append(int(s))
+            chosen_ctx.append(np.sort(rng.choice(np.flatnonzero(contexts["states"] == s), size=n_contexts, replace=False)))
+    if not chosen_states:
+        return {"states": [], "by_zone": {}, "settings": {"states_per_zone": states_per_zone, "contexts": n_contexts, "draws": draws}}
+    idx = np.concatenate(chosen_ctx)
+    idx_t = torch.as_tensor(idx, device=contexts["h"].device)
+    sub = {"positions": contexts["positions"][idx], "states": contexts["states"][idx],
+           "prior_probs_t": contexts["prior_probs_t"][idx_t], "h_next": contexts["h_next"][idx_t]}
+    samples = e3_probe.real_context_action_samples(rssm, sub, world.templates_t, draws=draws,
+                                                   margin_threshold=cfg["measure"]["kernel_margin_threshold"], generator=generator)
+    keep = ~samples["is_ghost"]
+    counts = np.zeros((idx.size, N_ACTIONS, N_STATES))
+    np.add.at(counts, (samples["context"][keep], samples["a"][keep], samples["s_next"][keep]), 1.0)
+    with np.errstate(invalid="ignore"):
+        kernels = counts / counts.sum(axis=-1, keepdims=True)
+    rows = []
+    for k, s in enumerate(chosen_states):
+        block = kernels[k * n_contexts:(k + 1) * n_contexts]
+        valid = np.isfinite(block).all(axis=(1, 2))
+        I_ctx = controllability_per_state(block[valid])
+        pooled = block[valid].mean(axis=0, keepdims=True)  # the same number of draws per context
+        I_pool = float(controllability_per_state(pooled)[0])
+        rows.append({"s": s, "zone": zone_of_state(layout, s), "n_contexts": int(valid.sum()),
+                     "per_context": float(I_ctx.mean()), "per_context_sd": float(I_ctx.std(ddof=1)) if I_ctx.size > 1 else float("nan"),
+                     "per_context_bias": float(np.mean(controllability_bootstrap(block[valid], draws, 200, rng)["bias"])),
+                     "pooled": I_pool, "pooled_bias": float(controllability_bootstrap(pooled, draws * int(valid.sum()), 200, rng)["bias"][0]),
+                     "gap": I_pool - float(I_ctx.mean())})
+    by_zone = {}
+    for cat in e3_env.ZONE_CATEGORIES:
+        zr = [r for r in rows if r["zone"] == cat]
+        if not zr:
+            continue
+        gaps = np.array([r["gap"] for r in zr])
+        by_zone[cat] = {**{key: float(np.mean([r[key] for r in zr]))
+                           for key in ("per_context", "per_context_bias", "pooled", "pooled_bias", "gap")},
+                        "gap_se_over_states": float(gaps.std(ddof=1) / np.sqrt(gaps.size)) if gaps.size > 1 else float("nan"),
+                        "n_states": len(zr)}
+    return {"states": rows, "by_zone": by_zone, "ghost_fraction": float(samples["is_ghost"].mean()),
+            "settings": {"states_per_zone": states_per_zone, "contexts": n_contexts, "draws": draws}}
+
+
 def is_by_zone(I_s: np.ndarray, boot: dict, layout) -> dict[str, dict]:
     """Zone summaries of I_s: mean over the measured states with the se of
     the mean (zone_mean_with_se, per-state bootstrap se), and the mean
@@ -1005,6 +1067,15 @@ def measure_final(rssm: RSSM, world: World, replay: ReplayBuffer, N: np.ndarray,
                                                    test_frac=cfg["measure"]["z_only_test_frac"], rng=rng_h, generator=gen_h,
                                                    max_images=max_images_per_forward(cfg), latent="h")
 
+    pc = cfg["measure"].get("is_per_context")
+    per_context = None
+    if pc:
+        log(f"I_s per context vs pooled (secondary; {pc['states_per_zone']} states per zone, {pc['contexts']} contexts, "
+            f"{pc['draws']} draws) ...")
+        rng_pc, gen_pc = measure_streams(seed, SLOT_PER_CONTEXT, streams)
+        per_context = per_context_is_check(rssm, world, real["contexts"], cfg, rng_pc, gen_pc, pc["states_per_zone"], pc["contexts"],
+                                           pc["draws"])
+
     log("D1 in real contexts (every measured state of every zone with an accepted contrast) ...")
     rng_d1, gen_d1 = measure_streams(seed, SLOT_D1_REAL, streams)
     d1_real = d1_analysis_real(rssm, world, real["iz"], real["contexts"], cfg, rng_d1, gen_d1)
@@ -1045,6 +1116,7 @@ def measure_final(rssm: RSSM, world: World, replay: ReplayBuffer, N: np.ndarray,
         "ghost_fraction_mean": final["ghost_fraction_mean"],
         "z_only_probe": z_probe_result,
         "h_only_probe": h_probe_result,
+        "is_per_context": per_context,
         "context_dispersion": dispersion,
         "d1": d1_real,
         "d1_canonical": d1_canonical,
@@ -1907,6 +1979,18 @@ def write_report(seed_reports: list[dict], out_dir: Path, cfg_name: str) -> Path
             else:
                 add(f"{NOT_EVALUABLE}.")
             add("")
+            pcc = report.get("is_per_context")
+            if pcc and pcc["by_zone"] and ok_mech:
+                st = pcc["settings"]
+                add(f"I_s per context vs pooled (SECONDARY diagnostic, docs/e3/DECISIONS.md 2026-09-30): {st['states_per_zone']} states "
+                    f"per zone, {st['contexts']} contexts each, {st['draws']} draws per context and action; bootstrap bias in brackets.")
+                add("")
+                add("| zone | per-context mean I_s | pooled I_s (same contexts) | gap pooled - per-context [se over states] |")
+                add("|---|---|---|---|")
+                for cat, z in pcc["by_zone"].items():
+                    add(f"| {cat} | {_fmt(z['per_context'])} ({_fmt(z['per_context_bias'])}) | {_fmt(z['pooled'])} "
+                        f"({_fmt(z['pooled_bias'])}) | {_fmt(z['gap'])} [{_fmt(_nan(z['gap_se_over_states']))}] |")
+                add("")
         add("### I_z in real contexts (SECONDARY, upper bound; per zone: mean over measured states, std over states, se of the mean)")
         add("")
         add("| zone | dynamics here | mean I_z | std I_z | se of the mean | states measured |")

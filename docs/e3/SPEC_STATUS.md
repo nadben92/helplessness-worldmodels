@@ -157,7 +157,8 @@ Last updated: 2026-09-28.
     state, prior draws of z' from its contexts, decoded and matched to the templates (§5.3),
     pooled over the state's contexts (K = 1,358 draws per (s, a), spread over up to 50
     contexts), then `measures.controllability.controllability_per_state` -- the same function
-    as for the true P. Standard error and plug-in bias by parametric bootstrap
+    as for the true P (pooled: the analogue of E2's per-state kernel and of twin B; the per-context
+    I_s is a secondary diagnostic with every final measurement, 2026-09-30 (2)). Standard error and plug-in bias by parametric bootstrap
     (`controllability_bootstrap`, 200 replicates); plug-in bias <= 0.004 bits for an exact
     noisy kernel at K = 1,358. b is computed on I_s (`aggregate_b.py`).
   - **Why:** on the bridge, I_z / I_s / truth = 2.07 / 1.71 / 1.65 bits in the controllable-noisy

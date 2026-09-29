@@ -40,6 +40,7 @@ def tiny_config() -> dict:
     cfg["measure"].update(iz_mc_samples_training=100, iz_mc_samples_final=200, kernel_k_s=2, separation_every=25,
                           diagnostics_every=None, monitor_every=50, z_only_seq_len=16)
     cfg["measure"]["real_context"].update(window_len=16, burn_in=8, max_per_state=3, kernel_draws=4)
+    cfg["measure"]["is_per_context"] = {"states_per_zone": 2, "contexts": 2, "draws": 8}
     cfg["checkpoints"] = {"grid": [40, 100], "resume_every": 30}
     cfg["runtime"].update(num_threads=2, device="cpu")
     return cfg
@@ -218,6 +219,11 @@ def test_is_is_the_main_measure_with_state_probes(trained):
     assert 0.0 <= rc["state_probe_h"] <= 1.0 and 0.0 <= rc["state_probe_z"] <= 1.0
     assert report["h_only_probe"]["latent"] == "h" and report["z_only_probe"]["latent"] == "z"
     assert report["h_only_probe"]["n_test"] == report["z_only_probe"]["n_test"]
+    pc = report["is_per_context"]  # the secondary per-context check (2026-09-30)
+    assert pc["settings"] == {"states_per_zone": 2, "contexts": 2, "draws": 8} and pc["states"]
+    for row in pc["states"]:
+        assert row["gap"] == pytest.approx(row["pooled"] - row["per_context"])
+        assert row["pooled"] <= row["per_context"] + 1e-9  # I is convex in the channel: the mixture's I is at most the mean
     diagnostics = [json.loads(line) for line in (run_dir / "diagnostics.jsonl").read_text(encoding="utf-8").splitlines()]
     assert all("I_s_by_zone" in d["real_context"] and "I_s_by_zone" in d for d in diagnostics)
     text = (run_dir / "REPORT.md").read_text(encoding="utf-8")

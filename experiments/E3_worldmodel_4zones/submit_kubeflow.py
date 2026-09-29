@@ -31,6 +31,7 @@ BATCHES = {
                  for tag, config in (("win64", WIN64_CONFIG), ("win16", WIN16_CONFIG)) for seed in (0, 5) for condition in CONDITIONS},
 }
 DEFAULT_BATCH = "gpu_e30"
+DEFAULT_CPUS = 3  # the job's CPU request (--cpu); the first batch ran on 3
 RUNS = BATCHES[DEFAULT_BATCH]
 
 
@@ -57,7 +58,7 @@ def n_concurrent(runs: list[str] | None, max_parallel: int | None, batch: str = 
 
 
 def preflight_command(python: str, output: Path, runs: list[str] | None, max_parallel: int | None,
-                      batch: str = DEFAULT_BATCH) -> list[str]:
+                      batch: str = DEFAULT_BATCH, cpus: int = DEFAULT_CPUS) -> list[str]:
     """preflight.py for the planned launch: --parallel is the number of
     processes that will share the GPU, filled with the heaviest config
     first (its first config in the batch's order), plus one process of each
@@ -73,18 +74,21 @@ def preflight_command(python: str, output: Path, runs: list[str] | None, max_par
     command = [python, "-u", f"{SCRIPT}/preflight.py", "--config", primary]
     if others and parallel > n_primary:
         command += ["--extra-config", *others[:parallel - 1]]
-    return command + ["--parallel", str(parallel), "--device", "cuda", "--out-dir", str(output / "runs")]
+    counts = [f"{c}={sum(known[name][0] == c for name in selected)}" for c in configs]
+    return command + ["--parallel", str(parallel), "--batch-runs", *counts, "--cpus", str(cpus), "--device", "cuda",
+                      "--out-dir", str(output / "runs")]
 
 
 def commands(phase: str, python: str, output: Path, resume: str = "", runs: list[str] | None = None,
-             max_parallel: int | None = None, batch: str = DEFAULT_BATCH) -> list[tuple[str, list[str]]]:
+             max_parallel: int | None = None, batch: str = DEFAULT_BATCH, cpus: int = DEFAULT_CPUS) -> list[tuple[str, list[str]]]:
     """Return foreground commands, preserving the scientific configs unchanged.
     batch: a key of BATCHES; runs: a subset of its runs (default: all);
     max_parallel: the most processes run at once (default: all), which the
-    preflight tests."""
+    preflight tests; cpus: the job's CPU request, passed to the preflight (its
+    duration projection is measured under that allocation)."""
     base = [python, "-u", f"{SCRIPT}/run_mini.py"]
     if phase == "preflight":
-        return [("preflight", preflight_command(python, output, runs, max_parallel, batch))]
+        return [("preflight", preflight_command(python, output, runs, max_parallel, batch, cpus))]
     if phase == "resume":
         if not resume:
             raise ValueError("resume requires a run directory")
@@ -168,7 +172,7 @@ def supervise(jobs: list[tuple[str, list[str]]], repo: Path, output: Path, max_p
 
 
 def _run_e3(repo_dir: str, phase: str, output: str, token_dir: str, resume: str, runs: str = "", max_parallel: int = 0,
-            batch: str = "gpu_e30") -> None:
+            batch: str = "gpu_e30", cpus: int = 3) -> None:
     """Serialized by CustomTrainer: imports and constants must be self-contained.
     batch: a key of BATCHES; runs: comma-separated subset of its runs ("" = all); max_parallel: 0 = all at once."""
     import os
@@ -210,7 +214,7 @@ def _run_e3(repo_dir: str, phase: str, output: str, token_dir: str, resume: str,
                     "import torch; assert torch.cuda.is_available(), 'CUDA unavailable'; "
                     "print('GPU:', torch.cuda.get_device_name(0), 'torch:', torch.__version__, flush=True)"],
                    check=True)
-    selection = (["--batch", batch] + (["--runs", *runs.split(",")] if runs else [])
+    selection = (["--batch", batch, "--cpu", str(cpus)] + (["--runs", *runs.split(",")] if runs else [])
                  + (["--max-parallel", str(max_parallel)] if max_parallel else []))
     subprocess.run([python, "-u", "experiments/E3_worldmodel_4zones/submit_kubeflow.py",
                     "--worker", "--phase", phase, "--repo-dir", repo_dir,
@@ -237,7 +241,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repo-dir", default="/scratch/helplessness-worldmodels")
     parser.add_argument("--volume", default="scratch-volume")
     parser.add_argument("--mount", default="/scratch")
-    parser.add_argument("--cpu", default="3")
+    parser.add_argument("--cpu", type=int, default=DEFAULT_CPUS,
+                        help="CPUs requested for the job (default 3); the preflight projects the duration under it")
     parser.add_argument("--memory", default="64Gi")
     parser.add_argument("--image", default=IMAGE)
     parser.add_argument("--wandb-secret", help="Secret containing WANDB_API_KEY; ignored for preflight")
@@ -263,7 +268,7 @@ def main(argv: list[str] | None = None) -> int:
     output = Path(args.output).resolve() if args.output else repo / "logs" / "kubeflow" / f"{args.phase}-{stamp}"
     if args.worker:
         jobs = commands(args.phase, sys.executable, output, args.resume, runs=args.runs, max_parallel=args.max_parallel,
-                        batch=args.batch)
+                        batch=args.batch, cpus=args.cpu)
         return supervise(jobs, repo, output, max_parallel=args.max_parallel if args.phase == "train" else None)
     if output.exists():
         parser.error(f"Output already exists: {output}")
@@ -282,12 +287,13 @@ def main(argv: list[str] | None = None) -> int:
             func=_run_e3, image=args.image, num_nodes=1,
             func_args={"repo_dir": str(repo), "phase": args.phase, "output": str(output),
                        "token_dir": "/etc/e3-wandb" if secret else "", "resume": args.resume,
-                       "runs": ",".join(args.runs or []), "max_parallel": args.max_parallel or 0, "batch": args.batch},
-            resources_per_node={"cpu": args.cpu, "memory": args.memory, "nvidia.com/gpu": "1"},
+                       "runs": ",".join(args.runs or []), "max_parallel": args.max_parallel or 0, "batch": args.batch,
+                       "cpus": args.cpu},
+            resources_per_node={"cpu": str(args.cpu), "memory": args.memory, "nvidia.com/gpu": "1"},
         ),
     )
     record = {"job_id": job_id, "phase": args.phase, "output": str(output), "repo_dir": str(repo),
-              "batch": args.batch, "runs": select_runs(args.runs, args.batch),
+              "batch": args.batch, "cpus": args.cpu, "runs": select_runs(args.runs, args.batch),
               "max_parallel": n_concurrent(args.runs, args.max_parallel, args.batch),
               "submitted_at": datetime.now(timezone.utc).isoformat()}
     record_path = output.parent / f"{output.name}.submission.json"

@@ -2120,3 +2120,44 @@ console line.
 reference by zone for I_s (main) and I_z (secondary) with the combined se; class means (block class
 A / B) with se sqrt(sum se^2) / n and the spread over seeds; each run's C-a, C-b (by zone, with the
 floor) and C-c next to it; B_BY_ZONE.md and b_by_zone.json.
+
+## 2026-09-30 (2) -- pooled I_s retained; per-context I_s as a secondary diagnostic; --cpu; git rule
+
+### 1. I_s pooled over a state's contexts: the main measure (user decision)
+
+**Retained: I_s pooled over the contexts of a state** (one kernel per state, K = 1,358 draws per
+(s, a) spread over up to 50 contexts). **Why:**
+- it is the exact analogue of E2's per-state kernel and of the tabular twin B -- one kernel per
+  state, histories merged -- so it is comparable to them;
+- its gap to the per-context computation (+0.04 to +0.065 bits on the bridge, 2026-09-30 first
+  entry) is small against the differences between zones, and it is computed the same way in the
+  environment and in its reference;
+- the per-context computation would cost 7.5 times more.
+
+**Per-context I_s stays as a SECONDARY diagnostic, reported with every final measurement**
+(`run_mini.per_context_is_check`, config `measure.is_per_context`: 4 states per zone, 10
+contexts each, 512 draws per context and action, in every E3 config; own measurement slot 12):
+per zone, the mean per-context I_s, the pooled I_s of the same contexts, their bootstrap biases,
+and the gap pooled - per-context with its se over states (<= 0 up to sampling: mutual information
+is convex in the channel). In results.json (`is_per_context`) and REPORT.md (under the I_s table).
+`is_pooling_check.py` runs the same function on any checkpoint (other sizes on request). Cost:
+4 x 4 x 10 x 5 x 512 = 0.41 M decodes and matches per final measurement.
+
+### 2. Job CPUs (user request)
+
+`submit_kubeflow.py --cpu N` (default 3, as before; now an integer) sets the Kubernetes CPU
+request, and is passed to the worker and to the preflight (`--cpus N`, with the launch's runs per
+config, `--batch-runs`). The preflight records the request with the CPUs it can actually use
+(cgroup quota, affinity, count; a warning if they differ), measures under that allocation, and
+prints the projected wall time of the whole batch (`projected_batch_hours`: runs queued at most
+`--max-parallel` at once, longest first; a config left out of the parallel mix is costed as the
+slowest measured one; every diagnostic point costed as the final one, an upper bound).
+RUN_GPU.md says how to request it.
+
+### 3. Git rule (user decision)
+
+The user committed and pushed the state of 2026-09-30 (merge with origin/main included,
+41260d8). **From now on the implementer makes no commit, not even local, and does not modify the
+existing history.** At the end of each step it gives the list of files to add and a commit
+message, **without any Co-Authored-By line or mention of Claude**; the user runs git add, commit
+and push.
