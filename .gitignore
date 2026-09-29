@@ -56,4 +56,7 @@ results/E3_worldmodel_4zones/*worldmodel-gpu_e30*/
 
 # Preflight runs and GPU launch logs (experiments/E3_worldmodel_4zones/preflight.py, launch_gpu_e30.sh)
 results/preflight/
-logs/
+logs/*
+!logs/kubeflow/
+logs/kubeflow/*
+!logs/kubeflow/E3_GPU_2026-09-28_light.tgz
