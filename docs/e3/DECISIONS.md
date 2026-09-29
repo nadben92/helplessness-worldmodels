@@ -1825,3 +1825,298 @@ plus the logs. Measured on the smoke run of gpu_e30 (20 gradient steps):
 10.0 MB for one run. A full run adds its 60,000-step history to
 results.json (~5 MB compressed, upper estimate): ~15 MB per run, ~75 MB for
 the 5 runs. The full archive (with the weights, ~2 GB) only on request.
+
+## 2026-09-29 -- first GPU batch: outcomes as they stand; bridge measures recovered; K_s corrected; engineering for the next batch
+
+### 1. Outcomes of TrainJob m3e9461fad23 (recorded as they are, nothing relaunched)
+
+One A100 80 GB shared by the 5 processes (preflight bc7e34cec174 had passed; it tested throughput, not the memory of concurrent measurements).
+
+| run | outcome |
+|---|---|
+| seed 0 reference (gpu_e30, class A) | **done**, 60,000 / 60,000 gradient steps; switch at 7,051 |
+| seed 0 experimental (gpu_e30) | **separation not reached** by the 40,000 deadline (SeparationNotReachedError); batch-pair JS never above 0.003 bits |
+| seed 5 reference (gpu_e30, class B) | **separation not reached** by 40,000; batch-pair JS never above 0.24 bits |
+| seed 5 experimental (gpu_e30) | **CUDA out of memory** at step 600, first real-context diagnostic (encoder LayerNorm, 2.57 GiB request) |
+| bridge seed 0 experimental (gpu_e30_bridge) | training **done** 60,000 / 60,000 (switch at 4,201); **CUDA out of memory** in the final z-only probe (972 MiB request: the float images of one 256-window chunk) |
+
+One success, two separation failures, two out-of-memory errors. Seed 5 experimental's step-600
+weights are not a resume point: its outcome stays "out of memory at 600", and any later run of it is a
+new run, recorded separately. All five meta.yaml have git_commit "unknown" (no git in the container).
+
+### 2. Bridge: final measures recovered on CPU
+
+`recompute_measures.py <bridge> --checkpoint final --device cpu` (4 threads), then `--checkpoint all`
+for the trajectory (section 7). There is no run-side arrays.npz to compare with, and a CPU
+recomputation is not bit-identical to the A100. Outputs under `<run>/recomputed/` (not versioned).
+
+- **C-a** (>= 0.99): 0.9941 on the designated measure (replay windows, one batch of 32 x 16 = 512
+  frames, binomial se 0.0034); on the 6,806 real contexts 0.9875 at K_s = 32 and 0.9904 at K_s = 1,358
+  (the contexts' posterior draws come from the same stream, after the canonical kernel). At the threshold.
+- **C-c** (>= 0.99): 0.9947 (z-only probe, 19,993 held-out samples). Met.
+- **C-b** (per zone, pairs with N[s,a] >= 100, L1_WM <= L1_B + 0.05), at K_s = 1,358 (section 3), with
+  the exact-kernel floor: uncontrollable deterministic 0.044 vs 0.061 (floor 0, 24 pairs) met;
+  controllable deterministic 0.045 vs 0.059 (floor 0, 93 pairs) met; controllable noisy 0.265 vs 0.104
+  (floor 0.020, 94 pairs) **not met**; uncontrollable noisy 0.191 vs 0.107 (floor 0.020, 27 pairs)
+  **not met**. Same verdicts at K_s = 32 (0.029 / 0.050 / 0.289 / 0.202; floor 0.13 in the noisy zones).
+- I_z in real contexts (mean [se]): uncontrollable deterministic 0.287 [0.006], controllable noisy
+  2.069 [0.002], uncontrollable noisy 0.285 [0.006], controllable deterministic 2.257 [0.002]; s-space
+  truth 0, 1.653, 0, 2.322.
+- T4 (p_hat at the true frequent outcome, real-context kernel, mean over the zone's pairs): controllable
+  noisy 0.789 (se over states 0.030), uncontrollable noisy 0.634 (0.051); target 0.9; twin B 0.894 / 0.877.
+- Ghosts 0.002 (0.001-0.004 by zone). Context dispersion (mean |I_real - I_canonical| / mean sd over a
+  state's contexts), zone order as above: 0.245/0.176, 0.139/0.084, 0.247/0.187, 0.152/0.061.
+  D2 (real contexts): boundary 4.294, within-zone 2.907 bits.
+
+### 3. C-b's K_s: corrected after seeing the bridge fail, for every configuration
+
+With K draws per (s, a), even a model whose kernel IS the true P scores an expected L1 above zero: the
+empirical law of K draws differs from P. Exactly (the expectation is linear: a sum of binomial mean
+absolute deviations, `measures.kernel_probe.expected_l1_sampling_floor`), in a 0.9 / 4 x 0.025 zone the
+floor is 0.131 at K = 32, above C-b's bound L1_B + 0.05 (about 0.105-0.11 with this data): C-b could
+not be met in the noisy zones by any model, the seed 0 reference included (0.167 / 0.183, within 0.05
+of the floor).
+
+**Decision (user):** correct the measurement's precision, not the threshold. K_s is the smallest K for
+which the floor is <= 0.02 in the noisiest zone, at K and at every K' up to 2K
+(`measures.kernel_probe.draws_for_l1_floor`): **K_s = 1,358** (1,357 is above 0.02). Set as
+`measure.kernel_k_s` and `measure.real_context.kernel_draws` in **every** E3 config (mini, mini_long,
+gpu_e30, gpu_e30_bridge). The floor is reported next to every L1 (`l1_floor_by_zone` in the records, a
+column in REPORT.md and in the recomputation's SUMMARY.md). `recompute_measures.py --kernel-draws K`
+measures an older run at the corrected K_s (output labelled `__ks<K>`).
+
+**This correction was made after seeing the bridge fail C-b.** It is justified independently of that
+result: the floor is a property of the estimator and of P alone, computed without any model, and it
+applies to every run and configuration alike. At K_s = 1,358 the bridge still fails C-b in the noisy
+zones, by 8-13 times the floor. Cost: a kernel is 144 x 5 x 1,358 decodes (about 12 min of decoding
+for the bridge network on 4 CPU threads; each diagnostic point has two kernels, canonical and real).
+
+### 4. Seed 0 reference: T4 and I_z against the s-space value
+
+In the reference both noisy zones are controllable noisy (0.9 / 4 x 0.025): I(a;s'|s) = 1.653 bits.
+- **T4**: 0.9225 (se 0.0051) in the controllable-noisy zone, 0.9011 (0.0075) in the zone that is
+  uncontrollable noisy in the experimental environment; twin B 0.898 / 0.893. One seed: no interval
+  over seeds.
+- **I_z (z-space, real contexts): 2.142 [0.004] and 1.965 [0.005], i.e. +0.49 and +0.31 bits above
+  1.653.** Deterministic zones: 2.225 and 2.316 against log2 5 = 2.322.
+- The run's own s-space kernel (K_s = 32): I_s 1.970 / 1.895, against 1.749 expected from 32 exact draws
+  of P: +0.22 / +0.15 bits beyond the sampling bias. **The model overestimates the controllability of
+  the noisy zones**, while its probability of the frequent outcome is right (T4).
+- The reference's weights are not in this checkout (the light archive omits every .pt): it could not be
+  measured at K_s = 1,358, nor probed as in section 5.
+
+### 5. Hypothesis (user): the predicted code carries the action
+
+I_z measures the action dependence of the predicted latent code; the code of one arrival state could
+encode, through h_{t+1,a}, the action that led there -- inflating I_z without changing the belief about
+the state (and possibly the conveyor's ~0.4-bit plateau in mini_long; I_z being capped at log2 5, it
+would not cancel in b). Tested on the bridge only (weights available), final checkpoint. **The main
+measure is unchanged; the decision is the user's.**
+
+a. I_s by zone from the real-context kernel at K_s = 1,358 (sampling bias <= 0.004 bits), against I_z
+and the truth: uncontrollable deterministic I_s 0.071 / I_z 0.287 / truth 0; controllable noisy
+1.706 / 2.069 / 1.653; uncontrollable noisy 0.069 / 0.285 / 0; controllable deterministic 2.128 /
+2.257 / 2.322. In the controllable-noisy zone the s-space kernel is within +0.05 bits of the truth
+while I_z is +0.42; in the uncontrollable zones I_s is 0.07, I_z 0.29.
+
+b. `action_in_latent.py` (new): from the 6,806 real contexts, 4 prior draws of z' per context and
+action, each decoded to s'; at fixed s' (groups >= 50 draws, 80/20 split), a linear probe z' -> a. Test
+accuracy, weighted over the s' groups (about 4,100-4,900 test draws per zone, binomial se about 0.007):
+
+| source zone | chance | majority given s' | (s, s') only | z' given s' | z' + s given s' |
+|---|---|---|---|---|---|
+| uncontrollable deterministic | 0.200 | 0.221 | 0.222 | 0.258 | 0.265 |
+| controllable noisy | 0.200 | 0.350 | 0.860 | 0.401 | 0.869 |
+| uncontrollable noisy | 0.200 | 0.222 | 0.223 | 0.251 | 0.260 |
+| controllable deterministic | 0.200 | 0.331 | 0.964 | 0.376 | 0.972 |
+
+In the uncontrollable zones, where the states tell nothing about the action, z' predicts it 0.03-0.04
+above what (s, s') allow (about 5 se); in the controllable zones z' adds 0.008-0.009 to (s, s').
+
+### 6. Engineering for the next batch (implementer's decisions)
+
+- **Probes by blocks.** `loop.encode_windows(rssm, x, device, max_images)`: the real-context and z-only
+  probes convert and encode their block of windows at most `measure.max_images_per_forward` images at
+  a time (2,048 in both GPU configs), then unroll from the embeddings (`unroll_observation(...,
+  embeds=)`). The latent draws, taken step by step over the whole block, are unchanged; embeddings
+  agree to ~1e-6 (tested: same drawn classes, probabilities within 1e-6). null (every older config)
+  keeps the one-call path bit for bit.
+- **Peak GPU memory** of every diagnostic point (`diagnostics.jsonl`: gpu_memory) and of the final
+  measures (results.json: gpu_memory_final), allocated and reserved; the cache is then returned to the
+  device (`torch.cuda.empty_cache`): the spec-size processes held 29 GiB each after their measurements.
+- **Preflight memory test** with the planned number of processes: each trains the config's model a few
+  steps, waits at a file barrier for the others, then takes one diagnostic point and one final
+  measurement at the same time; fails on any process failure (OOM) or if the processes' worst reserved
+  peaks add up to more than 90% of the GPU. Not yet run on a GPU (none here).
+- **Launcher**: `submit_kubeflow.py --runs <subset> --max-parallel N` (a queue: at most N at once, the
+  next starts when one ends; status.json per run, supervisor.json); its preflight phase with the same
+  flags builds `preflight.py --parallel N` with the worst mix (spec-size runs first).
+  `launch_gpu_e30.sh` delegates to the same supervisor (RUNS, MAX_PARALLEL).
+- **Code version**: `runs.code_provenance` records git_commit when git works, and always
+  `source_sha256` (contents of src/, experiments/, configs/, pyproject.toml; CRLF read as LF; caches
+  excluded); `run_one_seed` refuses to start with neither (`UnknownCodeVersionError`).
+
+### 7. Separation failures (description only: no correction, no hypothesis tested by a run)
+
+From diagnostics.jsonl, failure/diagnostic.json, the console lines (every 1,000 steps) and the
+batch-pair JS history (every 50 steps; the bridge's from its resume.pt).
+
+| | seed 0 exp. (spec) | seed 5 ref. (spec) | seed 0 ref. (spec) | bridge seed 0 exp. |
+|---|---|---|---|---|
+| outcome | no switch by 40,000 | no switch by 40,000 | switch 7,051 | switch 4,201 |
+| batch-pair JS first > 0.1 / 1 / 3 bits | never | 5,650 / never / never | 5,500 / 5,650 / 6,250 | 2,600 / 2,850 / 3,350 |
+| JS max before switch / deadline | 0.003 (5,400) | 0.236 (5,650) | 4.81 | 4.12 |
+| JS median, 10,000-40,000 | 1e-7 | 2e-9 | 6.1 (after switch) | 6.0 (after switch) |
+| posterior entropy, canonical (bits, ceiling 24), at 600 / 3,786 / 6,000 / 9,509 / 37,858 | 23.54 / 23.84 / 23.89 / 23.99 / 23.99 | 23.26 / 23.94 / 24.00 / 24.00 / 23.99 | 23.60 / 23.94 / 17.17 / 3.43 / 1.18 | 20.93 / 17.24 / 9.20 / 5.85 / 3.74 |
+| recon_patch at 1k / 5k / 10k / 39k | 1.76 / 1.40 / 1.00 / 0.51 | 2.77 / 3.17 / 2.81 / 1.05 | 1.66 / 1.74 / 0.089 / 0.007 | 2.22 / 0.35 / 0.25 / 0.047 |
+| grad norm, median (max) over 1k-39k | 44 (250) | 50 (199) | 13 (147) | 19 (160) |
+| real-context template accuracy at 37,858 | 0.46 | 0.57 | 1.00 | 0.98 |
+| failure diagnostic (canonical) | acc probs/mode/hard 0.007/0.007/0.010; I(z;s) -0.001; centred logit norm 0.10 | 0.007/0.007/0.007; -0.001; 0.12 | - | - |
+
+What distinguishes the runs that separate:
+- All four start alike: batch-pair JS about 1e-7 and a posterior entropy rising from step 600 toward
+  the 24-bit ceiling.
+- Each shows one window in which the JS rises (bridge 2,400-3,350; the three spec runs 3,500-7,000). In
+  the seed 0 reference it goes from 1e-3 to 3 bits in 1,000 steps (5,250 -> 6,250) and the posterior
+  entropy falls (23.94 at 3,786, 17.2 at 6,000). In the two failures the rise stops at 0.003 and 0.24
+  bits and reverts: the JS is back near 1e-7 by 10,000 and the posterior reaches maximal entropy
+  (23.99-24.00 bits, centred logit norm 0.10-0.12), where it stays to 40,000.
+- Before that window, recon_patch and gradient norms do not separate successes from failures (seed 0
+  reference vs experimental: 1.66-1.74 vs 1.40-1.76; gradient norms 100-250 in every run). After it,
+  recon_patch falls by an order of magnitude with the separation in the successes and declines slowly
+  in the failures, whose gradient norms stay 2-4 times higher.
+- In the failures the reconstruction still improves and the real-context template accuracy reaches
+  0.46 and 0.57 with a posterior at maximal entropy: state information reaches the decoder through h,
+  not z (observation).
+- With the same data (seed 0 experimental), the bridge network's window comes earlier (first JS > 0.1
+  at 2,600 vs never) and its posterior is further from uniform at step 600 (20.9 vs 23.5 bits).
+- Spec architecture: 1 separation in 3 runs; the bridge network: 1 in 1.
+
+Bridge trajectory (recomputed at every checkpoint, K_s = 32; the final point recomputed with the new
+code is bit-identical to the one recomputed before the changes of section 6):
+
+| step | I_z real ud / cn / un / cd | acc replay / real | z-only | post. entropy real | L1(WM, P) real ud / cn / un / cd | T4 preview cn / un |
+|---|---|---|---|---|---|---|
+| 600 | 0.00 / 0.00 / 0.00 / 0.00 | 0.016 / 0.008 | 0.025 | 21.08 | 1.97 / 1.99 / 1.97 / 1.99 | 0.14 / 0.15 |
+| 2,389 | 0.00 / 0.00 / 0.00 / 0.00 | 0.016 / 0.010 | 0.028 | 22.68 | 1.95 / 1.99 / 1.97 / 1.99 | 0.21 / 0.21 |
+| 3,786 | 0.06 / 0.06 / 0.06 / 0.09 | 0.506 / 0.349 | 0.637 | 16.97 | 1.97 / 1.78 / 1.93 / 1.92 | 0.14 / 0.13 |
+| 6,000 | 0.15 / 0.28 / 0.25 / 0.52 | 0.896 / 0.673 | 0.921 | 8.82 | 1.86 / 1.81 / 1.84 / 1.84 | 0.21 / 0.24 |
+| 9,509 | 0.29 / 0.76 / 0.51 / 1.19 | 0.965 / 0.796 | 0.957 | 5.67 | 1.70 / 1.73 / 1.73 / 1.61 | 0.21 / 0.29 |
+| 15,071 | 0.40 / 1.23 / 0.59 / 1.67 | 0.969 / 0.890 | 0.973 | 4.57 | 1.49 / 1.49 / 1.48 / 1.17 | 0.30 / 0.35 |
+| 23,887 | 0.43 / 1.51 / 0.51 / 2.01 | 0.982 / 0.957 | 0.983 | 3.96 | 1.23 / 1.04 / 1.20 / 0.62 | 0.46 / 0.44 |
+| 37,858 | 0.37 / 1.87 / 0.37 / 2.18 | 0.994 / 0.980 | 0.991 | 3.40 | 0.97 / 0.65 / 0.97 / 0.30 | 0.66 / 0.52 |
+| 60,000 | 0.28 / 2.06 / 0.30 / 2.26 | 0.994 / 0.988 | 0.995 | 2.94 | 0.71 / 0.39 / 0.71 / 0.15 | 0.79 / 0.64 |
+
+(ud / cn / un / cd: uncontrollable deterministic, controllable noisy, uncontrollable noisy,
+controllable deterministic; all states of each zone, before the N >= 100 restriction.) At 60,000 the
+L1 errors and T4 are still moving: the bridge's kernel has not converged. The uncontrollable zones'
+I_z peaks at 0.43 / 0.59 (15,000-24,000) and is still falling at the end (0.28 / 0.30).
+
+## 2026-09-30 -- I_s becomes the main measure; second GPU batch gpu_e30b (objectives fixed before the launch); b aggregation
+
+### 1. Main measure: I_s; I_z secondary (user decision)
+
+**I_s** -- the controllability I(a ; s' | s) of the world model's s-space kernel in real contexts
+(prior draws of z' from a state's contexts, decoded to their arrival state and matched to the
+templates) -- replaces I_z as the main measure. I_z stays reported, as secondary: an upper bound.
+
+**Why.** On the bridge (2026-09-29, section 5), I_z / I_s / truth are 2.07 / 1.71 / 1.65 bits in the
+controllable-noisy zone and 0.29 / 0.07 / 0 in the uncontrollable zones: I_z overestimates the
+controllability. The predicted code carries information on the action beyond the arrival state
+(action_in_latent.py: at fixed s', z' predicts the action 0.03-0.04 above what (s, s') allow in the
+uncontrollable zones, about 5 se), and this bias would compress b (I_z is capped at log2 5 and the
+inflation does not cancel between the environment and its reference). I_s recovers the truth where
+it is known (within +0.05 bits in the controllable-noisy zone, 0.07 in the uncontrollable ones).
+
+**Implementation.**
+- `run_mini.real_context_measures`: I_s per state = `measures.controllability.controllability_per_state`
+  of the real-context kernel (NaN for a state not measured or with an all-ghost action row);
+  standard error and plug-in bias by parametric bootstrap
+  (`measures.controllability.controllability_bootstrap`, `measure.is_bootstrap` = 200 replicates:
+  redraw K outcomes per (s, a) from the estimated kernel); by zone, the mean over measured states
+  with the se of the mean and the mean bias (`I_s_by_zone`). The canonical probe gets the same
+  (secondary). Records, diagnostics.jsonl, results.json (`I_s_by_category_real`), arrays.npz
+  (`real_I_s`, `real_I_s_se`, `real_I_s_bias`), REPORT.md (I_s table first, I_z "SECONDARY, upper
+  bound"), the expected-shape checks (the I rules judged on I_s, then on I_z as secondary), the
+  checklist and the figures.
+- b = I_s(experimental) - I_s(reference) (`aggregate_b.py`, section 4).
+- D1 (alpha_app) is still computed in z-space: no s-space version yet.
+
+**Cost and estimator (implementer's proposal).** The plug-in I(a ; s' | s) of a kernel estimated
+from K draws per (s, a) is biased upward; for an exact 0.9 / 4 x 0.025 kernel (simulation, 1,000
+replicates): 0.047 bits at K = 64, 0.019 at 128, 0.013 at 256, 0.005 at 512, 0.003 at 1,024,
+**0.002 at 1,358**. Keeping the bias <= 0.01 per context would take >= 512 draws in each of the 50
+contexts of a state (128,000 decodes per state and action, 50 times the present cost). So:
+- **the draws of a state's contexts are pooled** into one kernel before I is computed (the existing
+  estimator: K draws per (s, a), the i-th from the state's (i mod n)-th context -- about 27 per
+  context at K = 1,358 with 50 contexts). This measures the controllability of the mixture of the
+  contexts' kernels, which is at most the mean of their controllabilities (mutual information is
+  convex in the channel);
+- **final measures: 50 contexts per state, K = 1,358 per (s, a)** (the value C-b already needs):
+  bias about 0.002-0.004 bits in the noisy zones, 0 in the deterministic ones; 144 x 5 x 1,358 =
+  0.98 M decodes and template matches per kernel, two kernels (real contexts and canonical);
+- **training diagnostics: K = 256** (`measure.real_context.kernel_draws_training`,
+  `measure.kernel_k_s_training`, in every E3 config): bias <= 0.013 bits, L1 floor 0.046; each record
+  states the K it used.
+- **Gap between pooled and per-context I_s, measured on the bridge** (`is_pooling_check.py`, final
+  checkpoint, 4 states per zone, 10 real contexts each, 512 draws per context and action; bits,
+  bootstrap plug-in bias in brackets):
+
+  | zone | per-context mean I_s | pooled I_s (same contexts) | gap [se over states] | truth |
+  |---|---|---|---|---|
+  | uncontrollable deterministic | 0.143 (0.006) | 0.092 (0.001) | +0.051 [0.029] | 0 |
+  | controllable noisy | 1.691 (0.009) | 1.626 (0.002) | +0.065 [0.031] | 1.653 |
+  | uncontrollable noisy | 0.111 (0.017) | 0.058 (0.003) | +0.053 [0.006] | 0 |
+  | controllable deterministic | 1.963 (0.005) | 1.927 (0.001) | +0.036 [0.019] | 2.322 |
+
+  The gap (+0.04 to +0.065 bits) is larger than the 0.01 bias target and is not a sampling bias
+  (the pooled bias is <= 0.003; the per-context one 0.005-0.017 at 512 draws): the two are different
+  quantities -- the controllability of the state's average predicted kernel (pooled) and the average
+  controllability of its context-specific kernels (per context), which also counts how the context
+  changes the action's effect. **Kept: pooled** (the main measure, bias <= 0.004, and the nearer to
+  the truth where it is known: 1.626 vs 1.653 in the noisy zone, 0.06-0.09 vs 0 in the
+  uncontrollable ones). The per-context estimand with bias <= 0.01 in every zone would need about
+  1,024 draws per context (the uncontrollable-noisy bias is 0.017 at 512), i.e. 10 contexts x 1,024
+  draws = 7.5 times the present final cost; available on request, not implemented as a measure.
+
+### 2. Second GPU batch: gpu_e30b (configs/e3/gpu_e30b_win64.yaml, gpu_e30b_win16.yaml)
+
+The bridge's network and procedure (mini_long's model block, lr 1e-3 -> 1e-4 at the label-free
+switch, deadline 25,000), 60,000 gradient steps on 100,000 environment steps (replay_ratio 0.6),
+**1,024 images per gradient step** (8 times the bridge) in two shapes:
+- **A (win64): 16 windows x 64 steps**; **B (win16): 64 windows x 16 steps**.
+Seeds 0 (block class A) and 5 (class B), experimental environment and reference: 8 runs. One CPU
+thread per process (and one BLAS/OpenMP thread, set by the Kubeflow worker). The real contexts
+are windows of the training length (64 or 16 steps, burn-in 8): the measurement regime follows
+the training regime, so it differs between the shapes.
+
+**Objectives, written before the launch:**
+- (i) **Does the window length explain the separation failures?** Hypothesis: with long windows the
+  state information can travel through h, and z does not need to separate. Read: the switch step
+  and the batch-pair JS trajectory of win64 vs win16 (same seeds, same data), with the new h -> s
+  and z -> s probes (real contexts, every diagnostic point; full replay at the end).
+- (ii) **Do 8 times more images per step than the bridge make the noisy zones' kernel converge?**
+  Read: C-b (L1 per zone against L1_B + 0.05, with the floor) and T4 (p_hat of the frequent outcome
+  -> 0.9) in the noisy zones, at the end and along the checkpoints.
+- (iii) **A first floor b = I_s - I_s,ref by zone**, for the configuration that passes the
+  calibration criteria (C-a, C-b, C-c), from `aggregate_b.py`, by block class.
+No run of this batch is relaunched on failure without a new entry here; a guard failure is a result.
+
+**Launch (implementer's proposal).** `submit_kubeflow.py --batch gpu_e30b --max-parallel 8`, preflight
+first with the same flags: its memory test runs 8 processes (7 win64 + 1 win16, the heaviest mix)
+measuring together; if it fails, the same with `--max-parallel 4` (then 4 win64 in the first wave).
+
+### 3. h -> s probe (user request)
+
+`probe.z_only_probe_chunked(latent="h")` (the z-only probe's linear classifier, factored as
+`probe.linear_state_probe`, on h_t; own measurement slot 11) at the end over the whole replay;
+`probe.context_state_probes` (h -> s and z -> s) on the real contexts at every diagnostic point.
+Reported in REPORT.md, SUMMARY.md, diagnostics.jsonl (`state_probe_h`, `state_probe_z`) and the
+console line.
+
+### 4. b aggregation
+
+`aggregate_b.py <run or recomputation dirs>`: pairs the runs by (config, seed), b = experimental -
+reference by zone for I_s (main) and I_z (secondary) with the combined se; class means (block class
+A / B) with se sqrt(sum se^2) / n and the spread over seeds; each run's C-a, C-b (by zone, with the
+floor) and C-c next to it; B_BY_ZONE.md and b_by_zone.json.

@@ -1,0 +1,6 @@
+[seed=0 experimental] collecting 20000 steps under epsilon=1, episode starts uniform_non_terminal ...
+[seed=0 experimental] collection done in 12.0s; 569 episode starts over 140 distinct states; compact replay saved
+[seed=0 experimental] [wandb] tracking on (mode online, project helplessness-e3): https://wandb.ai/skgtnb8-ucl/helplessness-e3/runs/0hcnw8xt
+[seed=0 experimental] condition experimental; class A; device cpu; torch 2.14.0+cpu; threads 6; TF32 matmul/cudnn False/False; deterministic False; run dir C:\Users\nadim\Desktop\v1_ucl\results\E3_worldmodel_4zones\grid12x12__4zones__pair-experimental__worldmodel-mini_long__seed00__20260928T112702Z
+[seed=0 experimental] lr 0.001 until the switch, then 0.0001; clip_norm None; collapse guard: batch-pair JS < 1.0 bits on 5 consecutive evaluations after the switch
+[seed=0 experimental] training for 200 gradient steps (planned 40000): posterior probabilities until the batch-pair JS exceeds 3.0 bits on 5 consecutive evaluations (every 50 steps, from step 500, deadline 25000 absolute), then straight-through; beta_dyn=0.5 from step 0, beta_rep 0 until the switch then ramped to 0.1; checkpoints at [2000, 3170, 5024, 7962, 12620, 20000, 31698]; training diagnostics every 2000 steps and at the checkpoints

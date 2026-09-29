@@ -16,6 +16,7 @@ results/*.csv convention -- see CONTRIBUTING.md) -- this is for E1 onwards.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 from datetime import datetime, timezone
@@ -56,6 +57,81 @@ def git_commit_hash(cwd: str | Path | None = None) -> str:
         return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=cwd, text=True).strip()
     except Exception:
         return "unknown"
+
+
+# The code and configs a run depends on: what source_tree_hash covers. On a clean checkout these are
+# exactly the files git tracks under these paths (caches and build metadata excluded below).
+SOURCE_SCOPE = ("src", "experiments", "configs", "pyproject.toml")
+
+
+def _outside_source(rel: Path) -> bool:
+    return any(part == "__pycache__" or part.endswith(".egg-info") for part in rel.parts) or rel.suffix in (".pyc", ".pyo")
+
+
+def source_tree_hash(root: str | Path, scope: tuple[str, ...] = SOURCE_SCOPE) -> dict | None:
+    """sha256 of the contents of the files under `scope` (relative to
+    root), for a machine without git (docs/e3/DECISIONS.md, 2026-09-29):
+    each file contributes its POSIX relative path, its length and its
+    bytes, in sorted path order; CRLF is read as LF, so a Windows checkout
+    and a Linux one of the same commit give the same hash. Returns
+    {"source_sha256", "source_n_files"}, or None when the scope holds no
+    file. To check a run against a commit: check the commit out and call
+    this function on the checkout."""
+    root = Path(root)
+    files = []
+    for entry in scope:
+        path = root / entry
+        if path.is_file():
+            files.append(path)
+        elif path.is_dir():
+            files += [f for f in path.rglob("*") if f.is_file() and not _outside_source(f.relative_to(root))]
+    if not files:
+        return None
+    digest = hashlib.sha256()
+    for f in sorted(files, key=lambda p: p.relative_to(root).as_posix()):
+        data = f.read_bytes().replace(b"\r\n", b"\n")
+        digest.update(f.relative_to(root).as_posix().encode("utf-8") + b"\0" + str(len(data)).encode("ascii") + b"\0" + data)
+    return {"source_sha256": digest.hexdigest(), "source_n_files": len(files)}
+
+
+def code_provenance(root: str | Path) -> dict:
+    """What identifies the code a run was launched from: git_commit,
+    git_dirty and git_n_changed_paths when git works in root ("unknown" /
+    None otherwise -- no git executable, or not a checkout), and always the
+    content hash of source_tree_hash (source_sha256, source_n_files, and
+    source_scope), None when it cannot be computed."""
+    def git(*args: str) -> str | None:
+        try:
+            done = subprocess.run(["git", *args], cwd=root, capture_output=True, text=True)
+        except OSError:
+            return None
+        return done.stdout.strip() if done.returncode == 0 else None
+
+    commit = git("rev-parse", "HEAD")
+    status = git("status", "--porcelain") if commit else None
+    if commit and status is not None:
+        changed = [line for line in status.splitlines() if line.strip()]
+        out = {"git_commit": commit, "git_dirty": bool(changed), "git_n_changed_paths": len(changed)}
+    else:
+        out = {"git_commit": "unknown", "git_dirty": None, "git_n_changed_paths": None}
+    source = source_tree_hash(root)
+    out.update(source or {"source_sha256": None, "source_n_files": None})
+    out["source_scope"] = list(SOURCE_SCOPE)
+    return out
+
+
+class UnknownCodeVersionError(RuntimeError):
+    """A run would start without a git commit and without a content hash
+    of its code: its results could not be tied to any version."""
+
+
+def require_code_provenance(provenance: dict) -> None:
+    """Raises UnknownCodeVersionError unless the provenance has a git
+    commit or a source content hash (docs/e3/DECISIONS.md, 2026-09-29:
+    the first GPU batch ran with git_commit "unknown")."""
+    if provenance.get("git_commit", "unknown") == "unknown" and not provenance.get("source_sha256"):
+        raise UnknownCodeVersionError("refusing to launch a run with neither a git commit (git unavailable or not a checkout) "
+                                      "nor a content hash of its source files (runs.source_tree_hash found no file)")
 
 
 def make_run_dir(results_root: str | Path, experiment_id: str, run_name: str) -> Path:

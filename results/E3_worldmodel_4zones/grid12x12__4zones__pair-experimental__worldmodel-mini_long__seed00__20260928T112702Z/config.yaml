@@ -1,0 +1,78 @@
+model:
+  n_vars: 8
+  n_classes: 8
+  h_dim: 64
+  embed_dim: 64
+  base_depth: 8
+  unimix: 0.01
+render:
+  k: 6
+  grid_lines: false
+  cielab_min_dist: 30.0
+  cielab_marker_min_dist: 30.0
+budget:
+  total_steps: 19744
+  prefill_steps: 256
+  checkpoints:
+  - 19744
+collection:
+  start_distribution: uniform_non_terminal
+  epsilon: 1.0
+train:
+  batch_size: 8
+  seq_len: 16
+  replay_ratio: 2
+  lr: 0.001
+  lr_after_switch: 0.0001
+  adam_eps: 1.0e-08
+  clip_norm: null
+  w_patch: 10.0
+  beta_dyn: 0.5
+  beta_rep: 0.1
+  free_bits: 0.0
+  free_bits_mode: per_step
+  rep_warmup_steps: null
+  latent_estimator:
+    kind: warmup_probs_until_separated
+    switch_js_threshold: 3.0
+    switch_consecutive: 5
+    switch_eval_every: 50
+    switch_min_steps: 500
+    switch_max_steps: 25000
+    switch_n_pairs: 64
+    collapse_js_threshold: 1.0
+    collapse_consecutive: 5
+measure:
+  iz_mc_samples_training: 2000
+  iz_mc_samples_final: 4096
+  kernel_k_s: 16
+  kernel_margin_threshold: 0.001
+  z_only_test_frac: 0.2
+  context_dispersion_n_samples: 100
+  d1_contrast_min_bits: 0.25
+  separation_every: 250
+  monitor_every: 500
+  diagnostics_every: 2000
+  real_context:
+    window_len: null
+    burn_in: 8
+    max_per_state: 50
+    kernel_draws: 32
+  diagnostics_at_checkpoints: true
+checkpoints:
+  grid: e2
+  resume_every: 2000
+conditions:
+- experimental
+logging:
+  wandb:
+    enabled: auto
+    project: helplessness-e3
+    entity: null
+    mode: online
+runtime:
+  num_threads: 6
+  device: cpu
+  max_steps: 200
+seeds:
+- 0

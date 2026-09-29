@@ -1,0 +1,88 @@
+seed: 0
+git_commit: 4a094c06a5a8466c1bda5eb57809b77d4e7ceeb8
+started_at: '2026-09-28T11:27:03Z'
+status: failed
+updated_at: '2026-09-28T11:29:11Z'
+start_distribution: uniform_non_terminal
+collection_epsilon: 1.0
+device: cpu
+python_version: 3.14.0
+platform: Windows-11-10.0.22631-SP0
+torch_version: 2.14.0+cpu
+cuda_version: null
+cudnn_version: null
+gpu_name: null
+num_threads: 6
+allow_tf32_matmul: false
+allow_tf32_cudnn: false
+deterministic_algorithms: false
+deterministic_warn_only: true
+cudnn_deterministic: false
+cudnn_benchmark: false
+cublas_workspace_config: :4096:8
+git_dirty: true
+git_n_changed_paths: 13
+condition: experimental
+rotation: 0
+quadrant_assignment:
+  nw: nw
+  ne: ne
+  se: se
+  sw: sw
+block_class: A
+themes:
+  zone_colors:
+    uncontrollable_deterministic:
+    - 94
+    - 29
+    - 224
+    controllable_noisy:
+    - 97
+    - 158
+    - 64
+    uncontrollable_noisy:
+    - 146
+    - 25
+    - 46
+    controllable_deterministic:
+    - 252
+    - 40
+    - 187
+  agent_marker_color:
+  - 93
+  - 38
+  - 140
+  corridor_color:
+  - 128
+  - 128
+  - 128
+  goal_color:
+  - 255
+  - 215
+  - 0
+  goal_state: 0
+zone_kinds:
+  uncontrollable_deterministic: uncontrollable_deterministic
+  controllable_noisy: controllable_noisy
+  uncontrollable_noisy: uncontrollable_noisy
+  controllable_deterministic: controllable_deterministic
+rng_streams:
+- env_dynamics
+- explore
+- tiebreak
+- start_state
+- matched_control
+- reference
+- theme
+- network_init
+- replay_sample
+- latent_sample
+- switch_pairs
+- measure
+episode:
+  goal_reward: 50.0
+  step_reward: -1.0
+  max_steps: 36
+  gamma: 0.9
+wandb_run_id: 0hcnw8xt
+error: 'KeyboardInterrupt: '

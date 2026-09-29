@@ -108,7 +108,9 @@ measure:
   # the spec's 4096 for the final measures (and for calibration).
   iz_mc_samples_training: 2000
   iz_mc_samples_final: 4096
-  kernel_k_s: 16              # K_s draws for canonical_kernel_probe
+  kernel_k_s: 1358   # K_s: expected L1 floor of an exact kernel <= 0.02 in a 0.9/4x0.025 zone (DECISIONS 2026-09-29; was 16)
+  kernel_k_s_training: 256           # canonical kernel, training diagnostics (as kernel_draws_training)
+  is_bootstrap: 200                  # parametric-bootstrap replicates for the se and bias of I_s (DECISIONS 2026-09-30)
   kernel_margin_threshold: 1.0e-3
   z_only_test_frac: 0.2
   context_dispersion_n_samples: 100
@@ -131,7 +133,9 @@ measure:
     window_len: null
     burn_in: 8
     max_per_state: 50
-    kernel_draws: 32
+    kernel_draws: 1358           # K_s, as kernel_k_s (DECISIONS 2026-09-29; was 32)
+    kernel_draws_training: 256       # reduced K for the training diagnostics (DECISIONS 2026-09-30): I_s plug-in bias
+                                     # <= 0.013 bits, L1 floor 0.046; the final measures use kernel_draws
   diagnostics_at_checkpoints: true
 
 # Weights saved at every checkpoint of E2's grid (E2 env-step grid x replay_ratio, gradient steps)

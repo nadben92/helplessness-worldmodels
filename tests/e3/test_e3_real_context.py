@@ -102,6 +102,32 @@ def test_one_step_kl_is_the_training_losses_pairing(trained):
     assert np.all(ctx["prior_probs"].sum(axis=-1) == pytest.approx(1.0))
 
 
+def test_probes_with_an_image_cap_give_the_same_contexts_and_draws(trained):
+    """measure.max_images_per_forward (docs/e3/DECISIONS.md, 2026-09-29):
+    the real-context and z-only probes encode at most max_images images at a
+    time; the contexts, the latent draws and the probe's results are the
+    same (values up to the convolutions' reduction order)."""
+    _, run_dir = trained
+    cfg = tiny_config()
+    world, replay, _, _ = run_mini.load_run_data(run_dir, cfg, 0, "experimental")
+    rssm = run_mini.build_rssm(cfg)
+    rssm.load_state_dict(torch.load(run_dir / "checkpoints" / "weights_final.pt", weights_only=False)["rssm"])
+    ctx = {cap: e3_probe.real_context_probe(rssm, replay, 16, 8, 3, 144, np.random.default_rng(0), torch.Generator().manual_seed(0),
+                                            chunk=4, max_images=cap) for cap in (None, 5)}
+    for key in ("positions", "states", "window", "t"):
+        assert np.array_equal(ctx[None][key], ctx[5][key]), key
+    # the same draws: z = onehot + probs - sg(probs) carries a rounding residue of probs, so compare the drawn classes
+    assert torch.equal(ctx[None]["z"].argmax(-1), ctx[5]["z"].argmax(-1))
+    assert torch.allclose(ctx[None]["z"], ctx[5]["z"], atol=1e-6)
+    np.testing.assert_allclose(ctx[None]["post_probs"], ctx[5]["post_probs"], atol=1e-6)
+    np.testing.assert_allclose(ctx[None]["prior_probs"], ctx[5]["prior_probs"], atol=1e-6)
+    z = {cap: e3_probe.z_only_probe_chunked(rssm, replay.iter_chronological_windows(16, chunk=3), 144, 0.2, np.random.default_rng(0),
+                                            epochs=20, generator=torch.Generator().manual_seed(0), max_images=cap)
+         for cap in (None, 7)}
+    assert z[None]["n_train"] == z[7]["n_train"] and z[None]["test_accuracy"] == pytest.approx(z[7]["test_accuracy"], abs=1e-6)
+    assert z[None]["mean_posterior_entropy"] == pytest.approx(z[7]["mean_posterior_entropy"], abs=1e-6)
+
+
 def test_run_outputs_checkpoints_and_real_context_record(trained):
     report, run_dir = trained
     for name in ("world.json", "replay.npz", "checkpoints/weights_step00000040.pt", "checkpoints/weights_step00000100.pt",
@@ -173,3 +199,36 @@ def test_reference_condition_shares_only_permutation_and_themes():
     assert s_exp["network_init_seed"] != s_ref["network_init_seed"]
     assert run_mini.make_seed_run_dir.__defaults__ == ("experimental",)
     assert run_mini.PAIR_ROLE["reference"] == "control"
+
+
+def test_is_is_the_main_measure_with_state_probes(trained):
+    """I_s (docs/e3/DECISIONS.md, 2026-09-30): controllability_per_state of
+    the real-context kernel, with bootstrap se and bias, by zone; I_z kept as
+    secondary; linear probes h -> s and z -> s on the contexts at every
+    diagnostic point, and the full-buffer h-only probe at the end."""
+    report, run_dir = trained
+    rc = report["real_context"]
+    arrays = np.load(run_dir / "arrays.npz")
+    measured = np.isfinite(arrays["real_p_hat"]).all(axis=(1, 2)) & np.isclose(np.nan_to_num(arrays["real_p_hat"]).sum(-1), 1).all(1)
+    expected = run_mini.controllability_per_state(arrays["real_p_hat"][measured])
+    assert np.allclose(arrays["real_I_s"][measured], expected) and np.isnan(arrays["real_I_s"][~measured]).all()
+    assert np.isfinite(arrays["real_I_s_se"][measured]).all() and np.isfinite(arrays["real_I_s_bias"][measured]).all()
+    for cat in run_mini.e3_env.ZONE_CATEGORIES:
+        assert set(rc["I_s_by_zone"][cat]) >= {"mean", "se", "bias", "n_measured"} and "mean" in rc["I_z_by_zone"][cat]
+    assert 0.0 <= rc["state_probe_h"] <= 1.0 and 0.0 <= rc["state_probe_z"] <= 1.0
+    assert report["h_only_probe"]["latent"] == "h" and report["z_only_probe"]["latent"] == "z"
+    assert report["h_only_probe"]["n_test"] == report["z_only_probe"]["n_test"]
+    diagnostics = [json.loads(line) for line in (run_dir / "diagnostics.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert all("I_s_by_zone" in d["real_context"] and "I_s_by_zone" in d for d in diagnostics)
+    text = (run_dir / "REPORT.md").read_text(encoding="utf-8")
+    assert "### I_s in real contexts (MAIN" in text and "I_z in real contexts (SECONDARY" in text and "h-only linear probe" in text
+
+
+def test_training_diagnostics_use_the_reduced_kernel_size(tmp_path):
+    cfg = tiny_config()
+    cfg["measure"]["real_context"]["kernel_draws_training"] = 3
+    cfg["measure"]["kernel_k_s_training"] = 2
+    assert run_mini.kernel_draws(cfg, final=False) == (3, 2)
+    assert run_mini.kernel_draws(cfg, final=True) == (cfg["measure"]["real_context"]["kernel_draws"], cfg["measure"]["kernel_k_s"])
+    del cfg["measure"]["kernel_k_s_training"]
+    assert run_mini.kernel_draws(cfg, final=False)[1] == cfg["measure"]["kernel_k_s"]

@@ -1,0 +1,105 @@
+# Second GPU batch, configuration A: 16 windows x 64 steps (docs/e3/DECISIONS.md, 2026-09-30).
+# gpu_e30b = the bridge's network and procedure (exactly mini_long.yaml's model block, lr schedule,
+# switch rule and deadline, losses), 60,000 gradient steps on 100,000 environment steps, with
+# 1,024 images per gradient step (8 times the bridge's 8 x 16), in two shapes:
+#   gpu_e30b_win64.yaml: 16 windows x 64 steps;  gpu_e30b_win16.yaml: 64 windows x 16 steps.
+# Seeds 0 (class A) and 5 (class B), experimental and reference: 4 runs per shape, 8 in all.
+# Differences from gpu_e30_bridge.yaml, and only these (tests/e3/test_e3_gpu_configs.py): the batch
+# shape, seeds and conditions, runtime.num_threads 1. The real contexts are windows of the
+# training length (window_len null = seq_len), so they differ between the two shapes.
+# Objectives, fixed before the launch: docs/e3/DECISIONS.md, 2026-09-30.
+
+model:
+  n_vars: 8
+  n_classes: 8
+  h_dim: 64
+  embed_dim: 64
+  base_depth: 8
+  unimix: 0.01
+
+render:
+  k: 6
+  grid_lines: false
+  cielab_min_dist: 30.0
+  cielab_marker_min_dist: 30.0
+
+budget:
+  total_steps: 99744       # + prefill 256 = 100,000 environment steps (as gpu_e30)
+  prefill_steps: 256
+  checkpoints: [99744]     # informational only; the saved checkpoints are the `checkpoints` block below
+
+collection:
+  start_distribution: uniform_non_terminal
+  epsilon: 1.0
+
+train:
+  batch_size: 16
+  seq_len: 64
+  replay_ratio: 0.6          # 60,000 gradient steps on 100,000 environment steps, as gpu_e30 and the bridge
+  lr: 1.0e-3
+  lr_after_switch: 1.0e-4
+  adam_eps: 1.0e-8
+  clip_norm: null
+  w_patch: 10.0
+  beta_dyn: 0.5
+  beta_rep: 0.1
+  free_bits: 0.0
+  free_bits_mode: per_step
+  rep_warmup_steps: null
+  latent_estimator:
+    kind: warmup_probs_until_separated
+    switch_js_threshold: 3.0
+    switch_consecutive: 5
+    switch_eval_every: 50
+    switch_min_steps: 500
+    switch_max_steps: 25000    # mini_long's and the bridge's (absolute)
+    switch_n_pairs: 64
+    collapse_js_threshold: 1.0
+    collapse_consecutive: 5
+
+measure:
+  iz_mc_samples_training: 2000
+  iz_mc_samples_final: 4096
+  kernel_k_s: 1358   # K_s: expected L1 floor of an exact kernel <= 0.02 in a 0.9/4x0.025 zone (DECISIONS 2026-09-29; was 16)
+  kernel_k_s_training: 256           # canonical kernel, training diagnostics (as kernel_draws_training)
+  is_bootstrap: 200                  # parametric-bootstrap replicates for the se and bias of I_s (DECISIONS 2026-09-30)
+  kernel_margin_threshold: 1.0e-3
+  z_only_test_frac: 0.2
+  z_only_seq_len: 64
+  context_dispersion_n_samples: 100
+  d1_contrast_min_bits: 0.25
+  separation_every: 1000
+  monitor_every: 1000
+  diagnostics_every: null
+  diagnostics_at_checkpoints: true
+  max_images_per_forward: 2048       # encoder block of the real-context and z-only probes (memory; DECISIONS 2026-09-29)
+  real_context:
+    window_len: null                 # = seq_len (64)
+    burn_in: 8
+    max_per_state: 50
+    kernel_draws: 1358           # K_s, as kernel_k_s (DECISIONS 2026-09-29; was 32)
+    kernel_draws_training: 256       # reduced K for the training diagnostics (DECISIONS 2026-09-30): I_s plug-in bias
+                                     # <= 0.013 bits, L1 floor 0.046; the final measures use kernel_draws
+
+checkpoints:
+  grid: e2
+  resume_every: 2000
+
+conditions: [experimental, reference]
+
+# Optional Weights & Biases tracking (experiments/E3_worldmodel_4zones/wandb_logger.py; never stops a
+# run). enabled: auto = on if WANDB_API_KEY is set; --wandb forces it on. WANDB_MODE, if set,
+# overrides mode (online | offline | disabled).
+logging:
+  wandb:
+    enabled: auto
+    project: helplessness-e3
+    entity: null
+    mode: online
+
+runtime:
+  num_threads: 1          # 8 processes share the job's CPUs (DECISIONS 2026-09-30)
+  device: cuda
+  deterministic: true
+
+seeds: [0, 5]

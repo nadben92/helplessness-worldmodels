@@ -13,6 +13,14 @@ config (a few minutes). One command:
    (default 5, the number of runs launched together: the --extra-config
    runs, one process each, and --config for the rest), peak GPU memory,
    and the projected duration of one run of each config.
+3b. Memory with the same --parallel processes (docs/e3/DECISIONS.md, 2026-09-29):
+   each trains the config's model a few steps, waits for the others, then
+   takes one training-diagnostic point and one final measurement at the
+   same time as the others; the peak GPU memory of each phase is printed.
+   Fails if a process fails (out of memory) or if the processes' worst
+   peaks (reserved) add up to more than 90% of the GPU's memory. A launch
+   with a subset of runs or a smaller --max-parallel is tested with its
+   own --parallel (submit_kubeflow.py --phase preflight builds it).
 4. The real entry point, truncated: run_mini.py on seed 0 / experimental
    with --max-steps (default 200) into <out-dir>/preflight/, then checks
    that every output is written (meta.yaml says device cuda and status
@@ -26,6 +34,7 @@ preflight_summary.json next to the run.
 from __future__ import annotations
 
 import argparse
+import copy
 import dataclasses
 import json
 import os
@@ -48,6 +57,11 @@ TARGET_HOURS = 6.0
 # The truncated run's model is barely trained, so its D1 accepts few contrasts; a trained model's D1
 # in real contexts costs up to ~12 pairs x ~30 states x 2 x 50 contexts x ~8 ms: this allowance is added.
 D1_ALLOWANCE_SECONDS = 900.0
+# Memory test: replay steps (> 256 windows of 65 steps, one full block of the real-context and z-only probes)
+# and the share of the GPU's memory left free when every process is at its peak.
+MEMORY_PROBE_ENV_STEPS = 20_000
+MEMORY_PROBE_KERNEL_DRAWS = 64
+MEMORY_HEADROOM = 0.10
 
 
 def _sync(device: torch.device) -> None:
@@ -55,15 +69,15 @@ def _sync(device: torch.device) -> None:
         torch.cuda.synchronize(device)
 
 
-def setup(cfg: dict, device: torch.device, n_env_steps: int = 3000):
+def setup(cfg: dict, device: torch.device, n_env_steps: int = 3000, with_counts: bool = False):
     world = run_mini.build_world(cfg, 0, "experimental")
     replay = run_mini.ReplayBuffer.for_run(budget=n_env_steps, prefill_steps=0, table=world.templates_np)
     streams = run_mini.seed_streams(0, device)
-    run_mini.collect_and_count(world.env, replay, n_env_steps, streams["collect"], run_mini.N_STATES, run_mini.N_ACTIONS,
-                               streams["start_state"])
+    N = run_mini.collect_and_count(world.env, replay, n_env_steps, streams["collect"], run_mini.N_STATES, run_mini.N_ACTIONS,
+                                   streams["start_state"])
     if device.type == "cuda":
         replay.to_device(device)
-    return world, replay
+    return (world, replay, N) if with_counts else (world, replay)
 
 
 def bench(cfg: dict, device: torch.device, n_steps: int) -> dict:
@@ -95,6 +109,80 @@ def bench(cfg: dict, device: torch.device, n_steps: int) -> dict:
         assert all(np.isfinite(float(v)) for k, v in res.items() if k != "post_probs"), "non-finite loss"
     out["peak_memory_mb"] = torch.cuda.max_memory_allocated(device) / 1e6 if device.type == "cuda" else None
     return out
+
+
+def _wait_barrier(barrier: Path | None, n: int, timeout_s: float = 3600.0) -> None:
+    """File barrier: announce readiness, then wait until n processes have (no-op for barrier None)."""
+    if barrier is None:
+        return
+    barrier.mkdir(parents=True, exist_ok=True)
+    (barrier / f"ready_{os.getpid()}").touch()
+    t0 = time.perf_counter()
+    while len(list(barrier.glob("ready_*"))) < n:
+        if time.perf_counter() - t0 > timeout_s:
+            raise TimeoutError(f"memory barrier: {len(list(barrier.glob('ready_*')))}/{n} processes ready after {timeout_s:.0f}s")
+        time.sleep(0.2)
+
+
+def memory_probe(cfg: dict, device: torch.device, out_dir: Path, barrier: Path | None = None, n_barrier: int = 1,
+                 n_env_steps: int = MEMORY_PROBE_ENV_STEPS, train_steps: int = 20) -> dict:
+    """Peak GPU memory of what a run holds while it measures (docs/e3/DECISIONS.md, 2026-09-29): the
+    config's model trained a few steps (weights, Adam state, the training step's own peak), then one
+    training-diagnostic point (run_mini.training_diagnostics, M = iz_mc_samples_training) and one
+    final measurement (run_mini.measure_final), each between run_mini.gpu_peak_start / gpu_peak_end as
+    in a run. The replay holds MEMORY_PROBE_ENV_STEPS steps: more than one full block of the
+    real-context and z-only probes (256 windows), so their block-size peak is reached. With a barrier,
+    every process waits for the others before measuring, so the peaks of the side-by-side processes
+    coincide (the first batch's out-of-memory errors happened in concurrent measurements)."""
+    world, replay, N = setup(cfg, device, n_env_steps=n_env_steps, with_counts=True)
+    streams = run_mini.seed_streams(0, device)
+    torch.manual_seed(0)
+    rssm = run_mini.build_rssm(cfg).to(device)
+    opt = torch.optim.Adam(rssm.parameters(), lr=1e-4, eps=1e-8)
+    loss_cfg = run_mini.WorldModelLossConfig(k=cfg["render"]["k"], w_patch=cfg["train"]["w_patch"])
+    bg = world.background_t.to(device)
+    world.templates_t, world.background_t = world.templates_t.to(device), bg
+    gen = torch.Generator(device=device).manual_seed(0)
+    rng = np.random.default_rng(0)
+    run_mini.gpu_peak_start(device)
+    for i in range(train_steps):
+        mb, _ = replay.sample(cfg["train"]["batch_size"], cfg["train"]["seq_len"], rng)
+        est = LatentEstimator("probs" if i < train_steps // 2 else "straight_through")
+        run_mini.train_world_model_step(rssm, opt, mb, bg, loss_cfg, clip_norm=None, estimator=est, generator=gen, sync=False)
+    out = {"training": run_mini.gpu_peak_end(device)}
+    _wait_barrier(barrier, n_barrier)
+    T_hat_B = run_mini.build_tabular_twin(N, run_mini.N_STATES, run_mini.N_ACTIONS)
+    P_true = world.env.transition_tensor()
+    d_rng, d_gen = run_mini.measure_streams(0, run_mini.SLOT_DIAG, streams)
+    run_mini.gpu_peak_start(device)
+    t0 = time.perf_counter()
+    run_mini.training_diagnostics(rssm, world, P_true, T_hat_B, replay, cfg, d_rng, d_gen, cfg["measure"]["iz_mc_samples_training"],
+                                  final=False)
+    out["diagnostic_point"] = run_mini.gpu_peak_end(device)
+    out["diagnostic_point_seconds"] = time.perf_counter() - t0
+    out_dir.mkdir(parents=True, exist_ok=True)
+    # The kernels are decoded MEMORY_PROBE_KERNEL_DRAWS draws per (s, a) here instead of the final K: their peak is set by the
+    # decoding chunk (1,024 images), not by K, and the full K (CPU template matching) would make the test long. The final
+    # measure's duration is measured by the truncated real run (step 4) at the config's own K.
+    cfg_final = copy.deepcopy(cfg)
+    cfg_final["measure"]["kernel_k_s"] = cfg_final["measure"]["real_context"]["kernel_draws"] = MEMORY_PROBE_KERNEL_DRAWS
+    t0 = time.perf_counter()
+    fields, _ = run_mini.measure_final(rssm, world, replay, N, cfg_final, streams, out_dir, run_mini.RunLog(None, "[memory probe]"),
+                                       train_steps)
+    out["final_measures"] = fields["gpu_memory_final"]
+    out["final_measures_seconds"] = time.perf_counter() - t0
+    out["total_mib"] = torch.cuda.get_device_properties(device).total_memory / 2**20 if device.type == "cuda" else None
+    return out
+
+
+def memory_verdict(results: list[dict], total_mib: float, headroom: float = MEMORY_HEADROOM) -> dict:
+    """Whether the side-by-side processes fit: each process's worst peak (reserved by its caching
+    allocator: training, diagnostic point or final measures), summed over the processes, must stay
+    under (1 - headroom) of the GPU's memory -- the case where every process is at its peak at once."""
+    worst = [max(r[k]["peak_reserved_mib"] for k in ("training", "diagnostic_point", "final_measures")) for r in results]
+    budget = (1.0 - headroom) * total_mib
+    return {"per_process_worst_peak_reserved_mib": worst, "sum_mib": float(sum(worst)), "budget_mib": budget,
+            "total_mib": total_mib, "fits": bool(sum(worst) <= budget)}
 
 
 def determinism_check(cfg: dict, device: torch.device, n_steps: int = 5) -> dict:
@@ -160,11 +248,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
     parser.add_argument("--max-steps", type=int, default=200, help="gradient steps of the truncated real run")
     parser.add_argument("--bench-steps", type=int, default=30)
-    parser.add_argument("--parallel", type=int, default=5, help="processes side by side for the throughput measure")
+    parser.add_argument("--parallel", type=int, default=5,
+                        help="processes side by side for the throughput and memory tests: the launch's number of simultaneous runs")
     parser.add_argument("--extra-config", type=Path, nargs="*", default=[],
                         help="configs launched alongside (one process each in the parallel measure), e.g. the bridge run")
     parser.add_argument("--out-dir", type=Path, default=run_mini.REPO_ROOT / "results" / "preflight")
     parser.add_argument("--bench-only", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--memory-only", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--barrier", type=Path, default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--barrier-n", type=int, default=1, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
 
     os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
@@ -177,6 +269,10 @@ def main(argv: list[str] | None = None) -> int:
     device = run_mini.configure_runtime(cfg)
     if args.bench_only:
         print(json.dumps(bench(cfg, device, args.bench_steps)), flush=True)
+        return 0
+    if args.memory_only:
+        out_dir = args.out_dir / "memory_probe" / f"pid{os.getpid()}"
+        print(json.dumps(run_mini._jsonable(memory_probe(cfg, device, out_dir, args.barrier, args.barrier_n))), flush=True)
         return 0
 
     summary: dict = {"config": str(args.config), "device": str(device), "torch": str(torch.__version__), "cuda": torch.version.cuda,
@@ -209,6 +305,43 @@ def main(argv: list[str] | None = None) -> int:
             "per_process": {c: {ph: float(np.mean([o[ph] for o in os_])) for ph in ("probabilities", "straight-through")}
                             for c, os_ in per_config.items()}}
         print(f"[preflight] throughput, {len(configs)} processes side by side: {summary['throughput_parallel']}", flush=True)
+
+    # Memory with the planned number of processes: each trains a few steps, waits for the others, then
+    # takes one diagnostic point and one final measurement at the same time as the others.
+    barrier = args.out_dir / "memory_probe" / f"barrier_{os.getpid()}_{int(time.time())}"
+    if device.type == "cuda":
+        print(f"[preflight] memory: {len(configs)} process(es) side by side, diagnostic point + final measures at the same "
+              "time ...", flush=True)
+        procs = [subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "--config", str(c), "--device", args.device,
+                                   "--memory-only", "--barrier", str(barrier), "--barrier-n", str(len(configs)),
+                                   "--out-dir", str(args.out_dir)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                 for c in configs]
+    else:
+        print("[preflight] memory test skipped (no GPU)", flush=True)
+        procs = []
+    mem_results, mem_failed = [], []
+    for c, p in zip(configs, procs):
+        stdout, stderr = p.communicate()  # the probe's JSON is the last line of its stdout
+        if p.returncode != 0:
+            mem_failed.append(f"{Path(c).name}: exit {p.returncode}: {(stderr.strip().splitlines() or ['?'])[-1]}")
+        else:
+            mem_results.append({"config": str(c), **json.loads(stdout.strip().splitlines()[-1])})
+    summary["memory_parallel"] = {"n_processes": len(configs), "per_process": mem_results, "failed": mem_failed}
+    for r in mem_results:
+        peaks = {k: r[k] and round(r[k]["peak_reserved_mib"]) for k in ("training", "diagnostic_point", "final_measures")}
+        print(f"[preflight] memory {Path(r['config']).name}: peak reserved MiB {peaks}; diagnostic point "
+              f"{r['diagnostic_point_seconds']:.0f} s, final measures {r['final_measures_seconds']:.0f} s", flush=True)
+    problems += [f"memory test process failed (out of memory?): {m}" for m in mem_failed]
+    if device.type == "cuda" and mem_results and not mem_failed:
+        verdict = memory_verdict(mem_results, mem_results[0]["total_mib"])
+        summary["memory_parallel"]["verdict"] = verdict
+        print(f"[preflight] memory, {len(configs)} processes at their peaks: {verdict['sum_mib']:.0f} MiB of a "
+              f"{verdict['budget_mib']:.0f} MiB budget ({1 - MEMORY_HEADROOM:.0%} of {verdict['total_mib']:.0f}): "
+              f"{'fits' if verdict['fits'] else 'DOES NOT FIT'}", flush=True)
+        if not verdict["fits"]:
+            problems.append(f"{len(configs)} processes at their measurement peaks need {verdict['sum_mib']:.0f} MiB, above "
+                            f"{verdict['budget_mib']:.0f} MiB: lower --parallel (launcher --max-parallel) or "
+                            "measure.max_images_per_forward")
 
     print(f"[preflight] truncated real run: run_mini.py --max-steps {args.max_steps} ...", flush=True)
     t0 = time.perf_counter()

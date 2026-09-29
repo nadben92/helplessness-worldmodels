@@ -304,11 +304,38 @@ class WorldModelLossConfig:
     free_bits_mode: str = "per_step"
 
 
+def encode_windows(rssm: RSSM, x, device: torch.device, max_images: int | None = None) -> torch.Tensor:
+    """rssm.encoder on windows of raw images x (B, T, H, W, C) uint8
+    (numpy array or torch tensor) -> embeddings (B, T, embed_dim) on
+    `device`. max_images None: one encoder call on the B*T images, exactly
+    unroll_observation's own encoding. Otherwise the images are converted
+    (to_chw_float) and encoded at most max_images at a time, so the float
+    images and the encoder's activations of a large measurement block
+    never sit in memory at once (docs/e3/DECISIONS.md, 2026-09-29: the
+    first GPU batch's out-of-memory errors). The encoder is a function of
+    each image alone and draws nothing, so the values are the same up to
+    the convolutions' floating-point reduction order."""
+    x = torch.as_tensor(x)
+    batch, T = x.shape[0], x.shape[1]
+    flat = x.reshape(batch * T, *x.shape[2:])
+    if max_images is None or max_images >= flat.shape[0]:
+        return rssm.encoder(to_chw_float(flat.unsqueeze(0), device)[0]).reshape(batch, T, -1)
+    if max_images < 1:
+        raise ValueError(f"max_images must be >= 1 or None, got {max_images}")
+    parts = [rssm.encoder(to_chw_float(flat[first:first + max_images].unsqueeze(0), device)[0])
+             for first in range(0, flat.shape[0], max_images)]
+    return torch.cat(parts).reshape(batch, T, -1)
+
+
 def unroll_observation(
-    rssm: RSSM, x_seq: torch.Tensor, a_seq: torch.Tensor, is_first_seq: torch.Tensor, estimator: LatentEstimator | None = None,
-    generator: torch.Generator | None = None, decode: bool = True,
+    rssm: RSSM, x_seq: torch.Tensor | None, a_seq: torch.Tensor, is_first_seq: torch.Tensor,
+    estimator: LatentEstimator | None = None, generator: torch.Generator | None = None, decode: bool = True,
+    embeds: torch.Tensor | None = None,
 ) -> dict[str, torch.Tensor]:
-    """x_seq: (B, T, C, H, W) float in [0,1]. a_seq: (B, T) int action
+    """x_seq: (B, T, C, H, W) float in [0,1] -- or None when `embeds`
+    (B, T, embed_dim), the encoder's outputs, are given instead
+    (encode_windows: measurements that encode a large block in pieces).
+    a_seq: (B, T) int action
     indices (a_seq[:, t] is the action taken AT step t, i.e. a_{t-1} for
     the transition INTO step t is a_seq[:, t-1] -- see the shift below).
     is_first_seq: (B, T) bool. Runs RSSM.observation_step across the
@@ -324,14 +351,16 @@ def unroll_observation(
     happen in the same order, so a given generator gives the same samples;
     only the floating-point reduction order of the convolutions can
     differ from the step-by-step version."""
-    batch, T = x_seq.shape[0], x_seq.shape[1]
-    device = x_seq.device
+    if embeds is None:
+        batch, T = x_seq.shape[0], x_seq.shape[1]
+        embeds = rssm.encoder(x_seq.reshape(batch * T, *x_seq.shape[2:])).reshape(batch, T, -1)
+    batch, T = embeds.shape[0], embeds.shape[1]
+    device, dtype = embeds.device, embeds.dtype
     n_actions = rssm.cfg.n_actions
-    a_onehot_seq = F.one_hot(a_seq.clamp(min=0), num_classes=n_actions).to(x_seq.dtype)
-    embeds = rssm.encoder(x_seq.reshape(batch * T, *x_seq.shape[2:])).reshape(batch, T, -1)
+    a_onehot_seq = F.one_hot(a_seq.clamp(min=0), num_classes=n_actions).to(dtype)
 
     h, z = rssm.initial_state(batch, device)
-    a_prev = torch.zeros(batch, n_actions, device=device, dtype=x_seq.dtype)
+    a_prev = torch.zeros(batch, n_actions, device=device, dtype=dtype)
 
     hs, zs, priors, posts = [], [], [], []
     for t in range(T):

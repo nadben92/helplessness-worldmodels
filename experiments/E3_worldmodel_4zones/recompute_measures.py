@@ -13,6 +13,7 @@ bit for bit (checked and printed when the run has its arrays.npz).
 
 Usage, from the repo root:
     python experiments/E3_worldmodel_4zones/recompute_measures.py <run dir> [--checkpoint final|all|failure|<step> ...] [--device cpu|cuda]
+        [--kernel-draws K]
 Outputs: <run dir>/recomputed/<checkpoint>__<UTC>/ with results.json, arrays.npz, SUMMARY.md and
 artifacts/ (plus REPORT.md, the run's report with the recomputed measures, when the run finished).
 """
@@ -63,24 +64,35 @@ def summary_lines(label: str, step: int, fields: dict) -> list[str]:
     lines = [f"# Recomputed measures -- {label} (gradient step {step})", "",
              f"Real contexts: {rc['n_contexts_total']} contexts, {rc['n_states_measured']} / 144 states measured "
              f"(not measured: {rc['not_measured_states'] or 'none'}).", "",
-             "| zone | dynamics | I_z real (mean [se], n measured) | KL real (bits) | L1(WM, P) real | L1(B, P) | I_z canonical |",
-             "|---|---|---|---|---|---|---|"]
+             "| zone | dynamics | I_s real, MAIN (mean [se], bias) | I_z real, secondary (mean [se], n measured) | KL real (bits) | "
+             f"L1(WM, P) real | L1 floor (exact kernel, {rc['kernel_draws']} draws) | L1(B, P) | I_z canonical |",
+             "|---|---|---|---|---|---|---|---|---|"]
     for cat in fields["zone_categories"]:
-        iz = rc["I_z_by_zone"][cat]
-        lines.append(f"| {cat} | {kinds[cat]} | {iz['mean']:.4f} [{iz['se']:.4f}], {iz['n_measured']}/{iz['n_states']} | "
-                     f"{rc['kl_by_zone'][cat]:.4f} | {rc['l1_vs_p_by_zone'][cat]:.4f} | {rc['l1_b_vs_p_by_zone'][cat]:.4f} | "
+        iz, i_s = rc["I_z_by_zone"][cat], rc["I_s_by_zone"][cat]
+        lines.append(f"| {cat} | {kinds[cat]} | {i_s['mean']:.4f} [{i_s['se']:.4f}], {i_s['bias']:.4f} | "
+                     f"{iz['mean']:.4f} [{iz['se']:.4f}], {iz['n_measured']}/{iz['n_states']} | "
+                     f"{rc['kl_by_zone'][cat]:.4f} | {rc['l1_vs_p_by_zone'][cat]:.4f} | {rc['l1_floor_by_zone'][cat]:.4f} | "
+                     f"{rc['l1_b_vs_p_by_zone'][cat]:.4f} | "
                      f"{fields['I_by_category'][cat]:.4f} |")
     lines += ["", "Template accuracies: " + ", ".join(f"{k} {v:.4f}" for k, v in fields["accuracies"].items()),
-              f"z-only probe test accuracy: {fields['z_only_probe']['test_accuracy']:.4f}",
+              f"z-only probe test accuracy: {fields['z_only_probe']['test_accuracy']:.4f}; h-only: "
+              f"{fields['h_only_probe']['test_accuracy']:.4f}; on the real contexts h -> s {rc['state_probe_h']:.4f}, "
+              f"z -> s {rc['state_probe_z']:.4f}",
               "p_hat(frequent outcome), real contexts: " + ", ".join(f"{k} {v:.4f}" for k, v in rc["frequent_outcome"].items()),
               f"D1 (real contexts): {sum(d['accepted'] for d in fields['d1'])} / {len(fields['d1'])} pairs accepted.",
               f"D2 (real contexts): boundary {fields['d2_boundary_mean']:.4f}, within-zone {fields['d2_within_zone_mean']:.4f}."]
     return lines
 
 
-def recompute(run_dir: Path, which: list[str], device_arg: str | None) -> list[Path]:
+def recompute(run_dir: Path, which: list[str], device_arg: str | None, kernel_draws: int | None = None) -> list[Path]:
+    """kernel_draws: overrides the run's K_s (measure.kernel_k_s and measure.real_context.kernel_draws) --
+    e.g. to measure a run made before 2026-09-29 at the corrected K_s (docs/e3/DECISIONS.md); the output
+    directory is then labelled __ks<K>, and no bit-for-bit comparison with the run's own arrays is made."""
     run_dir = Path(run_dir)
     cfg = run_mini.load_mini_config(run_dir / "config.yaml")
+    if kernel_draws is not None:
+        cfg["measure"]["kernel_k_s"] = kernel_draws
+        cfg["measure"]["real_context"]["kernel_draws"] = kernel_draws
     meta = yaml.safe_load((run_dir / "meta.yaml").read_text(encoding="utf-8"))
     seed, condition = int(meta["seed"]), meta.get("condition", "experimental")
     if device_arg is not None:
@@ -93,7 +105,7 @@ def recompute(run_dir: Path, which: list[str], device_arg: str | None) -> list[P
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     outputs = []
     for label, path in checkpoint_files(run_dir, which):
-        out_dir = run_dir / "recomputed" / f"{label}__{stamp}"
+        out_dir = run_dir / "recomputed" / f"{label}{'' if kernel_draws is None else f'__ks{kernel_draws}'}__{stamp}"
         (out_dir / "artifacts").mkdir(parents=True)
         log = run_mini.RunLog(out_dir / "console.log", f"[recompute {label}]")
         state = torch.load(path, map_location="cpu", weights_only=False)
@@ -106,7 +118,7 @@ def recompute(run_dir: Path, which: list[str], device_arg: str | None) -> list[P
         fields, arrays = run_mini.measure_final(rssm, world, replay, N, cfg, streams, out_dir, log, step)
         fields.pop("diagnostics_final")
         results = {"run_dir": str(run_dir), "checkpoint": label, "weights": path.name, "step": step, "seed": seed,
-                   "condition": condition, "device": str(device), **fields}
+                   "condition": condition, "device": str(device), "kernel_draws_override": kernel_draws, **fields}
         (out_dir / "results.json").write_text(json.dumps(run_mini._jsonable(
             {k: v for k, v in results.items() if k not in run_mini.ARRAY_FIELDS}), indent=1), encoding="utf-8")
         np.savez_compressed(out_dir / "arrays.npz", **arrays)
@@ -116,7 +128,7 @@ def recompute(run_dir: Path, which: list[str], device_arg: str | None) -> list[P
             report.update(fields)
             report["run_dir"] = str(out_dir)
             run_mini.write_report([report], out_dir, cfg_name=f"{run_dir.name} (recomputed)")
-        if label == "final" and (run_dir / "arrays.npz").exists():
+        if label == "final" and kernel_draws is None and (run_dir / "arrays.npz").exists():
             original = np.load(run_dir / "arrays.npz")
             same = {key: bool(np.array_equal(original[key], arrays[key], equal_nan=True)) for key in COMPARED_ARRAYS if key in original}
             log(f"identical to the run's own final arrays: {all(same.values())} {same}")
@@ -131,8 +143,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("run_dir", type=Path)
     parser.add_argument("--checkpoint", nargs="+", default=["final"], help="final (default), all, failure, or gradient steps")
     parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default=None)
+    parser.add_argument("--kernel-draws", type=int, default=None, help="override K_s (canonical and real-context kernels)")
     args = parser.parse_args(argv)
-    recompute(args.run_dir, args.checkpoint, args.device)
+    recompute(args.run_dir, args.checkpoint, args.device, args.kernel_draws)
     return 0
 
 

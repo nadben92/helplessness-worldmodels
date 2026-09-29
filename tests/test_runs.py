@@ -3,11 +3,22 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 import yaml
 
-from helplessness.runs import make_run_dir, make_run_name, write_checkpoint_pointer, write_run_meta
+import helplessness.runs as runs_module
+from helplessness.runs import (
+    UnknownCodeVersionError,
+    code_provenance,
+    make_run_dir,
+    make_run_name,
+    require_code_provenance,
+    source_tree_hash,
+    write_checkpoint_pointer,
+    write_run_meta,
+)
 
 
 def test_make_run_name_format():
@@ -67,3 +78,74 @@ def test_write_checkpoint_pointer(tmp_path):
     with open(run_dir / "checkpoints" / "latest.json") as f:
         pointer = json.load(f)
     assert pointer == {"filename": "step_000100000.pt", "step": 100_000}
+
+
+# ---------------------------------------------------------------------------
+# code provenance (docs/e3/DECISIONS.md, 2026-09-29): a git commit, or a
+# content hash of the source files when git is unavailable -- never neither
+# ---------------------------------------------------------------------------
+
+
+def _tree(root):
+    (root / "src" / "pkg" / "__pycache__").mkdir(parents=True)
+    (root / "src" / "pkg" / "mod.py").write_bytes(b"x = 1\n")
+    (root / "src" / "pkg" / "__pycache__" / "mod.cpython-312.pyc").write_bytes(b"\x00cache")
+    (root / "configs").mkdir()
+    (root / "configs" / "a.yaml").write_bytes(b"a: 1\n")
+    (root / "pyproject.toml").write_bytes(b"[project]\n")
+    (root / "results").mkdir()
+    (root / "results" / "big.npz").write_bytes(b"data")
+
+
+def test_source_tree_hash_covers_the_code_only_and_ignores_line_endings(tmp_path):
+    _tree(tmp_path)
+    first = source_tree_hash(tmp_path)
+    assert first["source_n_files"] == 3  # mod.py, a.yaml, pyproject.toml; not the cache, not results/
+    assert source_tree_hash(tmp_path) == first
+    (tmp_path / "src" / "pkg" / "__pycache__" / "mod.cpython-312.pyc").write_bytes(b"other")
+    (tmp_path / "results" / "big.npz").write_bytes(b"other")
+    assert source_tree_hash(tmp_path) == first
+    (tmp_path / "src" / "pkg" / "mod.py").write_bytes(b"x = 1\r\n")  # a Windows checkout of the same file
+    assert source_tree_hash(tmp_path) == first
+    (tmp_path / "src" / "pkg" / "mod.py").write_bytes(b"x = 2\n")
+    assert source_tree_hash(tmp_path)["source_sha256"] != first["source_sha256"]
+    (tmp_path / "src" / "pkg" / "mod.py").write_bytes(b"x = 1\n")
+    (tmp_path / "src" / "pkg" / "renamed.py").write_bytes((tmp_path / "src" / "pkg" / "mod.py").read_bytes())
+    (tmp_path / "src" / "pkg" / "mod.py").unlink()
+    assert source_tree_hash(tmp_path)["source_sha256"] != first["source_sha256"]  # paths count too
+
+
+def test_source_tree_hash_of_an_empty_scope_is_none(tmp_path):
+    assert source_tree_hash(tmp_path) is None
+
+
+def test_provenance_without_git_falls_back_to_the_content_hash(tmp_path, monkeypatch):
+    _tree(tmp_path)
+
+    def no_git(*args, **kwargs):
+        raise FileNotFoundError("git")
+
+    monkeypatch.setattr(runs_module.subprocess, "run", no_git)
+    prov = code_provenance(tmp_path)
+    assert prov["git_commit"] == "unknown" and prov["git_dirty"] is None
+    assert prov["source_sha256"] == source_tree_hash(tmp_path)["source_sha256"]
+    require_code_provenance(prov)  # the hash is enough
+
+
+def test_provenance_outside_a_checkout_is_not_reported_clean(tmp_path):
+    _tree(tmp_path)
+    prov = code_provenance(tmp_path)  # tmp_path is not a git checkout (git may or may not be installed)
+    assert prov["git_commit"] == "unknown" and prov["git_dirty"] is None
+    assert prov["source_sha256"]
+
+
+def test_a_run_without_commit_nor_hash_is_refused():
+    with pytest.raises(UnknownCodeVersionError):
+        require_code_provenance({"git_commit": "unknown", "source_sha256": None})
+    require_code_provenance({"git_commit": "abc123", "source_sha256": None})
+
+
+def test_the_repository_s_own_provenance_has_both():
+    root = Path(__file__).resolve().parents[1]
+    prov = code_provenance(root)
+    assert prov["source_sha256"] and prov["source_n_files"] > 100

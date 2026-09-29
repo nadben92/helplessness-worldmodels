@@ -98,3 +98,29 @@ def value_gap_second(Q: np.ndarray) -> np.ndarray:
     """
     top2 = np.sort(Q, axis=1)[:, -2:]
     return top2[:, 1] - top2[:, 0]
+
+
+def controllability_bootstrap(p_hat: np.ndarray, K: int, n_boot: int, rng: np.random.Generator) -> dict[str, np.ndarray]:
+    """Parametric bootstrap of the plug-in I(a ; s' | s) of a kernel
+    estimated from K draws per (s, a) (docs/e3/DECISIONS.md, 2026-09-30:
+    I_s, the main measure, is controllability_per_state() of the world
+    model's s-space kernel): n_boot times, redraw K outcomes per (s, a)
+    from p_hat itself, recompute controllability_per_state(). Returns, per
+    state, the standard error (sd over the replicates) and the estimated
+    plug-in bias (mean over the replicates minus the estimate); NaN for a
+    state whose rows are not all valid laws (unmeasured: NaN rows).
+
+    p_hat: (n_states, n_actions, n_outcomes)."""
+    p_hat = np.asarray(p_hat, dtype=np.float64)
+    n_states = p_hat.shape[0]
+    valid = np.isfinite(p_hat).all(axis=(1, 2)) & np.isclose(p_hat.sum(axis=-1), 1.0).all(axis=1)
+    se, bias = np.full(n_states, np.nan), np.full(n_states, np.nan)
+    if not valid.any():
+        return {"se": se, "bias": bias}
+    rows = p_hat[valid]
+    rows = rows / rows.sum(axis=-1, keepdims=True)  # exact laws for the multinomial
+    estimate = controllability_per_state(rows)
+    reps = np.stack([controllability_per_state(rng.multinomial(K, rows) / K) for _ in range(n_boot)])
+    se[valid] = reps.std(axis=0, ddof=1)
+    bias[valid] = reps.mean(axis=0) - estimate
+    return {"se": se, "bias": bias}

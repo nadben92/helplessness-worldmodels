@@ -111,3 +111,24 @@ def test_conditional_entropy_matches_hand_computed_value_for_state_0():
     expected = 0.5 * h([0.5, 0.5]) + 0.5 * h([0.2, 0.3, 0.5])
     per_state = conditional_entropy_per_state(_P)
     assert per_state[0] == pytest.approx(expected, abs=1e-12)
+
+
+def test_controllability_bootstrap_matches_the_plug_in_bias_and_skips_invalid_states():
+    """docs/e3/DECISIONS.md, 2026-09-30: the bootstrap's bias estimate agrees
+    with the plug-in bias of an exact kernel estimated from K draws."""
+    from helplessness.measures.controllability import controllability_bootstrap, controllability_per_state
+
+    P = np.full((3, 5, 5), 0.025)
+    for a in range(5):
+        P[0, a, a] = 0.9
+    P[1, :, 0] = 0.9
+    P[1, :, 1:] = 0.025
+    P[2] = np.nan  # a state not measured
+    rng = np.random.default_rng(0)
+    K = 256
+    out = controllability_bootstrap(P, K, 3000, rng)
+    sims = np.array([controllability_per_state(rng.multinomial(K, P[:2]) / K) for _ in range(3000)])
+    true_bias = sims.mean(axis=0) - controllability_per_state(P[:2])
+    assert np.allclose(out["bias"][:2], true_bias, atol=0.003)  # MC se of each mean ~0.0008
+    assert np.allclose(out["se"][:2], sims.std(axis=0), rtol=0.1)
+    assert np.isnan(out["se"][2]) and np.isnan(out["bias"][2])

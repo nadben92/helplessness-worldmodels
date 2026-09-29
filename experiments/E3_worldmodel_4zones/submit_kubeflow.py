@@ -14,38 +14,105 @@ import time
 
 IMAGE = "ghcr.io/ucl-arc-unified-ai/kubeflow-trainer-images-torch:v0.0.1"
 SCRIPT = "experiments/E3_worldmodel_4zones"
+SPEC_CONFIG = "configs/e3/gpu_e30.yaml"
+BRIDGE_CONFIG = "configs/e3/gpu_e30_bridge.yaml"
+WIN64_CONFIG = "configs/e3/gpu_e30b_win64.yaml"
+WIN16_CONFIG = "configs/e3/gpu_e30b_win16.yaml"
+CONDITIONS = ("experimental", "reference")
+# Every run of each batch: name -> (config, seed, condition), in launch order. Within a batch the configs
+# first appear from the heaviest on the GPU to the lightest (spec network before the bridge; 64-step
+# windows before 16-step ones, whose measurement probes unroll 4 times fewer steps per window).
+BATCHES = {
+    "gpu_e30": {
+        **{f"seed{seed}_{condition}": (SPEC_CONFIG, seed, condition) for seed in (0, 5) for condition in CONDITIONS},
+        "bridge_seed0_experimental": (BRIDGE_CONFIG, 0, "experimental"),
+    },
+    "gpu_e30b": {f"{tag}_seed{seed}_{condition}": (config, seed, condition)
+                 for tag, config in (("win64", WIN64_CONFIG), ("win16", WIN16_CONFIG)) for seed in (0, 5) for condition in CONDITIONS},
+}
+DEFAULT_BATCH = "gpu_e30"
+RUNS = BATCHES[DEFAULT_BATCH]
 
 
-def commands(phase: str, python: str, output: Path, resume: str = "") -> list[tuple[str, list[str]]]:
-    """Return foreground commands, preserving the scientific configs unchanged."""
+def select_runs(runs: list[str] | None, batch: str = DEFAULT_BATCH) -> list[str]:
+    """The requested subset of the batch's runs, in launch order (all of them for None)."""
+    if batch not in BATCHES:
+        raise ValueError(f"unknown batch {batch!r}; choose among {list(BATCHES)}")
+    known = BATCHES[batch]
+    if not runs:
+        return list(known)
+    unknown = sorted(set(runs) - set(known))
+    if unknown:
+        raise ValueError(f"unknown run(s) {unknown} in batch {batch}; choose among {list(known)}")
+    return [name for name in known if name in runs]
+
+
+def n_concurrent(runs: list[str] | None, max_parallel: int | None, batch: str = DEFAULT_BATCH) -> int:
+    """How many processes share the GPU at most: every selected run, or
+    max_parallel if smaller."""
+    n = len(select_runs(runs, batch))
+    if max_parallel is not None and max_parallel < 1:
+        raise ValueError(f"max_parallel must be >= 1, got {max_parallel}")
+    return n if max_parallel is None else min(n, max_parallel)
+
+
+def preflight_command(python: str, output: Path, runs: list[str] | None, max_parallel: int | None,
+                      batch: str = DEFAULT_BATCH) -> list[str]:
+    """preflight.py for the planned launch: --parallel is the number of
+    processes that will share the GPU, filled with the heaviest config
+    first (its first config in the batch's order), plus one process of each
+    other selected config when there is room, so the memory and throughput
+    tests see the worst mix the launch can produce and every config's
+    duration is projected."""
+    known = BATCHES[batch]
+    selected = select_runs(runs, batch)
+    parallel = n_concurrent(runs, max_parallel, batch)
+    configs = list(dict.fromkeys(known[name][0] for name in selected))
+    primary, others = configs[0], configs[1:]
+    n_primary = sum(known[name][0] == primary for name in selected)
+    command = [python, "-u", f"{SCRIPT}/preflight.py", "--config", primary]
+    if others and parallel > n_primary:
+        command += ["--extra-config", *others[:parallel - 1]]
+    return command + ["--parallel", str(parallel), "--device", "cuda", "--out-dir", str(output / "runs")]
+
+
+def commands(phase: str, python: str, output: Path, resume: str = "", runs: list[str] | None = None,
+             max_parallel: int | None = None, batch: str = DEFAULT_BATCH) -> list[tuple[str, list[str]]]:
+    """Return foreground commands, preserving the scientific configs unchanged.
+    batch: a key of BATCHES; runs: a subset of its runs (default: all);
+    max_parallel: the most processes run at once (default: all), which the
+    preflight tests."""
     base = [python, "-u", f"{SCRIPT}/run_mini.py"]
     if phase == "preflight":
-        return [("preflight", [python, "-u", f"{SCRIPT}/preflight.py",
-                              "--config", "configs/e3/gpu_e30.yaml",
-                              "--extra-config", "configs/e3/gpu_e30_bridge.yaml",
-                              "--device", "cuda", "--out-dir", str(output / "runs")])]
+        return [("preflight", preflight_command(python, output, runs, max_parallel, batch))]
     if phase == "resume":
         if not resume:
             raise ValueError("resume requires a run directory")
         return [("resume", base + ["--resume", resume, "--device", "cuda", "--wandb-artifact"])]
     if phase != "train":
         raise ValueError(f"Unknown phase: {phase}")
-    runs = [(f"seed{seed}_{condition}", base + [
-        "--config", "configs/e3/gpu_e30.yaml", "--device", "cuda",
-        "--seeds", str(seed), "--conditions", condition, "--wandb-artifact",
-    ]) for seed in (0, 5) for condition in ("experimental", "reference")]
-    runs.append(("bridge_seed0_experimental", base + [
-        "--config", "configs/e3/gpu_e30_bridge.yaml", "--device", "cuda",
-        "--seeds", "0", "--conditions", "experimental", "--wandb-artifact",
-    ]))
-    return runs
+    known = BATCHES[batch]
+    return [(name, base + ["--config", known[name][0], "--device", "cuda", "--seeds", str(known[name][1]),
+                           "--conditions", known[name][2], "--wandb-artifact"])
+            for name in select_runs(runs, batch)]
 
 
-def supervise(jobs: list[tuple[str, list[str]]], repo: Path, output: Path) -> int:
-    """Wait for all children; persist each exit code, including scientific failures."""
+def supervise(jobs: list[tuple[str, list[str]]], repo: Path, output: Path, max_parallel: int | None = None) -> int:
+    """Run the jobs, at most max_parallel at a time (default: all at once),
+    in order, starting the next queued job when one finishes; wait for all
+    of them and persist each exit code, including scientific failures. A
+    job never started (supervisor interrupted) is recorded with exit_code
+    null and not_started true."""
+    if max_parallel is not None and max_parallel < 1:
+        raise ValueError(f"max_parallel must be >= 1, got {max_parallel}")
+    limit = len(jobs) if max_parallel is None else max_parallel
     output.mkdir(parents=True, exist_ok=False)
-    processes: list[tuple[str, subprocess.Popen]] = []
-    status: dict[str, dict] = {}
+    (output / "supervisor.json").write_text(json.dumps({"max_parallel": limit, "jobs": [name for name, _ in jobs]}, indent=2) + "\n",
+                                            encoding="utf-8")
+    processes: dict[str, subprocess.Popen] = {}
+    queue = list(jobs)
+    status: dict[str, dict] = {name: {"command": command, "log": str(output / f"{name}.log"), "exit_code": None}
+                               for name, command in jobs}
 
     def save() -> None:
         temporary = output / "status.json.tmp"
@@ -55,33 +122,36 @@ def supervise(jobs: list[tuple[str, list[str]]], repo: Path, output: Path) -> in
     def interrupted(signum: int, frame: object) -> None:
         raise SystemExit(128 + signum)
 
+    def running() -> int:
+        return sum(status[name]["exit_code"] is None for name in processes)
+
     previous = signal.signal(signal.SIGTERM, interrupted)
+    save()
     try:
         with ExitStack() as stack:
             try:
-                for name, command in jobs:
-                    log_path = output / f"{name}.log"
-                    log = stack.enter_context(log_path.open("w", encoding="utf-8"))
-                    process = subprocess.Popen(command, cwd=repo, stdout=log, stderr=subprocess.STDOUT)
-                    processes.append((name, process))
-                    status[name] = {"pid": process.pid, "command": command, "log": str(log_path),
-                                    "started_at": datetime.now(timezone.utc).isoformat(), "exit_code": None}
-                    save()
-                    print(f"started {name}: pid={process.pid}, log={log_path}", flush=True)
-                while any(item["exit_code"] is None for item in status.values()):
-                    for name, process in processes:
+                while queue or running():
+                    while queue and running() < limit:
+                        name, command = queue.pop(0)
+                        log = stack.enter_context((output / f"{name}.log").open("w", encoding="utf-8"))
+                        processes[name] = subprocess.Popen(command, cwd=repo, stdout=log, stderr=subprocess.STDOUT)
+                        status[name].update(pid=processes[name].pid, started_at=datetime.now(timezone.utc).isoformat())
+                        save()
+                        print(f"started {name}: pid={processes[name].pid}, log={status[name]['log']} "
+                              f"({running()}/{limit} running, {len(queue)} queued)", flush=True)
+                    for name, process in processes.items():
                         code = process.poll()
                         if code is not None and status[name]["exit_code"] is None:
                             status[name].update(exit_code=code, finished_at=datetime.now(timezone.utc).isoformat())
                             save()
                             print(f"finished {name}: exit_code={code}", flush=True)
-                    if any(item["exit_code"] is None for item in status.values()):
+                    if queue or running():
                         time.sleep(1)
             finally:
-                for _, process in processes:
+                for process in processes.values():
                     if process.poll() is None:
                         process.terminate()
-                for name, process in processes:
+                for name, process in processes.items():
                     try:
                         code = process.wait(timeout=20)
                     except subprocess.TimeoutExpired:
@@ -89,14 +159,18 @@ def supervise(jobs: list[tuple[str, list[str]]], repo: Path, output: Path) -> in
                         code = process.wait()
                     if status[name]["exit_code"] is None:
                         status[name].update(exit_code=code, finished_at=datetime.now(timezone.utc).isoformat())
+                for name, _ in queue:
+                    status[name]["not_started"] = True
                 save()
     finally:
         signal.signal(signal.SIGTERM, previous)
     return int(any(item["exit_code"] != 0 for item in status.values()))
 
 
-def _run_e3(repo_dir: str, phase: str, output: str, token_dir: str, resume: str) -> None:
-    """Serialized by CustomTrainer: imports and constants must be self-contained."""
+def _run_e3(repo_dir: str, phase: str, output: str, token_dir: str, resume: str, runs: str = "", max_parallel: int = 0,
+            batch: str = "gpu_e30") -> None:
+    """Serialized by CustomTrainer: imports and constants must be self-contained.
+    batch: a key of BATCHES; runs: comma-separated subset of its runs ("" = all); max_parallel: 0 = all at once."""
     import os
     from pathlib import Path
     import subprocess
@@ -110,7 +184,10 @@ def _run_e3(repo_dir: str, phase: str, output: str, token_dir: str, resume: str)
     home.mkdir(exist_ok=True)
     os.environ.update(HOME=str(home), USER="trainjob", LOGNAME="trainjob",
                       PYTHONUNBUFFERED="1", CUBLAS_WORKSPACE_CONFIG=":4096:8",
-                      MPLBACKEND="Agg", XDG_CACHE_HOME=str(home / ".cache"))
+                      MPLBACKEND="Agg", XDG_CACHE_HOME=str(home / ".cache"),
+                      # one BLAS/OpenMP thread per process: several processes share the job's few CPUs, and numpy's
+                      # template matching would otherwise start one thread per core of the node (2026-09-30)
+                      OMP_NUM_THREADS="1", OPENBLAS_NUM_THREADS="1", MKL_NUM_THREADS="1")
     # The admission webhook rejects container env patches; credentials arrive as files.
     if token_dir and phase != "preflight":
         token = (Path(token_dir) / "WANDB_API_KEY").read_text(encoding="utf-8").strip()
@@ -133,9 +210,11 @@ def _run_e3(repo_dir: str, phase: str, output: str, token_dir: str, resume: str)
                     "import torch; assert torch.cuda.is_available(), 'CUDA unavailable'; "
                     "print('GPU:', torch.cuda.get_device_name(0), 'torch:', torch.__version__, flush=True)"],
                    check=True)
+    selection = (["--batch", batch] + (["--runs", *runs.split(",")] if runs else [])
+                 + (["--max-parallel", str(max_parallel)] if max_parallel else []))
     subprocess.run([python, "-u", "experiments/E3_worldmodel_4zones/submit_kubeflow.py",
                     "--worker", "--phase", phase, "--repo-dir", repo_dir,
-                    "--output", output, "--resume", resume], cwd=repo, check=True)
+                    "--output", output, "--resume", resume, *selection], cwd=repo, check=True)
 
 
 def runtime_patch(volume: str, mount: str, secret: str | None) -> dict:
@@ -164,15 +243,28 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--wandb-secret", help="Secret containing WANDB_API_KEY; ignored for preflight")
     parser.add_argument("--resume", default="", help="Existing run directory (phase=resume only)")
     parser.add_argument("--output", help="New persistent directory for supervisor logs/status")
+    parser.add_argument("--batch", choices=list(BATCHES), default=DEFAULT_BATCH, help="which batch's runs (default: gpu_e30)")
+    parser.add_argument("--runs", nargs="+", default=None,
+                        help="subset of the batch's runs (default: all); pass the same to the preflight and the training")
+    parser.add_argument("--max-parallel", type=int, default=None,
+                        help="most runs sharing the GPU at once (default: all); the preflight tests this number")
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     if (args.phase == "resume") != bool(args.resume):
         parser.error("--resume is required exactly when --phase=resume")
+    if args.max_parallel is not None and args.max_parallel < 1:
+        parser.error("--max-parallel must be >= 1")
+    try:
+        select_runs(args.runs, args.batch)
+    except ValueError as err:
+        parser.error(str(err))
     repo = Path(args.repo_dir).resolve()
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     output = Path(args.output).resolve() if args.output else repo / "logs" / "kubeflow" / f"{args.phase}-{stamp}"
     if args.worker:
-        return supervise(commands(args.phase, sys.executable, output, args.resume), repo, output)
+        jobs = commands(args.phase, sys.executable, output, args.resume, runs=args.runs, max_parallel=args.max_parallel,
+                        batch=args.batch)
+        return supervise(jobs, repo, output, max_parallel=args.max_parallel if args.phase == "train" else None)
     if output.exists():
         parser.error(f"Output already exists: {output}")
     if not repo.is_relative_to(Path(args.mount).resolve()) or not output.is_relative_to(Path(args.mount).resolve()):
@@ -189,11 +281,14 @@ def main(argv: list[str] | None = None) -> int:
         trainer=kubeflow.trainer.CustomTrainer(
             func=_run_e3, image=args.image, num_nodes=1,
             func_args={"repo_dir": str(repo), "phase": args.phase, "output": str(output),
-                       "token_dir": "/etc/e3-wandb" if secret else "", "resume": args.resume},
+                       "token_dir": "/etc/e3-wandb" if secret else "", "resume": args.resume,
+                       "runs": ",".join(args.runs or []), "max_parallel": args.max_parallel or 0, "batch": args.batch},
             resources_per_node={"cpu": args.cpu, "memory": args.memory, "nvidia.com/gpu": "1"},
         ),
     )
     record = {"job_id": job_id, "phase": args.phase, "output": str(output), "repo_dir": str(repo),
+              "batch": args.batch, "runs": select_runs(args.runs, args.batch),
+              "max_parallel": n_concurrent(args.runs, args.max_parallel, args.batch),
               "submitted_at": datetime.now(timezone.utc).isoformat()}
     record_path = output.parent / f"{output.name}.submission.json"
     record_path.parent.mkdir(parents=True, exist_ok=True)

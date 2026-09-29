@@ -111,3 +111,30 @@ def test_match_templates_distances_equal_the_direct_pairwise_computation():
     assert np.array_equal(matched["nearest_state"], order[:, 0])
     expected_margin = direct[np.arange(15), order[:, 1]] - direct[np.arange(15), order[:, 0]]
     assert np.allclose(matched["margin"], expected_margin, atol=1e-9)
+
+
+# ---------------------------------------------------------------------------
+# C-b's sampling floor (docs/e3/DECISIONS.md, 2026-09-29)
+# ---------------------------------------------------------------------------
+
+
+def test_expected_l1_sampling_floor_matches_simulation():
+    from helplessness.measures.kernel_probe import expected_l1_sampling_floor
+
+    p = np.array([0.9, 0.025, 0.025, 0.025, 0.025])
+    rng = np.random.default_rng(0)
+    for K in (32, 200):
+        sim = np.mean([np.abs(rng.multinomial(K, p) / K - p).sum() for _ in range(20_000)])
+        assert expected_l1_sampling_floor(p, K) == pytest.approx(sim, rel=0.02)
+    assert expected_l1_sampling_floor(np.array([1.0, 0, 0, 0, 0]), 32) == 0.0  # a deterministic kernel has no floor
+    assert expected_l1_sampling_floor(np.stack([p, p]), 32).shape == (2,)
+
+
+def test_draws_for_l1_floor_is_the_smallest_sufficient_k():
+    from helplessness.measures.kernel_probe import draws_for_l1_floor, expected_l1_sampling_floor
+
+    P = np.array([[0.9, 0.025, 0.025, 0.025, 0.025], [1.0, 0.0, 0.0, 0.0, 0.0]])
+    K = draws_for_l1_floor(P, 0.02)
+    assert K == 1358
+    assert all(expected_l1_sampling_floor(P[0], k) <= 0.02 for k in range(K, 2 * K + 1))
+    assert expected_l1_sampling_floor(P[0], K - 1) > 0.02

@@ -1,0 +1,229 @@
+_wandb:
+    value:
+        cli_version: 0.30.0
+        e:
+            4e5vvb6fvwiqa2sg5kl6x2g0jy9bjfrq:
+                args:
+                    - --config
+                    - configs\e3\mini_long.yaml
+                    - --device
+                    - cpu
+                    - --max-steps
+                    - "200"
+                    - --wandb-artifact
+                codePath: experiments\E3_worldmodel_4zones\run_mini.py
+                codePathLocal: experiments\E3_worldmodel_4zones\run_mini.py
+                cpu_count: 6
+                cpu_count_logical: 12
+                disk:
+                    /:
+                        total: "509722226688"
+                        used: "352632856576"
+                email: skgtnb8@ucl.ac.uk
+                executable: C:\Users\nadim\Desktop\v1_ucl\.venv\Scripts\python.exe
+                git:
+                    commit: 4a094c06a5a8466c1bda5eb57809b77d4e7ceeb8
+                    remote: https://github.com/nadben92/helplessness-worldmodels.git
+                host: Nadim
+                memory:
+                    total: "14870306816"
+                os: Windows-11-10.0.22631-SP0
+                program: C:\Users\nadim\Desktop\v1_ucl\experiments\E3_worldmodel_4zones\run_mini.py
+                python: CPython 3.14.0
+                root: C:\Users\nadim\Desktop\v1_ucl\results\E3_worldmodel_4zones\grid12x12__4zones__pair-experimental__worldmodel-mini_long__seed00__20260928T112702Z
+                startedAt: "2026-09-28T11:27:19.814344Z"
+                writerId: 4e5vvb6fvwiqa2sg5kl6x2g0jy9bjfrq
+        m:
+            - "1": grad_step
+              "6":
+                - 3
+              "7": []
+            - "2": '*'
+              "5": 1
+              "6":
+                - 1
+              "7": []
+        python_version: 3.14.0
+        t:
+            "1":
+                - 1
+            "2":
+                - 1
+            "3":
+                - 7
+                - 13
+                - 16
+            "4": 3.14.0
+            "5": 0.30.0
+            "8":
+                - 3
+            "12": 0.30.0
+            "13": windows-amd64
+config:
+    value:
+        budget:
+            checkpoints:
+                - 19744
+            prefill_steps: 256
+            total_steps: 19744
+        checkpoints:
+            grid: e2
+            resume_every: 2000
+        collection:
+            epsilon: 1
+            start_distribution: uniform_non_terminal
+        conditions:
+            - experimental
+        logging:
+            wandb:
+                enabled: auto
+                entity: null
+                mode: online
+                project: helplessness-e3
+        measure:
+            context_dispersion_n_samples: 100
+            d1_contrast_min_bits: 0.25
+            diagnostics_at_checkpoints: true
+            diagnostics_every: 2000
+            iz_mc_samples_final: 4096
+            iz_mc_samples_training: 2000
+            kernel_k_s: 16
+            kernel_margin_threshold: 0.001
+            monitor_every: 500
+            real_context:
+                burn_in: 8
+                kernel_draws: 32
+                max_per_state: 50
+                window_len: null
+            separation_every: 250
+            z_only_test_frac: 0.2
+        model:
+            base_depth: 8
+            embed_dim: 64
+            h_dim: 64
+            n_classes: 8
+            n_vars: 8
+            unimix: 0.01
+        render:
+            cielab_marker_min_dist: 30
+            cielab_min_dist: 30
+            grid_lines: false
+            k: 6
+        runtime:
+            device: cpu
+            max_steps: 200
+            num_threads: 6
+        seeds:
+            - 0
+        train:
+            adam_eps: 1e-08
+            batch_size: 8
+            beta_dyn: 0.5
+            beta_rep: 0.1
+            clip_norm: null
+            free_bits: 0
+            free_bits_mode: per_step
+            latent_estimator:
+                collapse_consecutive: 5
+                collapse_js_threshold: 1
+                kind: warmup_probs_until_separated
+                switch_consecutive: 5
+                switch_eval_every: 50
+                switch_js_threshold: 3
+                switch_max_steps: 25000
+                switch_min_steps: 500
+                switch_n_pairs: 64
+            lr: 0.001
+            lr_after_switch: 0.0001
+            rep_warmup_steps: null
+            replay_ratio: 2
+            seq_len: 16
+            w_patch: 10
+meta:
+    value:
+        allow_tf32_cudnn: false
+        allow_tf32_matmul: false
+        block_class: A
+        collection_epsilon: 1
+        condition: experimental
+        cublas_workspace_config: :4096:8
+        cuda_version: null
+        cudnn_benchmark: false
+        cudnn_deterministic: false
+        cudnn_version: null
+        deterministic_algorithms: false
+        deterministic_warn_only: true
+        device: cpu
+        episode:
+            gamma: 0.9
+            goal_reward: 50
+            max_steps: 36
+            step_reward: -1
+        git_commit: 4a094c06a5a8466c1bda5eb57809b77d4e7ceeb8
+        git_dirty: true
+        git_n_changed_paths: 13
+        gpu_name: null
+        num_threads: 6
+        platform: Windows-11-10.0.22631-SP0
+        python_version: 3.14.0
+        quadrant_assignment:
+            ne: ne
+            nw: nw
+            se: se
+            sw: sw
+        rng_streams:
+            - env_dynamics
+            - explore
+            - tiebreak
+            - start_state
+            - matched_control
+            - reference
+            - theme
+            - network_init
+            - replay_sample
+            - latent_sample
+            - switch_pairs
+            - measure
+        rotation: 0
+        seed: 0
+        start_distribution: uniform_non_terminal
+        started_at: "2026-09-28T11:27:03Z"
+        status: running
+        themes:
+            agent_marker_color:
+                - 93
+                - 38
+                - 140
+            corridor_color:
+                - 128
+                - 128
+                - 128
+            goal_color:
+                - 255
+                - 215
+                - 0
+            goal_state: 0
+            zone_colors:
+                controllable_deterministic:
+                    - 252
+                    - 40
+                    - 187
+                controllable_noisy:
+                    - 97
+                    - 158
+                    - 64
+                uncontrollable_deterministic:
+                    - 94
+                    - 29
+                    - 224
+                uncontrollable_noisy:
+                    - 146
+                    - 25
+                    - 46
+        torch_version: 2.14.0+cpu
+        updated_at: "2026-09-28T11:27:03Z"
+        zone_kinds:
+            controllable_deterministic: controllable_deterministic
+            controllable_noisy: controllable_noisy
+            uncontrollable_deterministic: uncontrollable_deterministic
+            uncontrollable_noisy: uncontrollable_noisy

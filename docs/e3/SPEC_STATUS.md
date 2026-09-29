@@ -20,7 +20,7 @@ Last updated: 2026-09-28.
 | 2 | Pixel environment | amended (§2.2) | 2026-09-23 Phase 0 validation, point 5; 2026-09-23 T2 entries |
 | 3 | World model | amended (§3.1–§3.3) | 2026-09-24 and 2026-09-25 entries, see below |
 | 4 | Agent | amended (§4.1, §4.3, §4.5, §4.6) | 2026-09-23 Phase 0 validation, points 1, 2, 8; 2026-09-25 episode starts; 2026-09-25 independent streams (reward convention) |
-| 5 | Measures | amended (§5.1, §5.2, §5.3, §5.5, via §8) | 2026-09-28 first GPU run (real contexts); 2026-09-25 independent streams (Monte-Carlo counts) |
+| 5 | Measures | amended (§5.1, §5.2 -- main measure I_s, §5.3 -- K_s, §5.4, §5.5, via §8) | 2026-09-30 I_s main measure; 2026-09-29 K_s; 2026-09-28 first GPU run (real contexts); 2026-09-25 independent streams (Monte-Carlo counts) |
 | 6 | Conditions, runs, seeds | amended | 2026-09-25 after the mini run; 2026-09-25 episode starts; 2026-09-25 independent streams; 2026-09-28 first GPU run (reference streams) |
 | 7 | Phase 4 — calibration | amended | 2026-09-23 Phase 0 validation, point 8; 2026-09-24 lr 1e-4 failure |
 | 8 | Position / appearance diagnostic | amended | 2026-09-25 after the mini run (D1 rule) |
@@ -134,7 +134,7 @@ Last updated: 2026-09-28.
     `tests/e3/test_e3_protocol_conformance.py` checks them against E2's
     code.
 
-### §5 — Measures — under review (§5.1); amended (§5.2)
+### §5 — Measures — amended (§5.1, §5.2, §5.3, §5.4, §5.5)
 
 - **§5.1 canonical probe: amended -- the main measure is taken in real contexts.**
   - The canonical probe (h0) is not valid as the main measure: template
@@ -152,14 +152,35 @@ Last updated: 2026-09-28.
   - The canonical probe stays reported as secondary. Its "KL by zone" pairs
     the posterior of s with the prior of s' and is not a fit measure.
   - *2026-09-28 first GPU run.*
-- **§5.2 I in z-space: amended (Monte-Carlo count).** M = 2000 for the
-  diagnostics during training; M = 4096, the spec's value, for the final
-  measures and the calibration. *2026-09-25 independent streams, point 4.*
-  The estimator itself is unchanged.
-- §5.3 s-space kernel: computed from the real contexts (main) and from the canonical probe (secondary); the estimator (decode, nearest template, ghosts) is unchanged. It is also used as the bridge for
-  `Agent.transition_distribution`. *2026-09-24 Phase 3 points 1-2.*
+- **§5.2: amended -- the main measure is I_s, I_z becomes secondary (an upper bound).**
+  - **I_s** = I(a ; s' | s) of the world model's s-space kernel in real contexts: for each
+    state, prior draws of z' from its contexts, decoded and matched to the templates (§5.3),
+    pooled over the state's contexts (K = 1,358 draws per (s, a), spread over up to 50
+    contexts), then `measures.controllability.controllability_per_state` -- the same function
+    as for the true P. Standard error and plug-in bias by parametric bootstrap
+    (`controllability_bootstrap`, 200 replicates); plug-in bias <= 0.004 bits for an exact
+    noisy kernel at K = 1,358. b is computed on I_s (`aggregate_b.py`).
+  - **Why:** on the bridge, I_z / I_s / truth = 2.07 / 1.71 / 1.65 bits in the controllable-noisy
+    zone and 0.29 / 0.07 / 0 in the uncontrollable zones: I_z overestimates the
+    controllability; the predicted code carries information on the action beyond the arrival
+    state (action_in_latent.py); this bias would compress b. I_s recovers the truth where it is
+    known. *2026-09-30 I_s main measure.*
+  - I_z (z-space, exact densities): unchanged estimator, reported as secondary. M = 2000 for the
+    diagnostics during training; M = 4096, the spec's value, for the final measures.
+    *2026-09-25 independent streams, point 4.*
+  - Diagnostics during training use a reduced K = 256 (plug-in bias <= 0.013 bits, L1 floor
+    0.046), documented in each record; the final measures use K = 1,358. *2026-09-30.*
+- **§5.3 s-space kernel: amended (K_s).** Computed from the real contexts (main) and from the
+  canonical probe (secondary); the estimator (decode, nearest template, ghosts) is unchanged.
+  K_s = 1,358 draws per (s, a), the smallest K whose expected L1 for an exact kernel is <= 0.02
+  in a 0.9 / 4 x 0.025 zone; the floor is reported next to every L1. *2026-09-29 K_s.* It is also
+  used as the bridge for `Agent.transition_distribution`. *2026-09-24 Phase 3 points 1-2.*
+- **§5.4 z-only probe: amended (h-only probe added).** The same linear probe on the
+  deterministic state h_t (h -> s), over the whole replay at the end, and h -> s / z -> s on the
+  real contexts at every diagnostic point: how much of the state information travels through h.
+  *2026-09-30.*
 - §5.5 context dispersion: read from the real contexts (per zone, mean |I_real - I_canonical| and the sd over a state's contexts). *2026-09-28 first GPU run.*
-- §5.4, §5.6, §5.7: unchanged.
+- §5.6, §5.7: unchanged. D1 (§8) is still computed on I_z (no s-space version yet).
 - The measures are pure numpy functions in `src/helplessness/measures/`
   (the prompt's `measure/`). *Phase 0 validation, adjustment B.*
 

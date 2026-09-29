@@ -1,0 +1,68 @@
+{
+ "seed": 0,
+ "condition": "experimental",
+ "rotation": 0,
+ "quadrant_assignment": {
+  "nw": "nw",
+  "ne": "ne",
+  "se": "se",
+  "sw": "sw"
+ },
+ "block_class": "A",
+ "themes": {
+  "zone_colors": {
+   "uncontrollable_deterministic": [
+    94,
+    29,
+    224
+   ],
+   "controllable_noisy": [
+    97,
+    158,
+    64
+   ],
+   "uncontrollable_noisy": [
+    146,
+    25,
+    46
+   ],
+   "controllable_deterministic": [
+    252,
+    40,
+    187
+   ]
+  },
+  "agent_marker_color": [
+   93,
+   38,
+   140
+  ],
+  "corridor_color": [
+   128,
+   128,
+   128
+  ],
+  "goal_color": [
+   255,
+   215,
+   0
+  ],
+  "goal_state": 0
+ },
+ "zone_kinds": {
+  "uncontrollable_deterministic": "uncontrollable_deterministic",
+  "controllable_noisy": "controllable_noisy",
+  "uncontrollable_noisy": "uncontrollable_noisy",
+  "controllable_deterministic": "controllable_deterministic"
+ },
+ "env_dynamics_seed": 1722792823,
+ "render": {
+  "k": 6,
+  "grid_lines": false,
+  "cielab_min_dist": 30.0,
+  "cielab_marker_min_dist": 30.0
+ },
+ "templates_sha256": "f10be3404421ee2c885e16f7fa76987b383598fece1dd11b50ef5cc36fc301d6",
+ "n_states": 144,
+ "n_actions": 5
+}

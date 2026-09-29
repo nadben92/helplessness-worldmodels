@@ -1,5 +1,9 @@
 # E3 — World model validation, 4 zones
 
+**Status (2026-09-30): main measure I_s (controllability of the decoded s-space kernel, real contexts), I_z secondary; second GPU batch gpu_e30b ready, not launched** (bridge network, 1,024 images per step as 16 x 64 and 64 x 16 windows, seeds 0 and 5, experimental and reference: 8 runs). Objectives fixed before the launch, b aggregation (`aggregate_b.py`), h -> s probe: `docs/e3/DECISIONS.md`, 2026-09-30.
+
+**Status (2026-09-29): first GPU batch analysed, no run relaunched.** Outcomes recorded as they are (1 done, 2 separation failures, 2 out-of-memory). Bridge final measures recovered on CPU: C-a at the threshold, C-c met, C-b met in the deterministic zones and not in the noisy ones (also at the corrected K_s = 1,358, now in every config). Seed 0 reference: T4 0.92 / 0.90, I_z above the s-space value in the noisy zones (+0.49 / +0.31 bits). Engineering for the next batch: memory-bounded probes, preflight memory test, run subsets and --max-parallel, code content hash. Details: `docs/e3/DECISIONS.md`, 2026-09-29.
+
 **Status (2026-09-28, 22:44 UTC): GPU batch finished; seed 0 reference completed and produced its final report. Two main runs stopped at the separation deadline; seed 5 experimental and the bridge exited with CUDA OOM (bridge training itself completed).** Main measure in real contexts. No agent policy yet (Phase 5). Collaborator handoff: `reports/E3_GPU_2026-09-28.md`. Details: `docs/e3/SPEC_STATUS.md`, `docs/e3/DECISIONS.md`, `experiments/E3_worldmodel_4zones/README.md`.
 
 **GPU preflight (2026-09-28, 15:39-15:48 UTC): passed.**

@@ -87,3 +87,46 @@ def kernel_probe(
     result["is_ghost"] = matched["is_ghost"]
     result["margin"] = matched["margin"]
     return result
+
+
+def expected_l1_sampling_floor(p: np.ndarray, K: int) -> np.ndarray:
+    """E[ L1(p_emp_K, p) ]: the expected L1 error of the empirical law of K
+    exact draws from p -- what a kernel estimated from K decoded samples
+    scores against the truth even when the model IS the truth (docs/e3/
+    DECISIONS.md, 2026-09-29: C-b's sampling floor). Exact, not simulated:
+    the expectation is linear, so it is the sum over outcomes of the
+    binomial mean absolute deviation E|k_i/K - p_i|, k_i ~ Bin(K, p_i).
+    p: (..., n_outcomes); returns the floor for every leading index."""
+    from scipy.stats import binom
+
+    p = np.asarray(p, dtype=np.float64)
+    k = np.arange(K + 1)
+    pmf = binom.pmf(k[:, None], K, p.reshape(-1)[None, :])  # (K+1, n)
+    mad = (pmf * np.abs(k[:, None] / K - p.reshape(-1)[None, :])).sum(axis=0)
+    return mad.reshape(p.shape).sum(axis=-1)
+
+
+def draws_for_l1_floor(P: np.ndarray, target: float, k_max: int = 100_000) -> int:
+    """The smallest number of draws K such that, for every row of P
+    (..., n_outcomes) -- i.e. in the noisiest kernel it contains -- the
+    expected L1 sampling floor is <= target at K and at every K' in
+    [K, 2K] (the floor is not exactly monotone in K on the binomial
+    lattice). Doubling search, then bisection, then the lattice check."""
+    rows = np.unique(np.asarray(P, dtype=np.float64).reshape(-1, np.shape(P)[-1]).round(12), axis=0)
+
+    def worst(K: int) -> float:
+        return float(expected_l1_sampling_floor(rows, K).max())
+
+    hi = 1
+    while worst(hi) > target:
+        hi *= 2
+        if hi > k_max:
+            raise ValueError(f"no K <= {k_max} brings the floor to {target}")
+    lo = hi // 2
+    while hi - lo > 1:
+        mid = (lo + hi) // 2
+        lo, hi = (lo, mid) if worst(mid) <= target else (mid, hi)
+    K = hi
+    while any(worst(k) > target for k in range(K, 2 * K + 1)):
+        K += 1
+    return K

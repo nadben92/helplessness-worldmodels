@@ -68,7 +68,7 @@ def test_worker_bootstrap_uses_host_pip_and_disables_tracking(tmp_path, monkeypa
     monkeypatch.setenv("RANK", "0")
     monkeypatch.setenv("WANDB_API_KEY", "test-only")
     for name in ("HOME", "USER", "LOGNAME", "PYTHONUNBUFFERED", "CUBLAS_WORKSPACE_CONFIG",
-                 "MPLBACKEND", "XDG_CACHE_HOME", "WANDB_MODE"):
+                 "MPLBACKEND", "XDG_CACHE_HOME", "WANDB_MODE", "OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
         monkeypatch.setenv(name, os.environ.get(name, ""))
     cluster._run_e3(str(tmp_path), "preflight", str(tmp_path / "logs"), "/does/not/exist", "")
     assert "--without-pip" in calls[0]
@@ -76,3 +76,93 @@ def test_worker_bootstrap_uses_host_pip_and_disables_tracking(tmp_path, monkeypa
     assert "WANDB_API_KEY" not in os.environ
     assert os.environ["WANDB_MODE"] == "disabled"
     assert "--worker" in calls[-1]
+
+
+def test_a_subset_of_runs_is_launched_in_batch_order(tmp_path):
+    runs = cluster.commands("train", "python", tmp_path, runs=["bridge_seed0_experimental", "seed5_experimental"])
+    assert [name for name, _ in runs] == ["seed5_experimental", "bridge_seed0_experimental"]
+    seed5 = runs[0][1]
+    assert seed5[seed5.index("--config") + 1] == cluster.SPEC_CONFIG
+    assert (seed5[seed5.index("--seeds") + 1], seed5[seed5.index("--conditions") + 1]) == ("5", "experimental")
+    assert runs[1][1][runs[1][1].index("--config") + 1] == cluster.BRIDGE_CONFIG
+    with pytest.raises(ValueError, match="unknown run"):
+        cluster.commands("train", "python", tmp_path, runs=["seed7_experimental"])
+
+
+def test_preflight_tests_the_planned_number_of_processes(tmp_path):
+    def parallel(command):
+        return int(command[command.index("--parallel") + 1])
+
+    full = cluster.commands("preflight", "python", tmp_path)[0][1]
+    assert parallel(full) == 5 and "--extra-config" in full
+    capped = cluster.commands("preflight", "python", tmp_path, max_parallel=2)[0][1]
+    assert parallel(capped) == 2 and "--extra-config" not in capped  # worst mix: two spec-size runs
+    mixed = cluster.commands("preflight", "python", tmp_path, runs=["seed5_experimental", "bridge_seed0_experimental"])[0][1]
+    assert parallel(mixed) == 2 and mixed[mixed.index("--extra-config") + 1] == cluster.BRIDGE_CONFIG
+    bridge_only = cluster.commands("preflight", "python", tmp_path, runs=["bridge_seed0_experimental"])[0][1]
+    assert parallel(bridge_only) == 1 and bridge_only[bridge_only.index("--config") + 1] == cluster.BRIDGE_CONFIG
+    with pytest.raises(ValueError, match="max_parallel"):
+        cluster.commands("preflight", "python", tmp_path, max_parallel=0)
+
+
+def test_supervisor_runs_at_most_max_parallel_jobs_at_once(tmp_path):
+    output = tmp_path / "logs"
+    job = [sys.executable, "-c", "import time; time.sleep(0.3)"]
+    jobs = [("a", job), ("b", [sys.executable, "-c", "raise SystemExit(2)"]), ("c", job)]
+    assert cluster.supervise(jobs, tmp_path, output, max_parallel=1) == 1
+    status = json.loads((output / "status.json").read_text())
+    assert [status[n]["exit_code"] for n in "abc"] == [0, 2, 0]
+    for first, second in (("a", "b"), ("b", "c")):  # one at a time: each starts after the previous one finished
+        assert status[second]["started_at"] >= status[first]["finished_at"]
+    assert json.loads((output / "supervisor.json").read_text()) == {"max_parallel": 1, "jobs": ["a", "b", "c"]}
+
+
+def test_worker_passes_the_selection_to_the_supervisor(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(cluster.subprocess, "run", lambda command, **kwargs: calls.append(command))
+    monkeypatch.setenv("RANK", "0")
+    for name in ("HOME", "USER", "LOGNAME", "PYTHONUNBUFFERED", "CUBLAS_WORKSPACE_CONFIG",
+                 "MPLBACKEND", "XDG_CACHE_HOME", "WANDB_MODE", "OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "WANDB_API_KEY"):
+        monkeypatch.setenv(name, os.environ.get(name, ""))
+    cluster._run_e3(str(tmp_path), "train", str(tmp_path / "logs"), "", "", runs="seed0_reference,seed5_reference", max_parallel=2)
+    worker = calls[-1]
+    assert worker[worker.index("--runs") + 1:worker.index("--runs") + 3] == ["seed0_reference", "seed5_reference"]
+    assert worker[worker.index("--max-parallel") + 1] == "2"
+
+
+def test_gpu_e30b_batch_has_eight_runs_in_two_shapes(tmp_path):
+    runs = cluster.commands("train", "python", tmp_path, batch="gpu_e30b")
+    assert len(runs) == 8 and len({name for name, _ in runs}) == 8
+    configs = [command[command.index("--config") + 1] for _, command in runs]
+    assert configs.count(cluster.WIN64_CONFIG) == 4 and configs.count(cluster.WIN16_CONFIG) == 4
+    pairs = {(command[command.index("--seeds") + 1], command[command.index("--conditions") + 1]) for _, command in runs}
+    assert pairs == {(seed, condition) for seed in ("0", "5") for condition in ("experimental", "reference")}
+    with pytest.raises(ValueError, match="unknown run"):
+        cluster.commands("train", "python", tmp_path, runs=["seed0_experimental"], batch="gpu_e30b")
+    with pytest.raises(ValueError, match="unknown batch"):
+        cluster.select_runs(None, batch="gpu_e99")
+
+
+def test_gpu_e30b_preflight_mixes_both_shapes_heaviest_first(tmp_path):
+    command = cluster.commands("preflight", "python", tmp_path, batch="gpu_e30b", max_parallel=8)[0][1]
+    assert command[command.index("--config") + 1] == cluster.WIN64_CONFIG
+    assert command[command.index("--extra-config") + 1] == cluster.WIN16_CONFIG
+    assert command[command.index("--parallel") + 1] == "8"
+    capped = cluster.commands("preflight", "python", tmp_path, batch="gpu_e30b", max_parallel=4)[0][1]
+    assert "--extra-config" not in capped and capped[capped.index("--parallel") + 1] == "4"  # 4 x win64: the worst mix
+    only16 = cluster.commands("preflight", "python", tmp_path, batch="gpu_e30b",
+                              runs=["win16_seed0_experimental", "win16_seed0_reference"])[0][1]
+    assert only16[only16.index("--config") + 1] == cluster.WIN16_CONFIG and "--extra-config" not in only16
+
+
+def test_worker_passes_the_batch_and_one_blas_thread(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(cluster.subprocess, "run", lambda command, **kwargs: calls.append(command))
+    monkeypatch.setenv("RANK", "0")
+    for name in ("HOME", "USER", "LOGNAME", "PYTHONUNBUFFERED", "CUBLAS_WORKSPACE_CONFIG", "MPLBACKEND", "XDG_CACHE_HOME",
+                 "WANDB_MODE", "WANDB_API_KEY", "OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
+        monkeypatch.setenv(name, os.environ.get(name, ""))
+    cluster._run_e3(str(tmp_path), "train", str(tmp_path / "logs"), "", "", max_parallel=4, batch="gpu_e30b")
+    worker = calls[-1]
+    assert worker[worker.index("--batch") + 1] == "gpu_e30b" and "--runs" not in worker
+    assert os.environ["OMP_NUM_THREADS"] == "1"

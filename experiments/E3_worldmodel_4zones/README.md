@@ -131,7 +131,10 @@ slowest test (about 2 min).
 ## What this directory contains
 
 - `run_mini.py`: the run entry point above.
-- `recompute_measures.py`: every measure recomputed from a run directory.
+- `recompute_measures.py`: every measure recomputed from a run directory (`--kernel-draws K` to measure an older run at another K_s).
+- `aggregate_b.py`: b = I(experimental) - I(reference) by zone from finished pairs of runs (I_s main, I_z secondary), by block class, with each run's calibration criteria.
+- `action_in_latent.py`, `is_pooling_check.py`: diagnostics of 2026-09-29/30 (does z' carry the action at fixed arrival state; I_s per context vs pooled).
+- `submit_kubeflow.py`: the Kubeflow wrapper and local supervisor (`--batch gpu_e30 | gpu_e30b`, `--runs`, `--max-parallel`).
 - `wandb_logger.py`: the optional W&B tracking (never stops a run).
 - `preflight.py`, `launch_gpu_e30.sh`, `RUN_GPU.md`: the GPU check, the launcher and the instructions of the first GPU run.
 - `probe.py`: the real-context measure, the canonical probe and every measurement built on them. The

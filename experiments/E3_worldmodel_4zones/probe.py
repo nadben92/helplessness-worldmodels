@@ -27,7 +27,7 @@ import torch
 import torch.nn.functional as F
 
 from helplessness.agents.worldmodel.agent import categorical_mode, sample_categorical_batch
-from helplessness.agents.worldmodel.loop import to_chw_float, unroll_observation
+from helplessness.agents.worldmodel.loop import encode_windows, to_chw_float, unroll_observation
 from helplessness.agents.worldmodel.replay import ModelBatch, LabelBatch
 from helplessness.agents.worldmodel.rssm import RSSM, categorical_kl, sample_categorical_index, straight_through_sample
 from helplessness.measures.context_summary import per_state_context_summary
@@ -190,60 +190,77 @@ def z_only_probe(
     return z_only_probe_chunked(rssm, [(model_batch, label_batch)], n_states, test_frac, rng, epochs=epochs, lr=lr)
 
 
+def linear_state_probe(x: torch.Tensor, s: torch.Tensor, n_states: int, test_frac: float, rng: np.random.Generator,
+                       epochs: int = 300, lr: float = 0.05) -> dict[str, float]:
+    """A linear classifier x -> s (softmax regression, full batch, Adam),
+    trained on a random (1 - test_frac) split drawn from `rng` and scored on
+    the rest. The classifier's initial weights come from `rng` too (a forked
+    CPU torch RNG seeded from it), never from the global torch RNG: the
+    probe gives the same numbers whatever ran before it. x: (n, d) on the
+    device, s: (n,) long on the same device."""
+    device = x.device
+    n = x.shape[0]
+    perm = torch.as_tensor(rng.permutation(n), device=device)
+    n_test = int(n * test_frac)
+    test_idx, train_idx = perm[:n_test], perm[n_test:]
+    with torch.random.fork_rng(devices=[]):
+        torch.manual_seed(int(rng.integers(2**63 - 1)))
+        classifier = torch.nn.Linear(x.shape[1], n_states).to(device)
+    optimizer = torch.optim.Adam(classifier.parameters(), lr=lr)
+    for _ in range(epochs):
+        optimizer.zero_grad()
+        logits = classifier(x[train_idx])
+        loss = F.cross_entropy(logits, s[train_idx])
+        loss.backward()
+        optimizer.step()
+    with torch.no_grad():
+        train_acc = (classifier(x[train_idx]).argmax(-1) == s[train_idx]).float().mean().item()
+        test_acc = (classifier(x[test_idx]).argmax(-1) == s[test_idx]).float().mean().item() if n_test > 0 else float("nan")
+    return {"train_accuracy": train_acc, "test_accuracy": test_acc, "n_train": int(len(train_idx)), "n_test": n_test}
+
+
 def z_only_probe_chunked(
     rssm: RSSM, chunks, n_states: int, test_frac: float, rng: np.random.Generator, epochs: int = 300, lr: float = 0.05,
-    generator: torch.Generator | None = None,
+    generator: torch.Generator | None = None, max_images: int | None = None, latent: str = "z",
 ) -> dict[str, float]:
     """z_only_probe over an iterable of (ModelBatch, LabelBatch) chunks
     (audit B4): each chunk is unrolled without decoding and only z (and
     the posterior entropies) are kept, so the whole buffer never sits in
-    one image tensor. The same windows in one chunk or in several give
-    the same samples."""
+    one image tensor. The same windows in the same chunks give the same
+    samples. max_images (measure.max_images_per_forward): the images of a
+    chunk are encoded at most max_images at a time (loop.encode_windows);
+    the latent draws, taken step by step over the whole chunk, are
+    unchanged. latent="h" probes the deterministic state h_t instead of
+    z_t (docs/e3/DECISIONS.md, 2026-09-30: how much of the state
+    information travels through h)."""
     device = next(rssm.parameters()).device
     zs, labels, entropies = [], [], []
     with torch.no_grad():
         for model_batch, label_batch in chunks:
-            x_seq = to_chw_float(model_batch.x, device)
+            embeds = encode_windows(rssm, model_batch.x, device, max_images)
             a_seq = torch.as_tensor(model_batch.a, dtype=torch.long, device=device)
             is_first_seq = torch.as_tensor(model_batch.is_first, dtype=torch.bool, device=device)
-            out = unroll_observation(rssm, x_seq, a_seq, is_first_seq, generator=generator, decode=False)
+            out = unroll_observation(rssm, None, a_seq, is_first_seq, generator=generator, decode=False, embeds=embeds)
             post = out["post_probs"].reshape(-1, rssm.cfg.n_vars, rssm.cfg.n_classes).detach().cpu().numpy()
             entropies.append(per_variable_entropy(post))
-            zs.append(out["z"].reshape(-1, rssm.cfg.latent_dim))
+            zs.append(out[latent].reshape(out[latent].shape[0] * out[latent].shape[1], -1))
             labels.append(np.asarray(label_batch.s).reshape(-1))
     mean_posterior_entropy = float(np.concatenate(entropies).mean())
-    z = torch.cat(zs).to(device)
+    x = torch.cat(zs).to(device)
     s = torch.as_tensor(np.concatenate(labels), dtype=torch.long, device=device)
+    return {**linear_state_probe(x, s, n_states, test_frac, rng, epochs=epochs, lr=lr),
+            "mean_posterior_entropy": mean_posterior_entropy, "latent": latent}
 
-    n = z.shape[0]
-    perm = torch.as_tensor(rng.permutation(n), device=device)
-    n_test = int(n * test_frac)
-    test_idx, train_idx = perm[:n_test], perm[n_test:]
 
-    # The classifier's initial weights come from `rng` too (a forked CPU torch RNG seeded from it), never
-    # from the global torch RNG: the probe then gives the same numbers whatever ran before it.
-    with torch.random.fork_rng(devices=[]):
-        torch.manual_seed(int(rng.integers(2**63 - 1)))
-        classifier = torch.nn.Linear(rssm.cfg.latent_dim, n_states).to(device)
-    optimizer = torch.optim.Adam(classifier.parameters(), lr=lr)
-    for _ in range(epochs):
-        optimizer.zero_grad()
-        logits = classifier(z[train_idx])
-        loss = F.cross_entropy(logits, s[train_idx])
-        loss.backward()
-        optimizer.step()
-
-    with torch.no_grad():
-        train_acc = (classifier(z[train_idx]).argmax(-1) == s[train_idx]).float().mean().item()
-        test_acc = (classifier(z[test_idx]).argmax(-1) == s[test_idx]).float().mean().item() if n_test > 0 else float("nan")
-
-    return {
-        "train_accuracy": train_acc,
-        "test_accuracy": test_acc,
-        "n_train": int(len(train_idx)),
-        "n_test": n_test,
-        "mean_posterior_entropy": mean_posterior_entropy,
-    }
+def context_state_probes(contexts: dict, test_frac: float, rng: np.random.Generator, epochs: int = 300) -> dict[str, dict]:
+    """Linear probes h_t -> s_t and z_t -> s_t on the real contexts
+    themselves (docs/e3/DECISIONS.md, 2026-09-30): cheap enough for every
+    training-diagnostic point, and read in the regime of the main measure
+    (after the burn-in). One split per probe, both from `rng` (h first)."""
+    s = torch.as_tensor(contexts["states"], dtype=torch.long, device=contexts["h"].device)
+    n_states = int(contexts["n_states"])
+    return {key: linear_state_probe(contexts[key].reshape(contexts[key].shape[0], -1), s, n_states, test_frac, rng, epochs=epochs)
+            for key in ("h", "z")}
 
 
 # ---------------------------------------------------------------------
@@ -504,12 +521,15 @@ def select_real_contexts(
 
 def real_context_probe(
     rssm: RSSM, replay, window_len: int, burn_in: int, max_per_state: int, n_states: int, rng: np.random.Generator,
-    generator: torch.Generator | None = None, chunk: int = 256,
+    generator: torch.Generator | None = None, chunk: int = 256, max_images: int | None = None,
 ) -> dict:
     """The contexts of select_real_contexts, computed by unrolling their
     windows (window_len + 1 steps, from the learned initial state at the
     window's start, exactly as training unrolls a window) with hard
-    straight-through posterior samples drawn from `generator`. For each
+    straight-through posterior samples drawn from `generator`, `chunk`
+    windows at a time; max_images (measure.max_images_per_forward): each
+    chunk's images are encoded at most max_images at a time
+    (loop.encode_windows), the draws unchanged. For each
     context (step t of a window, true state s_t):
       h, z          the context itself (torch, on the model's device): h_t
                     and the posterior sample z_t of the unroll;
@@ -538,10 +558,10 @@ def real_context_probe(
         for first in range(0, windows.size, chunk):
             block = windows[first:first + chunk]
             model_batch, _ = replay.windows(block * window_len, window_len + 1)
-            x_seq = to_chw_float(model_batch.x, device)
+            embeds = encode_windows(rssm, model_batch.x, device, max_images)
             a_seq = torch.as_tensor(model_batch.a, dtype=torch.long, device=device)
             is_first_seq = torch.as_tensor(model_batch.is_first, dtype=torch.bool, device=device)
-            out = unroll_observation(rssm, x_seq, a_seq, is_first_seq, generator=generator, decode=False)
+            out = unroll_observation(rssm, None, a_seq, is_first_seq, generator=generator, decode=False, embeds=embeds)
             members = np.flatnonzero(np.isin(sel["window"], block))
             row_np, t_np = np.searchsorted(block, sel["window"][members]), sel["t"][members]
             row, t = torch.as_tensor(row_np, device=device), torch.as_tensor(t_np, device=device)
@@ -630,6 +650,42 @@ def real_context_kernel(
         s, a = divmod(int(owner), A)
         p_hat[s, a], ghost[s, a] = result["p_hat"], result["ghost_fraction"]
     return {"p_hat": p_hat, "ghost_fraction": ghost}
+
+
+def real_context_action_samples(
+    rssm: RSSM, contexts: dict, templates: torch.Tensor, draws: int, margin_threshold: float,
+    generator: torch.Generator | None = None, chunk: int = 1024,
+) -> dict[str, np.ndarray]:
+    """Action-labelled prior draws from the real contexts (docs/e3/DECISIONS.md,
+    2026-09-29, test of whether z' encodes the action beyond the arrival
+    state): for every context and every action a, `draws` samples
+    z' ~ p(. | h_{t+1,a}) (the same one-step predictions as
+    real_context_kernel), each decoded as decode(h_{t+1,a}, z') and matched to
+    the templates (measures.kernel_probe). Returns, one row per draw: context
+    (index into the contexts), s (the context's true state), a, z_index
+    (n_vars ints, the drawn class of each latent variable), s_next (the
+    decoded arrival state) and is_ghost."""
+    device = next(rssm.parameters()).device
+    A = rssm.cfg.n_actions
+    templates_np = templates.detach().cpu().numpy()
+    n_ctx = contexts["positions"].size
+    ctx = np.repeat(np.arange(n_ctx), A * draws)
+    act = np.tile(np.repeat(np.arange(A), draws), n_ctx)
+    z_index = np.empty((ctx.size, rssm.cfg.n_vars), dtype=np.int64)
+    nearest = np.empty(ctx.size, dtype=np.int64)
+    is_ghost = np.empty(ctx.size, dtype=bool)
+    with torch.no_grad():
+        for first in range(0, ctx.size, chunk):
+            sl = slice(first, min(first + chunk, ctx.size))
+            c = torch.as_tensor(ctx[sl], device=device)
+            a = torch.as_tensor(act[sl], device=device)
+            probs = contexts["prior_probs_t"][c, a]
+            idx = sample_categorical_index(probs, generator)
+            z = F.one_hot(idx, num_classes=probs.shape[-1]).to(probs.dtype)
+            decoded = rssm.decode(contexts["h_next"][c, a], z).cpu().numpy()
+            matched = match_templates(decoded, templates_np, margin_threshold)
+            z_index[sl], nearest[sl], is_ghost[sl] = idx.cpu().numpy(), matched["nearest_state"], matched["is_ghost"]
+    return {"context": ctx, "s": contexts["states"][ctx], "a": act, "z_index": z_index, "s_next": nearest, "is_ghost": is_ghost}
 
 
 def real_context_template_accuracy(rssm: RSSM, contexts: dict, templates: torch.Tensor, chunk: int = 1024) -> float:

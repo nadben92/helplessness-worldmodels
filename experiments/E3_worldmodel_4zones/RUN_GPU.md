@@ -33,6 +33,38 @@ python experiments/E3_worldmodel_4zones/submit_kubeflow.py --phase train
 
 This supervises all five processes on the same GPU, waits for every exit and returns
 a failure if any run fails. It never silently retries a scientific failure.
+
+**Subset and simultaneous processes (2026-09-29).** `--runs` selects runs among
+`seed0_experimental seed0_reference seed5_experimental seed5_reference
+bridge_seed0_experimental` (default: all), `--max-parallel N` caps how many share
+the GPU at once (default: all; the others wait in a queue). Pass the **same**
+`--runs` and `--max-parallel` to the preflight and to the training: the preflight
+then tests that number of processes, including a memory test in which every
+process takes a diagnostic point and a final measurement at the same time (it
+fails if one runs out of memory or if their peaks add up to more than 90% of the
+GPU). Example:
+
+```bash
+python experiments/E3_worldmodel_4zones/submit_kubeflow.py --phase preflight --runs seed5_experimental bridge_seed0_experimental --max-parallel 2
+python experiments/E3_worldmodel_4zones/submit_kubeflow.py --phase train --runs seed5_experimental bridge_seed0_experimental --max-parallel 2
+```
+
+**Second batch, gpu_e30b (2026-09-30).** Eight runs (`win64_` and `win16_` x `seed0` / `seed5` x
+`experimental` / `reference`), the bridge's network at 1,024 images per gradient step:
+
+```bash
+python experiments/E3_worldmodel_4zones/submit_kubeflow.py --phase preflight --batch gpu_e30b --max-parallel 8
+python experiments/E3_worldmodel_4zones/submit_kubeflow.py --phase train --batch gpu_e30b --max-parallel 8
+```
+
+If the preflight's memory test fails at 8, run both commands with `--max-parallel 4`.
+
+**Code version.** A run records its git commit, and always a sha256 of the
+contents of `src/`, `experiments/`, `configs/` and `pyproject.toml`
+(`meta.yaml`: `source_sha256`); it refuses to start with neither. The container
+has no git: compare `source_sha256` with
+`python -c "from helplessness.runs import source_tree_hash; print(source_tree_hash('.'))"`
+on a checkout of the intended commit.
 Do not use `launch_gpu_e30.sh` as the container entry point: it backgrounds its
 children and exits. Kubernetes needs a foreground supervisor. The five processes
 each retain their configured four CPU threads; the preflight measures contention
@@ -69,6 +101,7 @@ The last line must print `True` and the GPU's name. If it prints `False`, instal
     python experiments/E3_worldmodel_4zones/preflight.py --config configs/e3/gpu_e30.yaml --extra-config configs/e3/gpu_e30_bridge.yaml --device cuda
 
 It ends with `PREFLIGHT PASSED` or `PREFLIGHT FAILED`. Please send me its output before going to step 3.
+For a subset of runs or fewer simultaneous processes, add `--parallel <N>` (the number that will share the GPU) and drop `--extra-config` if the bridge is not launched.
 
 ## 3. Launch the runs
 
@@ -80,7 +113,7 @@ If the machine has no internet access, also run `export WANDB_MODE=offline` (see
 
     bash experiments/E3_worldmodel_4zones/launch_gpu_e30.sh
 
-This starts 5 runs in the background; they keep running if you close the terminal. To follow them: `tail -f logs/gpu_e30/*.log`.
+This starts a supervisor in the background that runs the 5 runs; it keeps running if you close the terminal. To follow them: `tail -f logs/gpu_e30/train-*/*.log`. For a subset or fewer simultaneous runs (tested by the preflight with the same number): `RUNS="seed5_experimental bridge_seed0_experimental" MAX_PARALLEL=2 bash experiments/E3_worldmodel_4zones/launch_gpu_e30.sh`.
 
 - If the machine restarts, resume each unfinished run with (after the same `export` line(s)):
   `python experiments/E3_worldmodel_4zones/run_mini.py --resume results/E3_worldmodel_4zones/<run folder>`

@@ -54,7 +54,6 @@ import json
 import os
 import platform
 import re
-import subprocess
 import sys
 import time
 from datetime import datetime, timezone
@@ -97,8 +96,17 @@ from helplessness.measures.diagnostics import (
     mean_random_pair_jensen_shannon,
     summarize_alpha_app,
 )
+from helplessness.measures.controllability import controllability_bootstrap, controllability_per_state
+from helplessness.measures.kernel_probe import expected_l1_sampling_floor
 from helplessness.measures.latent_controllability import latent_state_information
-from helplessness.runs import make_run_dir, make_run_name, write_checkpoint_pointer, write_run_meta
+from helplessness.runs import (
+    code_provenance,
+    make_run_dir,
+    make_run_name,
+    require_code_provenance,
+    write_checkpoint_pointer,
+    write_run_meta,
+)
 
 START_DISTRIBUTIONS = ("uniform_non_terminal",)
 
@@ -130,6 +138,7 @@ ACC_LABELS = {
 }
 # Measurement slots (rng_streams.measure_streams): each measurement owns one.
 SLOT_SEPARATION, SLOT_DIAG, SLOT_IZS, SLOT_ZONLY, SLOT_D1_REAL, SLOT_FAILURE, SLOT_FINAL, SLOT_D1_CANONICAL = 1, 2, 3, 4, 6, 7, 8, 9
+SLOT_HONLY = 11  # the h-only probe (2026-09-30); slot 10 is action_in_latent.py's
 
 
 # ---------------------------------------------------------------------
@@ -189,7 +198,8 @@ def shape_verdicts(records: list[dict], switch_step: int | None, n_se: float = N
       3. I_z of the conveyor (uncontrollable_deterministic) decreases;
       4. I_z of the controllable-deterministic zone increases.
     3 and 4 use the standard error of the zone means: a change within n_se
-    combined se is "non concluant". regime: the key of the record holding
+    combined se is "non concluant". They are judged on I_s (the main measure
+    since 2026-09-30) when the records have it, then on I_z (secondary). regime: the key of the record holding
     the measures (e.g. "real_context", the main measure since
     2026-09-28); None = the record's top level (the canonical probe).
     zone_kinds: appearance category -> dynamics type in the run's
@@ -219,9 +229,11 @@ def shape_verdicts(records: list[dict], switch_step: int | None, n_se: float = N
         ref = _nan(b_rec["l1_b_vs_p_by_zone"][zone])
         rows.append({"check": f"L1(WM, P) decreasing toward L1(B, P) = {ref:.3f} ({zone})", "first": a, "last": b,
                      "verdict": "conforme" if b < a else ("non mesuré" if not np.isfinite(a + b) else "non conforme")})
-    for kind, direction in (("uncontrollable_deterministic", -1), ("controllable_deterministic", +1)):
+    measures = [key for key in ("I_s", "I_z") if f"{key}_by_zone" in a_rec and f"{key}_by_zone" in b_rec]
+    for key, kind, direction in [(k, kind, d) for k in measures
+                                 for kind, d in (("uncontrollable_deterministic", -1), ("controllable_deterministic", +1))]:
         for zone in [z for z in e3_env.ZONE_CATEGORIES if zone_kinds[z] == kind]:
-            a, b = a_rec["I_z_by_zone"][zone], b_rec["I_z_by_zone"][zone]
+            a, b = a_rec[f"{key}_by_zone"][zone], b_rec[f"{key}_by_zone"][zone]
             se = float(np.sqrt(_nan(a.get("se", a.get("mc_se"))) ** 2 + _nan(b.get("se", b.get("mc_se"))) ** 2))
             change = _nan(b["mean"]) - _nan(a["mean"])
             if not np.isfinite(change):
@@ -230,7 +242,8 @@ def shape_verdicts(records: list[dict], switch_step: int | None, n_se: float = N
                 verdict = "non concluant"
             else:
                 verdict = "conforme" if np.sign(change) == direction else "non conforme"
-            rows.append({"check": f"I_z {'decreasing' if direction < 0 else 'increasing'} ({zone})", "first": _nan(a["mean"]),
+            label = key if key == "I_s" or "I_s" not in measures else "I_z (secondary)"
+            rows.append({"check": f"{label} {'decreasing' if direction < 0 else 'increasing'} ({zone})", "first": _nan(a["mean"]),
                          "last": _nan(b["mean"]), "verdict": verdict})
     for row in rows:
         row["first_step"], row["last_step"] = first["step"], last["step"]
@@ -272,15 +285,42 @@ def configure_runtime(cfg: dict) -> torch.device:
 
 
 def git_state() -> dict:
-    def run(*args: str) -> str:
-        return subprocess.run(["git", *args], cwd=REPO_ROOT, capture_output=True, text=True).stdout.strip()
+    """The code's version (runs.code_provenance): the git commit when git
+    works here, and always a content hash of the source files -- the first
+    GPU batch ran where git was unavailable and recorded only "unknown"
+    (docs/e3/DECISIONS.md, 2026-09-29)."""
+    return code_provenance(REPO_ROOT)
 
-    try:
-        commit = run("rev-parse", "HEAD") or "unknown"
-        changed = [line for line in run("status", "--porcelain").splitlines() if line.strip()]
-    except OSError:
-        return {"git_commit": "unknown", "git_dirty": None, "git_n_changed_paths": None}
-    return {"git_commit": commit, "git_dirty": bool(changed), "git_n_changed_paths": len(changed)}
+
+def max_images_per_forward(cfg: dict) -> int | None:
+    """measure.max_images_per_forward: at most this many images through
+    the encoder at once in the real-context and z-only probes
+    (loop.encode_windows); null (or absent, as in every config before
+    2026-09-29) keeps the one-call encoding, bit for bit."""
+    return cfg["measure"].get("max_images_per_forward")
+
+
+def gpu_peak_start(device: torch.device) -> None:
+    """Resets the peak-memory counters before a measurement (no-op off GPU)."""
+    if device.type == "cuda":
+        torch.cuda.synchronize(device)
+        torch.cuda.reset_peak_memory_stats(device)
+
+
+def gpu_peak_end(device: torch.device) -> dict | None:
+    """Peak GPU memory (MiB) since gpu_peak_start: allocated by tensors and
+    reserved by the caching allocator (what other processes cannot use).
+    Then returns the cached blocks to the device (torch.cuda.empty_cache):
+    runs sharing a GPU otherwise keep a measurement's peak reserved for the
+    rest of their life (the first GPU batch: 29 GiB per spec-size process).
+    None off GPU."""
+    if device.type != "cuda":
+        return None
+    torch.cuda.synchronize(device)
+    peak = {"peak_allocated_mib": torch.cuda.max_memory_allocated(device) / 2**20,
+            "peak_reserved_mib": torch.cuda.max_memory_reserved(device) / 2**20}
+    torch.cuda.empty_cache()
+    return peak
 
 
 def environment_metadata(device: torch.device) -> dict:
@@ -678,27 +718,76 @@ def real_context_settings(cfg: dict) -> dict:
     return rc
 
 
+def kernel_draws(cfg: dict, final: bool) -> tuple[int, int]:
+    """(K for the real-context kernel, K_s for the canonical kernel): the
+    final values (measure.real_context.kernel_draws, measure.kernel_k_s),
+    or during training the reduced *_training values when the config sets
+    them (docs/e3/DECISIONS.md, 2026-09-30)."""
+    m, rc = cfg["measure"], cfg["measure"]["real_context"]
+    if final:
+        return rc["kernel_draws"], m["kernel_k_s"]
+    return rc.get("kernel_draws_training", rc["kernel_draws"]), m.get("kernel_k_s_training", m["kernel_k_s"])
+
+
+def controllability_of_kernel(p_hat: np.ndarray) -> np.ndarray:
+    """I_s per state: measures.controllability.controllability_per_state of
+    the world model's s-space kernel p_hat (n_states, n_actions, n_states);
+    NaN for a state with a row that is not a law (not measured, or every
+    draw of an action a ghost)."""
+    valid = np.isfinite(p_hat).all(axis=(1, 2)) & np.isclose(np.nan_to_num(p_hat).sum(axis=-1), 1.0).all(axis=1)
+    out = np.full(p_hat.shape[0], np.nan)
+    if valid.any():
+        out[valid] = controllability_per_state(p_hat[valid])
+    return out
+
+
+def is_by_zone(I_s: np.ndarray, boot: dict, layout) -> dict[str, dict]:
+    """Zone summaries of I_s: mean over the measured states with the se of
+    the mean (zone_mean_with_se, per-state bootstrap se), and the mean
+    bootstrap estimate of the plug-in bias."""
+    out = {}
+    for cat in e3_env.ZONE_CATEGORIES:
+        states = zone_states(layout, cat)
+        bias = boot["bias"][states]
+        out[cat] = {**zone_mean_with_se(I_s, boot["se"], states),
+                    "bias": float(np.nanmean(bias)) if np.isfinite(bias).any() else float("nan")}
+    return out
+
+
 def real_context_measures(
     rssm: RSSM, world: World, replay: ReplayBuffer, P_true: np.ndarray, T_hat_B: np.ndarray, cfg: dict,
-    rng: np.random.Generator, generator: torch.Generator, M: int,
+    rng: np.random.Generator, generator: torch.Generator, M: int, final: bool = True,
 ) -> tuple[dict, dict]:
-    """The main measure (docs/e3/DECISIONS.md, 2026-09-28), in real
-    contexts: per state, I_z (mean over the contexts), the one-step KL,
-    the s-space kernel; aggregated by zone over the MEASURED states (a
-    state without a context is "non mesuré"). Returns a JSON-able record
-    and the arrays (contexts included)."""
+    """The main measure, in real contexts: per state, the s-space kernel
+    decoded from prior draws of the state's contexts and its
+    controllability I_s = I(a ; s' | s) (THE MAIN MEASURE since
+    docs/e3/DECISIONS.md 2026-09-30: measures.controllability on the
+    decoded arrival states), with a parametric-bootstrap se and bias; I_z
+    (mean over the contexts, SECONDARY since 2026-09-30: an upper bound),
+    the one-step KL, the linear probes h -> s and z -> s on the contexts;
+    aggregated by zone over the MEASURED states (a state without a context
+    is "non mesuré"). final: the final kernel sizes, else the reduced
+    training ones (kernel_draws). Returns a JSON-able record and the arrays
+    (contexts included)."""
     rc = real_context_settings(cfg)
+    draws, _ = kernel_draws(cfg, final)
     layout = world.layout
     ctx = e3_probe.real_context_probe(rssm, replay, window_len=rc["window_len"], burn_in=rc["burn_in"],
-                                      max_per_state=rc["max_per_state"], n_states=N_STATES, rng=rng, generator=generator)
+                                      max_per_state=rc["max_per_state"], n_states=N_STATES, rng=rng, generator=generator,
+                                      max_images=max_images_per_forward(cfg))
     iz = e3_probe.real_context_iz(ctx, M=M, rng=rng)
     kl = per_state_context_summary(ctx["kl_next_bits"], ctx["states"], N_STATES)
-    kernel = e3_probe.real_context_kernel(rssm, ctx, world.templates_t, draws=rc["kernel_draws"],
+    kernel = e3_probe.real_context_kernel(rssm, ctx, world.templates_t, draws=draws,
                                           margin_threshold=cfg["measure"]["kernel_margin_threshold"], generator=generator)
     acc = e3_probe.real_context_template_accuracy(rssm, ctx, world.templates_t)
     l1_vs_p = np.abs(kernel["p_hat"] - P_true).sum(axis=-1)  # (144, 5), NaN for unmeasured states
     l1_vs_b = np.abs(kernel["p_hat"] - T_hat_B).sum(axis=-1)
     l1_b_vs_p = np.abs(T_hat_B - P_true).sum(axis=-1)
+    # C-b's sampling floor (docs/e3/DECISIONS.md, 2026-09-29): the L1 an exact kernel scores with this many draws
+    l1_floor = np.where(np.isnan(l1_vs_p), np.nan, expected_l1_sampling_floor(P_true, draws))
+    I_s = controllability_of_kernel(kernel["p_hat"])
+    boot = controllability_bootstrap(kernel["p_hat"], draws, cfg["measure"].get("is_bootstrap", 200), rng)
+    probes = e3_probe.context_state_probes(ctx, cfg["measure"]["z_only_test_frac"], rng) if ctx["positions"].size else None
     cats = list(e3_env.ZONE_CATEGORIES)
 
     def by_zone(arr: np.ndarray) -> dict[str, float]:
@@ -714,7 +803,12 @@ def real_context_measures(
         "l1_vs_p_by_zone": by_zone(l1_vs_p),
         "l1_vs_b_by_zone": by_zone(l1_vs_b),
         "l1_b_vs_p_by_zone": by_zone(l1_b_vs_p),
+        "l1_floor_by_zone": by_zone(l1_floor),
+        "kernel_draws": draws,
+        "I_s_by_zone": is_by_zone(I_s, boot, layout),
         "I_z_by_zone": {cat: zone_mean_with_se(iz["I_z"], iz["se"], zone_states(layout, cat)) for cat in cats},
+        "state_probe_h": None if probes is None else probes["h"]["test_accuracy"],
+        "state_probe_z": None if probes is None else probes["z"]["test_accuracy"],
         "frequent_outcome": frequent_outcome_preview(kernel["p_hat"], layout),
         "posterior_entropy": float(e3_probe.per_variable_entropy(ctx["post_probs"]).mean()) if n.sum() else float("nan"),
         "acc_real_context": acc,
@@ -726,13 +820,13 @@ def real_context_measures(
         "settings": rc,
     }
     arrays = {"contexts": ctx, "iz": iz, "kl": kl, "kernel": kernel, "l1_vs_p": l1_vs_p, "l1_vs_b": l1_vs_b,
-              "l1_b_vs_p": l1_b_vs_p}
+              "l1_b_vs_p": l1_b_vs_p, "I_s": I_s, "I_s_se": boot["se"], "I_s_bias": boot["bias"]}
     return record, arrays
 
 
 def training_diagnostics(
     rssm: RSSM, world: World, P_true: np.ndarray, T_hat_B: np.ndarray, replay: ReplayBuffer, cfg: dict,
-    rng: np.random.Generator, generator: torch.Generator, M: int,
+    rng: np.random.Generator, generator: torch.Generator, M: int, final: bool = True,
 ) -> tuple[dict, dict]:
     """One point of the training diagnostics (docs/e3/DECISIONS.md,
     2026-09-25 and 2026-09-28), also used for the final measurement.
@@ -741,26 +835,31 @@ def training_diagnostics(
     JSON-able record and the full arrays it was computed from (reused by
     the final report). All draws come from (rng, generator), owned by the
     caller. M: Monte-Carlo samples per I_z (measure.iz_mc_samples_training
-    during training, measure.iz_mc_samples_final at the end)."""
+    during training, measure.iz_mc_samples_final at the end). final: the
+    final kernel sizes, else the reduced training ones (kernel_draws)."""
     m = cfg["measure"]
+    _, k_s = kernel_draws(cfg, final)
     layout, templates_t = world.layout, world.templates_t
     was_training = rssm.training
     rssm.eval()
     t0 = time.perf_counter()
     iz = e3_probe.canonical_iz(rssm, templates_t, M=M, rng=rng, generator=generator)
     probe = iz["probe"]
-    kernel = e3_probe.canonical_kernel_probe(rssm, templates_t, K_s=m["kernel_k_s"], margin_threshold=m["kernel_margin_threshold"],
+    kernel = e3_probe.canonical_kernel_probe(rssm, templates_t, K_s=k_s, margin_threshold=m["kernel_margin_threshold"],
                                              probe=probe, generator=generator)
     separation = e3_probe.canonical_separation(rssm, templates_t, n_eval_draws=5, generator=generator)
     batch, labels = replay.sample(32, 16, rng)
     acc_replay = e3_probe.template_match_accuracy(rssm, batch, labels, templates_t, margin_threshold=m["kernel_margin_threshold"],
                                                   generator=generator)
-    real_record, real_arrays = real_context_measures(rssm, world, replay, P_true, T_hat_B, cfg, rng, generator, M)
+    real_record, real_arrays = real_context_measures(rssm, world, replay, P_true, T_hat_B, cfg, rng, generator, M, final=final)
     rssm.train(was_training)
 
     l1_vs_p = np.abs(kernel["p_hat"] - P_true).sum(axis=-1)  # (144, 5)
     l1_vs_b = np.abs(kernel["p_hat"] - T_hat_B).sum(axis=-1)
     l1_b_vs_p = np.abs(T_hat_B - P_true).sum(axis=-1)
+    l1_floor = expected_l1_sampling_floor(P_true, k_s)
+    I_s_canonical = controllability_of_kernel(kernel["p_hat"])  # secondary: the canonical kernel (h0 contexts)
+    boot_canonical = controllability_bootstrap(kernel["p_hat"], k_s, m.get("is_bootstrap", 200), rng)
     cats = list(e3_env.ZONE_CATEGORIES)
 
     def by_zone(arr: np.ndarray) -> dict[str, float]:
@@ -771,6 +870,9 @@ def training_diagnostics(
         "l1_vs_p_by_zone": by_zone(l1_vs_p),
         "l1_vs_b_by_zone": by_zone(l1_vs_b),
         "l1_b_vs_p_by_zone": by_zone(l1_b_vs_p),
+        "l1_floor_by_zone": by_zone(l1_floor),
+        "kernel_k_s": k_s,
+        "I_s_by_zone": is_by_zone(I_s_canonical, boot_canonical, layout),
         "I_z_by_zone": {cat: {"mean": float(iz["I_z"][zone_states(layout, cat)].mean()),
                               "mc_se": zone_mean_mc_se(iz["se"][zone_states(layout, cat)])} for cat in cats},
         "frequent_outcome": frequent_outcome_preview(kernel["p_hat"], layout),
@@ -874,6 +976,8 @@ def measure_final(rssm: RSSM, world: World, replay: ReplayBuffer, N: np.ndarray,
     T_hat_B = build_tabular_twin(N, N_STATES, N_ACTIONS)
     P_true = world.env.transition_tensor()
     rssm.eval()
+    device = next(rssm.parameters()).device
+    gpu_peak_start(device)
     log("final measurements (real contexts, canonical probe, s-space kernels, template accuracies) ...")
     rng, gen = measure_streams(seed, SLOT_FINAL, streams)
     final, extras = training_diagnostics(rssm, world, P_true, T_hat_B, replay, cfg, rng, gen, cfg["measure"]["iz_mc_samples_final"])
@@ -892,7 +996,14 @@ def measure_final(rssm: RSSM, world: World, replay: ReplayBuffer, N: np.ndarray,
     rng_z, gen_z = measure_streams(seed, SLOT_ZONLY, streams)
     z_seq_len = cfg["measure"].get("z_only_seq_len", 64)
     z_probe_result = e3_probe.z_only_probe_chunked(rssm, replay.iter_chronological_windows(z_seq_len, chunk=256), n_states=N_STATES,
-                                                   test_frac=cfg["measure"]["z_only_test_frac"], rng=rng_z, generator=gen_z)
+                                                   test_frac=cfg["measure"]["z_only_test_frac"], rng=rng_z, generator=gen_z,
+                                                   max_images=max_images_per_forward(cfg))
+
+    log("h-only probe (every replay deterministic state h_t, in chunks) ...")
+    rng_h, gen_h = measure_streams(seed, SLOT_HONLY, streams)
+    h_probe_result = e3_probe.z_only_probe_chunked(rssm, replay.iter_chronological_windows(z_seq_len, chunk=256), n_states=N_STATES,
+                                                   test_frac=cfg["measure"]["z_only_test_frac"], rng=rng_h, generator=gen_h,
+                                                   max_images=max_images_per_forward(cfg), latent="h")
 
     log("D1 in real contexts (every measured state of every zone with an accepted contrast) ...")
     rng_d1, gen_d1 = measure_streams(seed, SLOT_D1_REAL, streams)
@@ -919,6 +1030,7 @@ def measure_final(rssm: RSSM, world: World, replay: ReplayBuffer, N: np.ndarray,
         "zone_kinds": world.zone_kinds,
         "zone_of_state": [zone_of_state(layout, s) for s in range(N_STATES)],
         "real_context": final["real_context"],
+        "I_s_real": real["I_s"], "I_s_real_se": real["I_s_se"], "I_s_real_bias": real["I_s_bias"],
         "I_z_real": real["iz"]["I_z"], "I_z_real_se": real["iz"]["se"], "I_z_real_sd": real["iz"]["sd"],
         "n_contexts": real["iz"]["n_contexts"],
         "I_z": iz_result["I_z"], "I_z_se": iz_result["se"],
@@ -928,9 +1040,11 @@ def measure_final(rssm: RSSM, world: World, replay: ReplayBuffer, N: np.ndarray,
         "collapse_grid": grid_name,
         "I_by_category": {cat: float(iz_result["I_z"][zone_states(layout, cat)].mean()) for cat in e3_env.ZONE_CATEGORIES},
         "I_by_category_real": {cat: final["real_context"]["I_z_by_zone"][cat]["mean"] for cat in e3_env.ZONE_CATEGORIES},
+        "I_s_by_category_real": {cat: final["real_context"]["I_s_by_zone"][cat]["mean"] for cat in e3_env.ZONE_CATEGORIES},
         "accuracies": {key: final[key] for key in ACC_LABELS},
         "ghost_fraction_mean": final["ghost_fraction_mean"],
         "z_only_probe": z_probe_result,
+        "h_only_probe": h_probe_result,
         "context_dispersion": dispersion,
         "d1": d1_real,
         "d1_canonical": d1_canonical,
@@ -942,8 +1056,13 @@ def measure_final(rssm: RSSM, world: World, replay: ReplayBuffer, N: np.ndarray,
         "l1_vs_p_by_zone": final["l1_vs_p_by_zone"],
         "l1_vs_b_by_zone": final["l1_vs_b_by_zone"],
         "l1_b_vs_p_by_zone": final["l1_b_vs_p_by_zone"],
+        "l1_floor_by_zone": final["l1_floor_by_zone"],
         "frequent_outcome_preview": final["frequent_outcome"],
+        "gpu_memory_final": gpu_peak_end(device),
     }
+    if fields["gpu_memory_final"] is not None:
+        log(f"final measures: GPU peak {fields['gpu_memory_final']['peak_allocated_mib']:.0f} MiB allocated, "
+            f"{fields['gpu_memory_final']['peak_reserved_mib']:.0f} MiB reserved")
     ctx = real["contexts"]
     arrays = {
         "N": N, "T_hat_B": T_hat_B, "P_true": P_true,
@@ -951,6 +1070,7 @@ def measure_final(rssm: RSSM, world: World, replay: ReplayBuffer, N: np.ndarray,
         "I_z": iz_result["I_z"], "I_z_se": iz_result["se"],
         "posterior_probs": probe["posterior_probs"], "prior_probs": probe["prior_probs"],
         "l1_vs_p": extras["l1_vs_p"], "l1_vs_b": extras["l1_vs_b"], "l1_b_vs_p": extras["l1_b_vs_p"],
+        "real_I_s": real["I_s"], "real_I_s_se": real["I_s_se"], "real_I_s_bias": real["I_s_bias"],
         "real_I_z": real["iz"]["I_z"], "real_I_z_se": real["iz"]["se"], "real_I_z_sd": real["iz"]["sd"],
         "real_n_contexts": real["iz"]["n_contexts"], "real_I_z_context": real["iz"]["I_z_context"],
         "real_I_z_context_se": real["iz"]["se_context"], "real_kl_per_state": real["kl"]["mean"],
@@ -1097,6 +1217,8 @@ def run_one_seed(cfg: dict, seed: int, run_dir: Path, device: torch.device, max_
     (wandb_logger.py; never stops the run)."""
     log = RunLog(run_dir / "console.log", f"[seed={seed} {condition}]")
     meta = environment_metadata(device)
+    require_code_provenance(meta)  # neither a git commit nor a source hash: the run does not start
+    log(f"code: git commit {meta['git_commit']}, source sha256 {meta['source_sha256']} ({meta['source_n_files']} files)")
     artifacts = run_dir / "artifacts"
     artifacts.mkdir(parents=True, exist_ok=True)
     (run_dir / "checkpoints").mkdir(parents=True, exist_ok=True)
@@ -1112,7 +1234,8 @@ def run_one_seed(cfg: dict, seed: int, run_dir: Path, device: torch.device, max_
         world, replay, N, episode_starts_arr = load_run_data(run_dir, cfg, seed, condition)
         episode_starts = episode_starts_arr.tolist()
         write_run_meta(run_dir, seed, status="running", resumed_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                       **{f"resume_{key}": value for key, value in meta.items() if key in ("device", "gpu_name", "git_commit", "git_dirty")})
+                       **{f"resume_{key}": value for key, value in meta.items()
+                          if key in ("device", "gpu_name", "git_commit", "git_dirty", "source_sha256")})
         log(f"RESUMING in {run_dir} (device {device})")
     else:
         (run_dir / "config.yaml").write_text(yaml.safe_dump(cfg, sort_keys=False), encoding="utf-8")
@@ -1234,19 +1357,23 @@ def run_one_seed(cfg: dict, seed: int, run_dir: Path, device: torch.device, max_
         pending.clear()
 
     def record_diagnostics(step: int) -> dict:
+        gpu_peak_start(device)
         record, _ = training_diagnostics(rssm, world, P_true, T_hat_B, replay, cfg, diag_rng, diag_gen,
-                                         cfg["measure"]["iz_mc_samples_training"])
-        record = {"step": step, "switch_step": switch.switch_step, **record}
+                                         cfg["measure"]["iz_mc_samples_training"], final=False)
+        record = {"step": step, "switch_step": switch.switch_step, **record, "gpu_memory": gpu_peak_end(device)}
         diagnostics.append(record)
         with open(run_dir / "diagnostics.jsonl", "a", encoding="utf-8") as f:
             f.write(json.dumps(_jsonable(record)) + "\n")
         save_training_diagnostics_figure(diagnostics, switch.switch_step, artifacts / f"training_diagnostics_seed{seed:02d}.png")
         tracker.log(step, record, prefix="diagnostics")
         rc = record["real_context"]
-        log(f"diagnostics @ {step}: real contexts: KL det {[round(rc['kl_by_zone'][z], 2) for z in DETERMINISTIC_ZONES]} bits, I_z "
-            f"{ {z[:14]: round(rc['I_z_by_zone'][z]['mean'], 2) for z in e3_env.ZONE_CATEGORIES} } | acc replay/real/canonical-hard "
+        log(f"diagnostics @ {step}: real contexts: KL det {[round(rc['kl_by_zone'][z], 2) for z in DETERMINISTIC_ZONES]} bits, I_s "
+            f"{[round(rc['I_s_by_zone'][z]['mean'], 2) for z in e3_env.ZONE_CATEGORIES]} (I_z "
+            f"{[round(rc['I_z_by_zone'][z]['mean'], 2) for z in e3_env.ZONE_CATEGORIES]}) | probes h/z -> s "
+            f"{_nan(rc['state_probe_h']):.3f}/{_nan(rc['state_probe_z']):.3f} | acc replay/real/canonical-hard "
             f"{record['acc_replay_hard']:.3f}/{record['acc_real_context']:.3f}/{record['acc_canonical_hard']:.3f} | "
-            f"{record['seconds']:.0f}s")
+            f"{record['seconds']:.0f}s" + (f" | GPU peak {record['gpu_memory']['peak_reserved_mib']:.0f} MiB reserved"
+                                           if record["gpu_memory"] else ""))
         return record
 
     def fail(err: Exception, steps_done: int) -> None:
@@ -1398,7 +1525,8 @@ def run_one_seed(cfg: dict, seed: int, run_dir: Path, device: torch.device, max_
 
 # results.json leaves out the per-state arrays (they are in arrays.npz); load_run_report puts them back.
 ARRAY_FIELDS = {"I_z": "I_z", "I_z_se": "I_z_se", "I_z_real": "real_I_z", "I_z_real_se": "real_I_z_se",
-                "I_z_real_sd": "real_I_z_sd", "n_contexts": "real_n_contexts"}
+                "I_z_real_sd": "real_I_z_sd", "n_contexts": "real_n_contexts",
+                "I_s_real": "real_I_s", "I_s_real_se": "real_I_s_se", "I_s_real_bias": "real_I_s_bias"}
 
 
 def load_run_report(run_dir: Path) -> dict:
@@ -1407,7 +1535,8 @@ def load_run_report(run_dir: Path) -> dict:
     report = json.loads((run_dir / "results.json").read_text(encoding="utf-8"))
     arrays = np.load(run_dir / "arrays.npz")
     for field, key in ARRAY_FIELDS.items():
-        report[field] = arrays[key]
+        if key in arrays:  # the I_s arrays exist from 2026-09-30 on
+            report[field] = arrays[key]
     report["run_dir"] = str(run_dir)
     return report
 
@@ -1453,10 +1582,11 @@ def save_training_diagnostics_figure(records: list[dict], switch_step: int | Non
     ax.set_title("L1 of the s-space kernel vs P (dashed: L1(B, P), what the data allow)")
     ax = axes[0, 2]
     for cat in cats:
-        ax.errorbar(steps, [val(r["I_z_by_zone"][cat]["mean"]) for r in rc],
-                    yerr=[N_SE * val(r["I_z_by_zone"][cat]["se"]) for r in rc], marker="o", color=colors[cat], label=cat, capsize=2)
-        ax.plot(steps, [r["I_z_by_zone"][cat]["mean"] for r in records], linestyle=":", linewidth=0.8, color=colors[cat])
-    ax.set_title("I_z by zone (bits, +/- 3 se; solid: real contexts, dotted: canonical)")
+        if all("I_s_by_zone" in r for r in rc):
+            ax.errorbar(steps, [val(r["I_s_by_zone"][cat]["mean"]) for r in rc],
+                        yerr=[N_SE * val(r["I_s_by_zone"][cat]["se"]) for r in rc], marker="o", color=colors[cat], label=cat, capsize=2)
+        ax.plot(steps, [val(r["I_z_by_zone"][cat]["mean"]) for r in rc], linestyle=":", linewidth=1, color=colors[cat])
+    ax.set_title("real contexts, bits: I_s (MAIN, solid, +/- 3 se) and I_z (secondary, dotted)")
     ax = axes[1, 0]
     for zone in NOISY_ZONES:
         ax.plot(steps, [val(r["frequent_outcome"][zone]) for r in rc], marker="o", color=colors[zone], label=zone)
@@ -1538,20 +1668,23 @@ def _save_separation_figure(seed_reports: list[dict], path: Path) -> None:
 
 
 def _save_iz_by_zone_figure(seed_reports: list[dict], path: Path) -> None:
-    """Bars: real-context I_z by zone (main); black ticks: canonical."""
+    """Bars: real-context I_s by zone (the main measure since 2026-09-30;
+    I_z for reports written before); black ticks: real-context I_z
+    (secondary, an upper bound)."""
     plt = _plt()
     categories = seed_reports[0]["zone_categories"]
     fig, ax = plt.subplots(figsize=(9, 4))
     width = 0.8 / len(seed_reports)
     x = np.arange(len(categories))
     for i, report in enumerate(seed_reports):
-        values = [_nan(report["I_by_category_real"][c]) for c in categories]
-        ax.bar(x + i * width, values, width, label=f"{_tag(report)}, real contexts")
-        ax.scatter(x + i * width, [report["I_by_category"][c] for c in categories], marker="_", color="black", s=200, zorder=3,
-                   label="canonical probe" if i == 0 else None)
+        main = report.get("I_s_by_category_real", report["I_by_category_real"])
+        ax.bar(x + i * width, [_nan(main[c]) for c in categories], width,
+               label=f"{_tag(report)}, {'I_s' if 'I_s_by_category_real' in report else 'I_z'} real contexts")
+        ax.scatter(x + i * width, [_nan(report["I_by_category_real"][c]) for c in categories], marker="_", color="black", s=200,
+                   zorder=3, label="I_z, real contexts (secondary)" if i == 0 else None)
     ax.set_xticks(x + width * (len(seed_reports) - 1) / 2)
     ax.set_xticklabels(categories, rotation=20, ha="right")
-    ax.set_ylabel("mean I_z (bits)")
+    ax.set_ylabel("bits")
     ax.legend(fontsize=7)
     fig.tight_layout()
     fig.savefig(path, dpi=100)
@@ -1624,10 +1757,15 @@ def write_report(seed_reports: list[dict], out_dir: Path, cfg_name: str) -> Path
     add("**Main measure: real contexts** (docs/e3/DECISIONS.md, 2026-09-28). For each state s, the contexts (h_t, z_t) of "
         "replay windows unrolled with their true history where s_t = s, excluding the first steps of each window (burn-in) "
         "and the is_first steps (the h0 regime); up to a fixed number of contexts per state, drawn from the measurement "
-        "stream. I_z is computed in every context with the same exact densities, then averaged per state; the standard error "
-        "of a state's mean is sd / sqrt(n) over its contexts. A state with no context is \"non mesuré\". KL(posterior || prior) "
-        "is the one-step KL of the transition the data took from the context (the training loss's pairing). The s-space "
-        "kernel decodes prior samples from these contexts. The canonical probe (h0) is reported as secondary.")
+        "stream. **The main measure is I_s** (docs/e3/DECISIONS.md, 2026-09-30): I(a ; s' | s) of the s-space kernel -- "
+        "prior draws from the state's contexts decoded to their arrival state and matched to the templates, pooled over "
+        "the contexts of the state -- computed by measures.controllability, the same function as for the true P; its "
+        "standard error and plug-in bias come from a parametric bootstrap. I_z (the action dependence of the predicted "
+        "latent code, computed in every context with exact densities and averaged per state; the standard error of a "
+        "state's mean is sd / sqrt(n) over its contexts) is secondary: an upper bound, inflated by action information the "
+        "code carries beyond the arrival state. A state with no context is \"non mesuré\". KL(posterior || prior) is the "
+        "one-step KL of the transition the data took from the context (the training loss's pairing). The canonical probe "
+        "(h0) is reported as secondary.")
     add("")
     add(f"Verdict rules: every check uses a {N_SE:g}-standard-error margin; an ordering whose gap is within "
         f"{N_SE:g} combined standard errors is \"non concluant\", never OK. If the template accuracy "
@@ -1646,9 +1784,9 @@ def write_report(seed_reports: list[dict], out_dir: Path, cfg_name: str) -> Path
     add("")
     add("![separation curves](artifacts/separation_curves.png)")
     add("")
-    add("## I_z by zone type (bars: real contexts; ticks: canonical probe)")
+    add("## Controllability by zone type (bars: I_s, real contexts, MAIN; ticks: I_z, real contexts, secondary)")
     add("")
-    add("![I_z by zone](artifacts/iz_by_zone.png)")
+    add("![I_s by zone](artifacts/iz_by_zone.png)")
     add("")
 
     for report in seed_reports:
@@ -1689,7 +1827,8 @@ def write_report(seed_reports: list[dict], out_dir: Path, cfg_name: str) -> Path
         add(f"Environment: device `{repro['device']}`, torch {repro['torch_version']}, CUDA {repro['cuda_version']}, "
             f"{repro['num_threads']} threads, TF32 matmul/cuDNN {repro['allow_tf32_matmul']}/{repro['allow_tf32_cudnn']}, "
             f"deterministic algorithms {repro['deterministic_algorithms']}, commit "
-            f"`{repro['git_commit']}`{' (working tree modified)' if repro['git_dirty'] else ''} -- bit-exact only on the same "
+            f"`{repro['git_commit']}`{' (working tree modified)' if repro['git_dirty'] else ''}, source sha256 "
+            f"`{repro.get('source_sha256') or 'not recorded'}` -- bit-exact only on the same "
             f"machine, device and number of threads.")
         add("")
         add("| term | start (first 50 steps) | end (last 50 steps) |")
@@ -1736,6 +1875,13 @@ def write_report(seed_reports: list[dict], out_dir: Path, cfg_name: str) -> Path
             f"test accuracy **{_fmt(report['z_only_probe']['test_accuracy'])}** (n_train={report['z_only_probe']['n_train']}, "
             f"n_test={report['z_only_probe']['n_test']})")
         add("")
+        if report.get("h_only_probe"):
+            add(f"h-only linear probe (every replay deterministic state h_t -> s_t, same windows): train accuracy "
+                f"**{_fmt(report['h_only_probe']['train_accuracy'])}**, test accuracy "
+                f"**{_fmt(report['h_only_probe']['test_accuracy'])}**. On the real contexts (after the burn-in): h -> s "
+                f"**{_fmt(_nan(rc.get('state_probe_h')))}**, z -> s **{_fmt(_nan(rc.get('state_probe_z')))}** (test accuracy; the "
+                "state information carried by h alone, docs/e3/DECISIONS.md 2026-09-30).")
+            add("")
 
         add("### Real contexts: coverage")
         add("")
@@ -1747,7 +1893,21 @@ def write_report(seed_reports: list[dict], out_dir: Path, cfg_name: str) -> Path
             f"{rc['not_measured_states'] or 'none'}.")
         add("")
 
-        add("### I_z in real contexts (MAIN; per zone: mean over measured states, std over states, se of the mean)")
+        if "I_s_by_zone" in rc:
+            add(f"### I_s in real contexts (MAIN; kernel of {rc['kernel_draws']} decoded draws per (s, a), pooled over the "
+                "state's contexts; per zone: mean over measured states, se of the mean and mean plug-in bias from the bootstrap)")
+            add("")
+            if ok_mech:
+                add("| zone | dynamics here | mean I_s | se of the mean | plug-in bias (bootstrap) | states measured |")
+                add("|---|---|---|---|---|---|")
+                for cat in categories:
+                    st = rc["I_s_by_zone"][cat]
+                    add(f"| {cat} | {kinds[cat]} | {_fmt(_nan(st['mean']))} | {_fmt(_nan(st['se']))} | {_fmt(_nan(st['bias']))} | "
+                        f"{st['n_measured']}/{st['n_states']} |")
+            else:
+                add(f"{NOT_EVALUABLE}.")
+            add("")
+        add("### I_z in real contexts (SECONDARY, upper bound; per zone: mean over measured states, std over states, se of the mean)")
         add("")
         add("| zone | dynamics here | mean I_z | std I_z | se of the mean | states measured |")
         add("|---|---|---|---|---|---|")
@@ -1765,11 +1925,13 @@ def write_report(seed_reports: list[dict], out_dir: Path, cfg_name: str) -> Path
         add("### s-space kernel from real contexts (MAIN): L1 vs P and vs B; L1(B, P) = what the data allow")
         add("")
         if ok_mech:
-            add("| zone | L1(WM, P) | L1(WM, B) | L1(B, P) | p_hat(frequent outcome) |")
-            add("|---|---|---|---|---|")
+            add("| zone | L1(WM, P) | L1 floor (exact kernel, same draws) | L1(WM, B) | L1(B, P) | p_hat(frequent outcome) |")
+            add("|---|---|---|---|---|---|")
             for cat in categories:
                 fo = rc["frequent_outcome"].get(cat)
-                add(f"| {cat} | {_fmt(_nan(rc['l1_vs_p_by_zone'][cat]))} | {_fmt(_nan(rc['l1_vs_b_by_zone'][cat]))} | "
+                floor = rc.get("l1_floor_by_zone", {}).get(cat)  # absent from reports written before 2026-09-29
+                add(f"| {cat} | {_fmt(_nan(rc['l1_vs_p_by_zone'][cat]))} | {'-' if floor is None else _fmt(_nan(floor))} | "
+                    f"{_fmt(_nan(rc['l1_vs_b_by_zone'][cat]))} | "
                     f"{_fmt(_nan(rc['l1_b_vs_p_by_zone'][cat]))} | {_fmt(_nan(fo)) if cat in NOISY_ZONES else '-'} |")
             add("")
             add(f"Ghost rate (mean over measured (s, a) pairs): **{_fmt(_nan(rc['ghost_fraction_mean']))}**")
@@ -1846,6 +2008,23 @@ def write_report(seed_reports: list[dict], out_dir: Path, cfg_name: str) -> Path
         kinds = report.get("zone_kinds") or {z: z for z in categories}
         acc_replay = report["accuracies"]["acc_replay_hard"]
         ok_mech = mechanics_ok(acc_replay)
+        is_zones = report["real_context"].get("I_s_by_zone")
+        if is_zones is not None:  # the main measure since 2026-09-30
+            if kinds.get("uncontrollable_deterministic") == "uncontrollable_deterministic":
+                conv, ctrl = is_zones["uncontrollable_deterministic"], is_zones["controllable_deterministic"]
+                conv_se, ctrl_se = _nan(conv["se"]), _nan(ctrl["se"])
+                verdict = ordering_verdict(_nan(conv["mean"]), conv_se, _nan(ctrl["mean"]), ctrl_se)
+                add(f"| {row} | I_s(conveyor) < I_s(controllable-det) (MAIN) | {tag} | gap > {N_SE:g} x combined se | "
+                    f"{_fmt(_nan(conv['mean']))} vs {_fmt(_nan(ctrl['mean']))} (combined se "
+                    f"{_fmt(float(np.sqrt(conv_se ** 2 + ctrl_se ** 2)))}) | {verdict} |")
+            else:
+                add(f"| {row} | I_s(conveyor) < I_s(controllable-det) (MAIN) | {tag} | - | no conveyor in this environment | "
+                    "non applicable |")
+            row += 1
+            b = bounds_verdict(report["I_s_real"], report["I_s_real_se"], ceiling=float(np.log2(5)))
+            add(f"| {row} | 0 <= I_s <= log2(5), per measured state within {N_SE:g} se (MAIN) | {tag} | 0 violations | "
+                f"{b['n_violations']} violation(s) / {b['n_measured']} measured | {'OK' if b['ok'] else 'FAIL'} |")
+            row += 1
         if kinds.get("uncontrollable_deterministic") == "uncontrollable_deterministic":
             conv = _zone_iz_stats_real(report, "uncontrollable_deterministic")
             ctrl = _zone_iz_stats_real(report, "controllable_deterministic")
