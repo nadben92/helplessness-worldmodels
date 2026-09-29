@@ -60,3 +60,4 @@ logs/*
 !logs/kubeflow/
 logs/kubeflow/*
 !logs/kubeflow/E3_GPU_2026-09-28_light.tgz
+!logs/kubeflow/bridge_full.tgz
