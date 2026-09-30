@@ -1,0 +1,119 @@
+{
+ "runs": [
+  {
+   "job": "win64_seed0_experimental",
+   "exit_code": 0,
+   "started_at": "2026-09-29T18:34:21.415226+00:00",
+   "finished_at": "2026-09-30T09:04:35.325456+00:00",
+   "not_started": false,
+   "run_dir": "grid12x12__4zones__pair-experimental__worldmodel-gpu_e30b_win64__seed00__20260929T183427Z",
+   "status": "done",
+   "steps_done": null,
+   "switch_step": 6351,
+   "error": "",
+   "finished": true
+  },
+  {
+   "job": "win64_seed0_reference",
+   "exit_code": 0,
+   "started_at": "2026-09-29T18:34:21.421750+00:00",
+   "finished_at": "2026-09-30T09:07:12.364042+00:00",
+   "not_started": false,
+   "run_dir": "grid12x12__4zones__pair-control__worldmodel-gpu_e30b_win64__seed00__20260929T183428Z",
+   "status": "done",
+   "steps_done": null,
+   "switch_step": 5901,
+   "error": "",
+   "finished": true
+  },
+  {
+   "job": "win64_seed5_experimental",
+   "exit_code": 0,
+   "started_at": "2026-09-29T18:34:21.427570+00:00",
+   "finished_at": "2026-09-30T09:05:25.338255+00:00",
+   "not_started": false,
+   "run_dir": "grid12x12__4zones__pair-experimental__worldmodel-gpu_e30b_win64__seed05__20260929T183427Z",
+   "status": "done",
+   "steps_done": null,
+   "switch_step": 5501,
+   "error": "",
+   "finished": true
+  },
+  {
+   "job": "win64_seed5_reference",
+   "exit_code": 0,
+   "started_at": "2026-09-29T18:34:21.433038+00:00",
+   "finished_at": "2026-09-30T09:06:54.356350+00:00",
+   "not_started": false,
+   "run_dir": "grid12x12__4zones__pair-control__worldmodel-gpu_e30b_win64__seed05__20260929T183427Z",
+   "status": "done",
+   "steps_done": null,
+   "switch_step": 5501,
+   "error": "",
+   "finished": true
+  },
+  {
+   "job": "win16_seed0_experimental",
+   "exit_code": 0,
+   "started_at": "2026-09-29T18:34:21.439373+00:00",
+   "finished_at": "2026-09-30T05:15:49.885453+00:00",
+   "not_started": false,
+   "run_dir": "grid12x12__4zones__pair-experimental__worldmodel-gpu_e30b_win16__seed00__20260929T183427Z",
+   "status": "done",
+   "steps_done": null,
+   "switch_step": 6451,
+   "error": "",
+   "finished": true
+  },
+  {
+   "job": "win16_seed0_reference",
+   "exit_code": 0,
+   "started_at": "2026-09-29T18:34:21.445262+00:00",
+   "finished_at": "2026-09-30T05:14:46.820308+00:00",
+   "not_started": false,
+   "run_dir": "grid12x12__4zones__pair-control__worldmodel-gpu_e30b_win16__seed00__20260929T183427Z",
+   "status": "done",
+   "steps_done": null,
+   "switch_step": 7001,
+   "error": "",
+   "finished": true
+  },
+  {
+   "job": "win16_seed5_experimental",
+   "exit_code": 0,
+   "started_at": "2026-09-29T18:34:21.450713+00:00",
+   "finished_at": "2026-09-30T05:11:32.782951+00:00",
+   "not_started": false,
+   "run_dir": "grid12x12__4zones__pair-experimental__worldmodel-gpu_e30b_win16__seed05__20260929T183427Z",
+   "status": "done",
+   "steps_done": null,
+   "switch_step": 6351,
+   "error": "",
+   "finished": true
+  },
+  {
+   "job": "win16_seed5_reference",
+   "exit_code": 0,
+   "started_at": "2026-09-29T18:34:21.456461+00:00",
+   "finished_at": "2026-09-30T05:16:56.901220+00:00",
+   "not_started": false,
+   "run_dir": "grid12x12__4zones__pair-control__worldmodel-gpu_e30b_win16__seed05__20260929T183427Z",
+   "status": "done",
+   "steps_done": null,
+   "switch_step": 6651,
+   "error": "",
+   "finished": true
+  }
+ ],
+ "archives": [
+  "grid12x12__4zones__pair-experimental__worldmodel-gpu_e30b_win64__seed00__20260929T183427Z.tgz",
+  "grid12x12__4zones__pair-control__worldmodel-gpu_e30b_win64__seed00__20260929T183428Z.tgz",
+  "grid12x12__4zones__pair-experimental__worldmodel-gpu_e30b_win64__seed05__20260929T183427Z.tgz",
+  "grid12x12__4zones__pair-control__worldmodel-gpu_e30b_win64__seed05__20260929T183427Z.tgz",
+  "grid12x12__4zones__pair-experimental__worldmodel-gpu_e30b_win16__seed00__20260929T183427Z.tgz",
+  "grid12x12__4zones__pair-control__worldmodel-gpu_e30b_win16__seed00__20260929T183427Z.tgz",
+  "grid12x12__4zones__pair-experimental__worldmodel-gpu_e30b_win16__seed05__20260929T183427Z.tgz",
+  "grid12x12__4zones__pair-control__worldmodel-gpu_e30b_win16__seed05__20260929T183427Z.tgz",
+  "logs.tgz"
+ ]
+}
