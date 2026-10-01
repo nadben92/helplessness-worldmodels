@@ -2791,3 +2791,26 @@ e. **Shape 5 holds**: the twin's L1 to P decreases at every checkpoint in all fo
 4. Data: the goal observation is rare because the agent rarely gets there (and E3-0's replay never stored it).
    Seeding the world model with goal arrivals (e.g. prefill under the uniform policy for longer) changes the protocol
    of section 4.5 (minimal prefill).
+
+## 2026-10-01 (12) -- reading rule of the world-model diagnostics (fixed BEFORE computing them); tie-break; per-checkpoint weights
+
+### Reading rule (user decision, recorded before any of the numbers below was computed)
+
+Question: is the world model's failure to predict the goal (11) specific to the goal, or a general insufficiency of
+the prior in rarely visited contexts?
+
+Quantity: for every (s, a) pair whose true transition is deterministic (one successor s* with P = 1), with s and s*
+both different from the goal, the **mass of the prior on the right successor**: p_hat(s* | s, a) of the s-space kernel
+in real contexts (the main measure's kernel, probe.real_context_kernel: prior draws decoded and matched to the
+templates, renormalised over the non-ghost draws as the kernel is defined; the raw mass including ghosts,
+p_hat x (1 - ghost fraction), is reported next to it), against the number n of real visits of (s, a) (the run's
+counts N at the weights' environment step).
+
+Rule: over the pairs with 2 <= n <= 8, the **median** mass on the right successor
+- >= 0.9, while the median mass on the goal of the four pairs that lead into the goal is < 0.1: the failure is
+  **specific to the goal**;
+- <= 0.5: **general insufficiency** of the prior in rarely visited contexts;
+- in between: **undetermined, no action**.
+Applied at each of the two weight sets (environment steps 18,000 and 20,000), each with its own replay and counts
+(18,000: the replay and counts of the resume point; 20,000: the run's final measures, arrays.npz). A verdict holds
+only if both weight sets give it; otherwise undetermined.
