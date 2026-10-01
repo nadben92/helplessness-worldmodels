@@ -28,8 +28,8 @@ def test_every_submission_command_parses(tmp_path, monkeypatch):
     commands = _commands("submit_kubeflow.py")
     assert len(commands) == 2  # the preflight and the measurement of gpu_e30b_measures (docs/e3/DECISIONS.md, 2026-10-01 (10))
     assert {tuple(c) for c in commands} == {
-        ("--phase", "preflight", "--batch", "gpu_e30b_measures", "--max-parallel", "4", "--cpu", "5"),
-        ("--phase", "measure", "--batch", "gpu_e30b_measures", "--max-parallel", "4", "--cpu", "5")}
+        ("--phase", "preflight", "--batch", "gpu_e30b_measures", "--max-parallel", "4", "--cpu", "3"),
+        ("--phase", "measure", "--batch", "gpu_e30b_measures", "--max-parallel", "4", "--cpu", "3")}
     assert not any("train" in c for c in commands)  # no training in this batch
     mount = tmp_path / "scratch"
     repo = mount / "helplessness-worldmodels"

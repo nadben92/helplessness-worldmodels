@@ -2726,3 +2726,13 @@ B_BY_ZONE.md, thresholds.json); it refuses an output directory that already hold
 3. the two seeds are of different block classes (A and B), so the spread mixes seed and class effects.
 None of this changes the definition; the script applies it as fixed. Whether the gpu_e30b verdict is reported as a
 test or as a description is the user's decision.
+
+## 2026-10-01 (11) -- CPU capacity adjustment for gpu_e30b_measures
+
+The user authorized running the measurement-only batch with 3 CPUs rather than the originally prescribed 5:
+the notebook reserves 2 of the namespace's 5 CPUs, so the 5-CPU GPU job cannot be admitted alongside it.
+This supersedes only the batch's CPU prescription in (10), not its four source runs, weights, measurement
+configuration, parallelism (4), deterministic GPU settings, source-hash check, or preflight decision rule.
+`BATCH_CPUS`, the runbook, and their tests now prescribe 3 requested and 3 usable CPUs; the preflight still
+rejects any other allocation and any projected duration over 4 hours. The existing dirty cluster checkout
+must be preserved separately before installing a clean copy of this version at the canonical path.
