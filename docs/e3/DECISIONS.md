@@ -2900,3 +2900,23 @@ No agent run was made with the new tolerance.
 `run_agent.py` writes `checkpoints/agent_env<NNNNNN>.pt` (the same fields as agent_final.pt) at every checkpoint,
 atomically; nothing is drawn. Checked: a tiny run with the previous run_agent.py and with this one (same legacy tie
 rule) gives identical checkpoints.jsonl and final weights.
+
+## 2026-10-02 (13) -- gradients against data: protocol and criterion (fixed BEFORE any computation; not launched)
+
+Question (user): is the prior's poor mass on rarely visited transitions ((12): median 0.28-0.33 at n = 2-8) limited by
+the number of gradient steps or by the data?
+
+Protocol (user decision): start from the agent_mini world model, continue training the world model ALONE on the
+frozen replay -- same loss, same learning rates and schedule, no new data, no agent heads -- for N more gradient steps;
+then measure the s-space kernel in real contexts with the run's own settings (K = 1,358, ghost margin), as in (12).
+
+Criterion (user decision), on the deterministic pairs off the goal with 2 <= n <= 8 (n = the frozen replay's visits):
+- median mass of the prior on the right successor >= 0.5 after the N steps: **limited by the gradients**;
+- rise of that median < 0.1 over its value at the start: **limited by the data**;
+- otherwise: **mixed**.
+Reported alongside, not part of the criterion: by zone, the L1 to P of the NOISY pairs before / after with their
+visits (memorising a few samples must not pass for success: a pair seen n times whose kernel moves toward its n
+empirical successors rather than toward P is not learning the dynamics).
+
+Not launched: N and the starting point await the user's agreement (cost and the starting point's constraint in the
+report of 2026-10-02).
