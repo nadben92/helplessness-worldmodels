@@ -81,3 +81,38 @@ def test_handoff_without_training(tmp_path):
     assert handoff.main(["--preflight-dir", str(pre), "--out", str(out), "--results-root", str(tmp_path)]) == 0
     text = (out / "handoff.md").read_text(encoding="utf-8")
     assert "decision **stop**" in text and "Training not launched" in text and (out / "logs.tgz").is_file()
+
+
+def test_handoff_of_a_measurement_batch(tmp_path):
+    """docs/e3/DECISIONS.md, 2026-10-01 (10): --measure-dir archives each run's recomputation (no .pt, the source
+    runs not read) and handoff.md lists the code version, the weights checksum and the comparison with the original."""
+    measure = tmp_path / "m"  # short: Windows path-length limit with the real run names
+    name_ok = "grid12x12__4zones__pair-experimental__worldmodel-gpu_e30b_win64__seed00__20260929T183427Z"
+    name_failed = "grid12x12__4zones__pair-control__worldmodel-gpu_e30b_win64__seed00__20260929T183428Z"
+    final = measure / "runs" / name_ok / "recomputed" / "final__20261002T080100Z"
+    final.mkdir(parents=True)
+    (final / "results.json").write_text(json.dumps({"weights_sha256": "f" * 64, "reproducibility": {"source_sha256": "c" * 64}}),
+                                        encoding="utf-8")
+    (final / "arrays.npz").write_bytes(b"a")
+    (final / "comparison_with_run.json").write_text(json.dumps({"real_I_z": True, "p_hat": True}), encoding="utf-8")
+    (final / "stray.pt").write_bytes(b"w")
+
+    def job(name, code):
+        return {"command": ["python", "-u", "experiments/E3_worldmodel_4zones/recompute_measures.py", f"/scratch/src/{name}",
+                            "--checkpoint", "final", "--device", "cuda", "--out-dir", str(measure / "runs"), "--weights-sha256", "f" * 64],
+                "exit_code": code, "started_at": "2026-10-02T08:00:05+00:00"}
+
+    (measure / "status.json").write_text(json.dumps({"win64_seed0_experimental": job(name_ok, 0),
+                                                     "win64_seed0_reference": job(name_failed, 1)}), encoding="utf-8")
+    out = tmp_path / "handoff" / "gpu_e30b_measures"
+    assert handoff.main(["--measure-dir", str(measure), "--out", str(out), "--results-root", str(tmp_path / "nowhere")]) == 0
+    assert sorted(p.name for p in out.iterdir()) == sorted([f"{name_ok}.recomputed.tgz", "logs.tgz", "handoff.md", "handoff.json"])
+    with tarfile.open(out / f"{name_ok}.recomputed.tgz") as tar:
+        names = tar.getnames()
+    assert f"{name_ok}/recomputed/final__20261002T080100Z/results.json" in names and not any(n.endswith(".pt") for n in names)
+    text = (out / "handoff.md").read_text(encoding="utf-8")
+    assert "Measurement batch: no training" in text
+    assert f"| win64_seed0_experimental | 0 | {name_ok} | {name_ok}/recomputed/final__20261002T080100Z | yes | True | {'c' * 64} | {'f' * 64} |" in text
+    assert f"| win64_seed0_reference | 1 | {name_failed} | none | no | - | - | - |" in text
+    with pytest.raises(SystemExit):
+        handoff.main(["--measure-dir", str(measure), "--train-dir", str(measure), "--out", str(tmp_path / "x")])

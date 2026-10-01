@@ -2196,3 +2196,533 @@ batch (no Secret configured). Everything else (first batch, server launcher, man
   its options, the hash command runs with `python -S` (no site-packages) and prints the hash the file
   states, and the decision lines are the preflight's. **Any change to the code or configs changes the
   hash: that test then fails until RUN_GPU.md is updated.**
+
+## 2026-09-30 (4) -- gpu_e30b results, as they stand; answers to the objectives of entry (1); decisions pending
+
+Full analysis: `reports/E3_GPU_gpu_e30b_analysis_2026-09-30.md` (tables per run, figures, checks). Read-only
+analysis of the handoff (`handoff/gpu_e30b/`); no run relaunched, no measurement code changed.
+
+**Outcomes (recorded as they are).** 8 / 8 runs `done` (60,000 gradient steps), `source_sha256` as stated in
+RUN_GPU.md in 8 / 8, `git_commit` `unknown` (no git in the container). Batch wall time 14.6 h (preflight
+projection 18.1 h); GPU peak 2.2 to 2.5 GiB per process. The preflight log says 3 CPUs requested and usable,
+whereas RUN_GPU.md prescribes `--cpu 5` (to confirm with the executor).
+
+**(i) Window length and the separation failures.** All 8 runs separate (switch 5,501 to 7,001; margins 17,999 to
+19,499). The first batch's shape (16 x 64) does not prevent separation with the bridge's network. win16 switches
+later than win64 in 4 / 4 paired comparisons (mean 6,614 vs 5,814; n = 4, p = 0.125 two-sided sign test: a
+tendency). h -> s (0.905 to 0.918) and z -> s (0.993 to 0.999) are the same in both shapes; h is never ahead of z
+beyond noise. Between `gpu_e30.yaml` and `gpu_e30b_win64.yaml` only the network (and the deadline, the number of
+threads) differs: two paired failures (seed 0 experimental, seed 5 reference) now separate. **Established:** window
+length 64 is not sufficient to cause a failure; the failures go with the spec-size network (2 paired cases).
+**Not established:** that window length is irrelevant for the spec-size network (no such run), that network size is
+the only cause, that the failed runs' state information passed through h (no h -> s probe then).
+
+**(ii) Kernel convergence of the noisy zones at 1,024 images per step.** No. C-b fails in cn (0.150 to 0.173 vs
+0.103 to 0.111) and un (0.157 to 0.313 vs 0.107 to 0.113) in 8 / 8 runs; C-a, C-c hold in 8 / 8, C-b holds in ud and
+cd in 8 / 8. T4 is met in cn (0.891 to 0.907), not in the environment's un zone (0.687 to 0.766; reference un 0.796
+to 0.889). L1 and T4(un) still improve at 60,000 steps, decelerating; structural components do not: in cn the
+residual mass is concentrated and 4 to 5 % of the mass is off the true support (H(s'|s,a) right, H(s'|s) too high),
+and **I_s in cn is 1.93 to 1.95 against 1.653 (+0.27 to +0.29, 8 / 8 runs), still rising**. Hypothesis (not tested):
+a product-of-categoricals prior produces hybrid codes when the alternatives differ in many latent variables (the
+noise is spread over 6.8 to 7.7 of 8 variables in the noisy zones, 2.4 to 3.1 in the deterministic ones).
+
+**(iii) First floor of b (I_s, `aggregate_b.py`).** No pair meets all the calibration criteria (C-b, noisy zones).
+Where the criteria hold: ud b = -2.19 to -2.27 (theory -2.322), cd and cn b = -0.013 to +0.008 (theory 0).
+un b = -1.55 to -1.82 (theory -1.653): not calibrated, dominated by the reference's un zone (I_s 1.60 to 1.88, not
+converged). One seed per (config, class): no within-class variance.
+
+**Checks.** I_z - I_s bias of the bridge found again (+0.16 to +0.38 in the environment's uncontrollable zones, +0.25
+to +0.29 in cn, +0.02 to +0.03 in cd). Reference seed 0 (win64) against the first batch's (spec network) at the same
+K = 32: same order of magnitude everywhere; spec-size more precise in the deterministic zones, worse C-c (0.959 vs
+0.995). **Contradictions of expected forms:** C-b in the noisy zones; T4 not near 0.9 in the environment's un zone;
+I_s in cn above the truth (so "I_s recovers the truth where it is known" holds for ud, un (environment) and cd, not
+cn); the "KL of a deterministic zone ends below 1 bit" form fails narrowly for the environment's ud zone in 3 / 4
+runs (1.057, 1.060, 1.099 bits); one state of win16 seed 5 reference exceeds I_z <= log2 5 by 3.03 se (secondary).
+
+**Decisions pending (the user's; nothing chosen here).** (A) which window shape to carry forward (win64: earlier
+switch in 4 / 4 pairs, the spec's shape, +40 % training time; win16: 30 % cheaper, latest and most dispersed
+separations, worst reference un zone; both: twice the cost); (B) the noisy zones' C-b: train longer / accept with the
+documented reserve / revise the criterion (post hoc, to be recorded as such) / investigate the structural cause first;
+(C) whether I_s stays the main measure with its documented cn bias; (D) which b to report as the first floor (ud and
+the null controls are reliable; un is not); more seeds per class; (E) cost of the next batch (CPU-bound, memory not).
+
+## 2026-09-30 (5) -- decisions after gpu_e30b: window shape, C-b kept, hybrid-codes test, off-support mass, b floor, CPU check, Phase 5 started
+
+### A. Window shape: win64 (16 x 64) retained (user decision)
+
+Why: the switch comes earlier in 4 pairs out of 4 (same seed, condition and data; mean 5,814 vs 6,614), it is
+the shape of the first batch and of the spec (comparability), and its final measures cost half as much (11 to 14
+min against 23 to 28). **The choice was made without looking at b or at the calibration criteria.**
+
+### B. C-b in the noisy zones: kept as it is; hybrid-codes test before any new batch (user decision)
+
+The criterion is not revised. Before any new batch, the factorised-prior hypothesis is tested on existing
+weights (requested from the supervisor: weights_final.pt of win64 seed 0 environment, win64 seed 5 reference,
+win16 seed 5 reference). `experiments/E3_worldmodel_4zones/hybrid_codes_check.py <run dir> --weights <file>`
+(tested; dry run on the bridge, the only weights in this checkout): for the (s, a) pairs of the noisy zones, from
+real contexts,
+- factorised draws z' ~ prod_i p_i(. | h') decoded and matched: the share outside the 5 reachable successors;
+- two non-factorised comparisons: the joint mode of the same prior, and the posterior codes the model actually
+  produced after (s, a) in the replay, decoded with their own h;
+- each factorised draw's code classified against the posterior codes of the whole replay: novel (full code never
+  produced), novel pair (two variables' classes never produced together), hybrid (novel, and every variable's
+  class is one the posterior produced for a reachable successor).
+
+**Criterion, fixed before any result (user): the hypothesis is confirmed if the off-support mass comes mostly from
+combinations of variables never observed together in the posteriors** -- implemented as: more than half of the
+off-support factorised draws (noisy zones pooled) have a novel code.
+
+Reserves noted by the implementer before the three runs are tested (from the bridge dry run, which is NOT one
+of the three runs and was trained at 128 images per step): (1) the base rate is high -- 41 % of ALL the bridge's
+factorised draws have a novel code (7,716 distinct posterior codes in 100,000), so "73 % of the off-support draws
+are novel" must be read against it; the script also reports the off-support share among novel and among observed
+codes (0.31 against 0.08 on the bridge), which is the contrast the hypothesis predicts; (2) no pair of classes
+was unobserved (novel-pair share 0): the novelty is of higher order than pairs; (3) the joint mode itself decodes
+off support 8 % of the time and the observed-code draws 8 %: a part of the off-support mass is not hybrid.
+
+### C. I_s stays the main measure, on the kernel as it is; off-support mass and projected I_s added (user decision)
+
+- **I_s (main)** is computed on the kernel as it is: the model's actual belief, off-support mass included.
+- **Off-support mass** (diagnostic, by zone): the share of p_hat(s' | s, a) on states that are not among the 5
+  reachable successors of s (`measures.kernel_probe.off_support_mass`, support =
+  `envs.zones.geographic_support_mask`, the support of the twin's prior).
+- **I_s projected on the support** (secondary): the same draws matched among the successors' templates only
+  (`measures.kernel_probe.match_from_distances(allowed=...)`, the single matching rule), then renormalised and
+  passed to the same controllability function, with its own bootstrap se and bias. It serves the comparison with
+  the tabular twin B, whose prior is restricted to the same support.
+- In every final measurement (results.json, arrays.npz, REPORT.md, the recomputation's SUMMARY.md) and in
+  `aggregate_b.py` (the off-support mass is recomputed there from the saved kernel, so it is available for the 8
+  gpu_e30b runs: 0.04 to 0.055 in cn, 0.14 to 0.19 in the environment's un zone, 0.05 to 0.07 in its ud zone,
+  below 0.01 in cd; the projected I_s needs a decoding and exists only for runs measured from now on).
+- **Why the projected version is not the main measure:** it uses the environment's truth (which successors are
+  reachable) to measure the model's belief, and would erase the model's errors -- including those that will guide
+  the agent in closed loop.
+- Implementer's reading of "ghost if the distance to the best support template exceeds the existing ghost
+  threshold": the existing ghost rule is a MARGIN (second-best minus best distance below
+  `kernel_margin_threshold`), not a distance; the projection applies that same rule among the support's
+  templates. To be confirmed.
+
+### D. b floor (user decision)
+
+Established: the conveyor (uncontrollable-deterministic zone), b = -2.19 to -2.27 for a theory of -2.32, and the
+null controls (controllable-noisy and controllable-deterministic zones, b = -0.013 to +0.008 for 0). The
+uncontrollable-noisy zone is **pending a calibrated kernel**.
+
+### E. Latent size; CPUs (user decision; implementer's engineering)
+
+- The latent stays 8 x 8 as long as test B has not confirmed the hypothesis; no sweep of the latent for now. If
+  it is confirmed, before any GPU run: an isolation test on the CPU and a short local run in 4 x 32, to check
+  that the separation still happens with the same switch criterion.
+- **Why gpu_e30b ran on 3 CPUs instead of 5.** The preflight's own command (status.json) carried `--cpus 3` and the
+  container's quota was 3: the submission was made without `--cpu 5` (or with 3). `--cpu` defaulted to 3 and any
+  value was accepted, so the prescribed number could be missed silently; the submission record
+  (`*.submission.json`) was not in the archive. Now: each batch carries its prescribed number
+  (`submit_kubeflow.BATCH_CPUS`: gpu_e30b 5), `--cpu` defaults to it, another value is refused at submission
+  unless `--allow-cpu-override`; the preflight verdict records the CPUs requested and usable and prints them;
+  RUN_GPU.md's step 3 requires both to equal the prescribed number; `make_handoff.py` archives the submission
+  record and reports the CPUs. RUN_GPU.md is marked as finished for gpu_e30b.
+
+### F. Phase 5 started on the CPU (user decision; first version, implementer's choices flagged)
+
+`src/helplessness/agents/worldmodel/`: `heads.py` (goal head, critic, slow critic, r = 50 p - (1 - p),
+c = 1 - p), `policy.py` (one-step lookahead Q through RSSM.imagination_step, epsilon-greedy with the relative
+tie-break, the latent filter), `imagination.py` (rollouts, lambda-returns, the two losses), `closed_loop.py`
+(collection). `experiments/E3_worldmodel_4zones/run_agent.py` with `configs/e3/agent_mini.yaml` (mini_long's
+network and procedure): world model trained as in run_mini.py, heads from the switch on, twin B at E2's
+checkpoints through E2's own `twin_from_counts`. New streams appended (agent_init, act_latent, imagination).
+
+Implementer's choices to confirm:
+1. **Replay convention of the closed loop.** E3-0's replay stores, at each step, the observation before the action
+   and the reward of the transition LEAVING it, and never the terminal observation: the goal's image is in no E3-0
+   replay, and the model never sees a transition into it. The goal head (target 1[r > 0] on posterior states) and
+   the lookahead (r and c read at the predicted next state) need the goal's observation. The closed loop therefore
+   stores observations with the reward received ON ARRIVING at them, the goal's observation included (terminal,
+   r = 50); an episode of n transitions stores n + 1 steps. E3-0's collection is unchanged. Consequence: a
+   closed-loop world model also learns the goal's image and the transitions into it, which no E3-0 model has.
+2. **Untrained heads.** Their output layers start at zero (as DreamerV3): every Q ties and the random tie-break
+   explores uniformly until the heads have learnt something. With a random initialisation the first version
+   followed an arbitrary, 90 %-greedy policy for thousands of steps (tie fraction 0.015).
+3. **The heads train from the estimator switch on** (before it the latent is not a discrete code). So the
+   behaviour before the switch is uniform exploration in effect, although no epsilon = 1 phase is scheduled.
+4. Not given by the spec: the goal head's learning rate (1e-4) and the heads' width (128).
+5. Tie-break tolerance: population std of the 5 Q-values.
+
+Not in this first version: the E3 measures of the world model in closed loop (I_s, kernels, D1 / D2), Delta
+under P of the world-model agent itself (spec 5.7; the twin's Delta is computed), resume, W&B, the reference
+pipeline run side by side (the runner accepts `--conditions reference`).
+
+## 2026-09-30 (6) -- hybrid-codes test: criterion revised before the three runs; decision rule on the latent fixed in advance
+
+Written BEFORE the test is run on the three target runs (win64 seed 0 environment, win64 seed 5 reference,
+win16 seed 5 reference; their weights arrived in `handoff/gpu_e30b/weights/`).
+
+**Criterion of the hybrid-codes test, revised (user).** The hypothesis (the off-support mass of the noisy zones
+comes from the factorised prior) is **confirmed for a run if the off-support mass obtained by drawing the
+posterior codes actually observed after (s, a) is at most half of the off-support mass of the factorised prior
+draws** (noisy zones pooled). The off-support mass of the joint mode is reported next to it. **This criterion was
+fixed after the dry run on the bridge and before any result on the three target runs.** It replaces the one of
+entry (5) B (share of the off-support draws with a novel code above one half), whose base rate the dry run showed
+to be high (41 % of all the bridge's draws have a novel code); that statistic is still reported, as a description.
+
+**Decision rule on the latent, fixed in advance (user).**
+- If the hypothesis is confirmed on at least 2 of the 3 runs: start-up test of the 4 x 32 latent on the CPU (the
+  isolation test on 3 seeds, then a short local run on the basis of mini_long). Criterion: separation in the 3
+  seeds, with the present switch criterion and before the deadline. If it passes, the next GPU batch is in
+  4 x 32. If it fails: stop and report.
+- Otherwise: the next GPU batch stays in 8 x 8, with a doubled gradient budget (120,000 steps), to test whether
+  the noisy zones' kernel converges with more training.
+
+### Results of the hybrid-codes test (three target runs, final weights; `hybrid_codes_check.py`, 500 real contexts of the noisy zones' states x 5 actions x 64 factorised draws per run)
+
+| run | off-support mass, factorised prior | posterior codes after (s, a) | ratio | joint mode | verdict |
+|---|---|---|---|---|---|
+| win64 seed 0 environment | 0.0983 (cn 0.048, un 0.149) | 0.0041 | 0.042 | 0.0272 | confirmed |
+| win64 seed 5 reference | 0.0467 (cn 0.040, un 0.054) | 0.0012 | 0.027 | 0.0108 | confirmed |
+| win16 seed 5 reference | 0.0627 (cn 0.047, un 0.079) | 0.0033 | 0.053 | 0.0116 | confirmed |
+
+**Confirmed on 3 of 3 runs** (criterion: ratio <= 0.5). Description, same runs: 63 to 85 % of the off-support draws
+have a code the posterior never produced (26 to 37 % of all draws do); 55 to 79 % are hybrid (novel, made of the
+reachable successors' own classes); no pair of classes is unobserved; the off-support share is 0.11 to 0.29 among
+novel codes against 0.014 to 0.05 among observed ones.
+
+Reserve (implementer): the posterior sees the image of the state actually reached, and its reconstruction is right
+99.6 to 99.8 % of the time (C-a), so its off-support mass is near zero almost by construction; the criterion
+mostly measures that the prior's draws err and the posterior's do not. The evidence that bears on the mechanism is
+the description above and the joint mode: decoding the mode of every variable (no mixing of alternatives) leaves
+0.011 to 0.027 off support, 3.6 to 5.4 times less than the factorised draws -- most, not all, of the off-support
+mass comes from mixing.
+
+**Consequence, by the rule above:** start-up test of the 4 x 32 latent on the CPU.
+
+### Start-up test of the 4 x 32 latent: isolation test FAILED on 3 of 3 seeds -- stopped here, as the rule says
+
+`ae_isolation.run(6000, 1e-3, 32, seed, "warmup_probs_until_separated", k=6, switch_max_steps=3600, n_vars=4,
+n_classes=32)` (the retained procedure's isolation protocol, seeds 0, 1, 2, each with its own themes; the latent's
+shape is the only change, through the new `n_vars` / `n_classes` arguments):
+
+| seed | 4 x 32: switch | batch-pair JS at the deadline (3,600) | canonical mean JS at 3,500 | 8 x 8, same protocol (control): switch, final hard accuracy |
+|---|---|---|---|---|
+| 0 | none | 0.000 | 0.00 | none (JS 0.17 at the deadline) |
+| 1 | none | 0.000 | 0.00 | 2,601, 0.997 |
+| 2 | none | 2.892 | 2.80 (mode accuracy 0.76) | 1,851, 0.999 |
+
+Criterion (separation in the 3 seeds, present switch criterion, before the deadline): **not met, 0 of 3**. The short
+local run on the basis of mini_long was therefore NOT made, and no GPU batch in 4 x 32 is prepared.
+
+What the control and the numbers show (description; nothing was changed):
+- the same protocol in 8 x 8 switches in 2 of 3 seeds (seed 0's themes do not separate within 3,600 steps in either
+  shape: the isolation deadline is tight for that seed, see THEME_SENSITIVITY.md), so 0 of 3 is a difference of the
+  latent's shape for seeds 1 and 2, not of the protocol;
+- seed 1 shows no separation at all in 4 x 32 at 3,500 steps where 8 x 8 had switched at 2,601: the start-up is
+  slower;
+- seed 2 does separate in 4 x 32 (JS rising from step 1,000, 2.8 bits at 3,500) but stays under the threshold:
+  the batch-pair JS is a sum over the latent variables, each bounded by 1 bit, so its ceiling is 4 bits for 4
+  variables against 8 for 8, while the threshold stayed at 3.0 bits (75 % of the ceiling instead of 37.5 %; the
+  8 x 8 runs plateau at 6.2 to 6.5 of 8). The "present switch criterion" is not scale-free in the number of
+  variables.
+
+Decision pending (user): the latent of the next GPU batch. The rule's two branches do not cover this case (the
+hypothesis is confirmed, the 4 x 32 start-up fails).
+
+### Expected shapes of the agent_mini bench run -- PROPOSED by the implementer, to be confirmed before the run is read
+
+No expected shape of this run was recorded before. Proposal (configs/e3/agent_mini.yaml, seed 0, experimental,
+20,000 environment steps):
+1. the world model separates: the switch happens before the 25,000-gradient-step deadline, and no collapse guard
+   fires afterwards;
+2. before the heads have learnt anything the greedy tie fraction is close to 1 (zero-initialised heads) and the
+   success rate is that of uniform exploration (about 0.1 within H = 36); after the switch the tie fraction falls;
+3. the goal head learns the reward signal: goal_loss decreases after the switch and goal_recall rises toward 1;
+4. behaviour improves after the switch: the success rate over the last 100 episodes rises above its pre-switch
+   level and the mean episode length falls;
+5. the twin (condition B): Delta >= 0 in every zone at every checkpoint (T9); its L1 to P decreases with the
+   counts; its b is negative in the two uncontrollable zones and near 0 in the two controllable ones.
+A run that contradicts one of these is reported as such.
+
+## 2026-09-30 (7) -- decisions after the hybrid-codes and 4 x 32 tests; expected shapes of agent_mini (final); bias control; scale-free switch
+
+### Expected shapes of the agent_mini bench run -- FINAL (validated by the user before the run)
+
+`configs/e3/agent_mini.yaml`, seed 0, experimental environment, 20,000 environment steps:
+1. the world model separates: the switch happens before the 25,000-gradient-step deadline, and no collapse guard
+   fires afterwards;
+2. before the switch the policy is exactly uniform (zero-initialised heads: every Q ties, and the epsilon branch is
+   uniform too): the greedy tie fraction is 1 and the success rate is that of a uniform policy in this environment,
+   computed exactly under P (uniform starts over the non-terminal states, H = 36, the goal absorbing):
+   **0.0459** for seed 0 experimental (expected episode length 34.97; 95 % range of a 100-episode window
+   0.005 to 0.087). For reference: 0.1173 in the reference environment (same value for seed 5, whose layout is the
+   same up to the permutation of the zones). After the switch the tie fraction falls;
+3. the goal head learns the reward signal: goal_loss decreases after the switch and goal_recall rises toward 1;
+4. behaviour improves after the switch: the success rate over the last 100 episodes rises above the uniform level
+   and the mean episode length falls;
+5. the twin (condition B): Delta >= 0 in every zone at every checkpoint (T9); its L1 to P decreases with the counts;
+   its b is negative in the two uncontrollable zones and near 0 in the two controllable ones.
+A run that contradicts one of these is reported as such.
+
+### Hybrid codes: conclusion (user decision)
+
+The main cause of the off-support mass in the noisy zones is confirmed: the factorised prior mixes the latent
+variables of different successors. **The conclusion rests on two measures, not on the counterfactual criterion:**
+the joint mode (3.6 to 5.4 times less off-support mass than the factorised draws) and the over-representation of
+never-produced codes (63 to 85 % of the off-support draws against 26 to 37 % of all draws). The counterfactual
+criterion (posterior codes after (s, a) against factorised draws) was almost met by construction: the posterior
+codes decode their own image correctly (C-a). The bias is structural for a factorised prior in a multimodal zone;
+more training budget would not remove it.
+
+### Latent and calibration floor (user decision)
+
+- The latent stays **8 x 8**. The 4 x 32 latent is abandoned for E3 (slower start-up, seed 1).
+- No further GPU calibration batch: the win64 8 x 8 runs of gpu_e30b are the **provisional E3-0 floor**; the final
+  floor will be rerun with the final campaign (goal-storage convention aligned with the closed loop, more seeds).
+- C-b in the noisy zones: the criterion is kept; its failure is recorded with its structural cause.
+- The next GPU batch is the **closed-loop pilot** (seeds 0 and 5, environment and reference), prepared once the
+  closed-loop measures are done and agent_mini has been read, with RUN_GPU.md in the same format (replaces gpu_e30c).
+
+### Switch criterion: scale-free in the number of latent variables (user decision; implementation below)
+
+The threshold is expressed as a fraction of the ceiling: the batch-pair JS averaged over the latent variables
+(each bounded by 1 bit), `switch_js_threshold_per_var` and `collapse_js_threshold_per_var`; in bits of the summed
+statistic, threshold = fraction x n_vars. Fixed to reproduce the present 8 x 8 behaviour exactly: 3 bits of 8 =
+0.375 per variable (collapse: 1 bit of 8 = 0.125). 0.375 x 8 = 3.0 exactly in floating point, so an 8 x 8 run is
+unchanged bit for bit; the existing configs keep their `switch_js_threshold` in bits and are unchanged (tested).
+
+### Bias control in closed loop: reading rule and thresholds (user decision; thresholds proposed by the implementer)
+
+**Partly superseded by (9): the rule applies to the controllable zones only, the thresholds are per zone and defined differently (TAU_B = 0.14 and TAU_OFF = 0.02 below are dropped), and UN / UD are read against the E3-0 floor.**
+
+For every environment / reference pair, `aggregate_b.py` gives, by zone: b computed on I_s and on I_s projected on
+the geographic support, and the difference of off-support mass between the two environments (environment minus
+reference). **Reading rule: b is interpretable in a zone only if the two versions of b agree,
+|b(I_s) - b(I_s projected)| <= TAU_B, and the off-support mass does not differ between the environment and its
+reference, |off(env) - off(ref)| <= TAU_OFF.** A run without I_s projected (measured before 2026-09-30 (5)) gets the
+verdict "partial" (the off-support condition only). Both thresholds are options of `aggregate_b.py`
+(`--tau-b`, `--tau-off`).
+
+Thresholds, from the between-seed variability of gpu_e30b: for each (window shape, condition, zone), the paired
+difference between seeds 0 and 5 estimates sqrt(2) x the standard deviation of one run; the threshold is twice that
+standard deviation (a disagreement or a difference beyond it is larger than the seed-to-seed spread of one run),
+by zone and pooled over the four zones (root mean square):
+
+| zone | TAU_B (b on I_s) | TAU_OFF (off-support mass) |
+|---|---|---|
+| uncontrollable deterministic | 0.061 | 0.013 |
+| controllable noisy | 0.014 | 0.007 |
+| uncontrollable noisy | 0.265 | 0.032 |
+| controllable deterministic | 0.013 | 0.004 |
+| **pooled (retained)** | **0.136 -> 0.14 bits** | **0.018 -> 0.02** |
+
+What the rule gives on gpu_e30b (8 runs, no I_s projected, so "partial"): the off-support condition holds in the
+two controllable zones (differences -0.003 to +0.012) and **fails in the two uncontrollable zones in every pair**:
+uncontrollable deterministic +0.039 to +0.058, uncontrollable noisy +0.089 to +0.137 (the environment's kernel
+leaks more than the reference's, which is controllable-deterministic there). Under the rule as stated, the b of
+gpu_e30b in the uncontrollable zones -- including the conveyor's, about -2.2 bits -- is **not interpretable**.
+Recorded as it is; a remark for the user, nothing changed: the rule does not scale with the size of b (an
+off-support difference of 0.05 cannot by itself produce 2.2 bits), and the reference of an uncontrollable zone is a
+controllable-deterministic zone, whose kernel is sharper by construction, so the off-support condition may fail
+wherever b is large. Recomputing I_s projected for the gpu_e30b runs (recompute_measures.py, CPU, long at
+K = 1,358) would give the full verdict; not done.
+
+## 2026-09-30 (8) -- closed-loop measures (4c) and accelerations (4b): implementation
+
+### 4c: the E3 measures in closed loop, Delta under P of the agent, resume (run_agent.py)
+
+- **Delta under P of the world-model agent** (spec 5.7) at every checkpoint, by zone: the agent's greedy policy
+  (probe.agent_greedy_policy: Q of the one-step lookahead averaged over a state's contexts, uniform over the tie set,
+  uniform where no context was read), evaluated exactly under P (probe.delta_under_p: V* - V^pi, >= 0). Two
+  readings: real contexts (main, the latent states the agent actually had in the replay, as the other measures) and
+  the canonical probe (secondary). Own measurement slot (14), a child stream keyed by the checkpoint.
+  Columns agent_delta_real / agent_delta_canonical of metrics.csv, field agent_delta of checkpoints.jsonl.
+- **Final measures** (measure.final, true in agent_mini.yaml): run_mini.measure_final on the closed-loop replay and
+  counts at the end of the run -- I_s, I_s projected, off-support mass, I_z, kernels, probes, D1 / D2 -- written as
+  run_mini writes them (arrays.npz, results.json), so aggregate_b.py pairs a closed-loop environment run with its
+  reference, with the bias control above (tested on a tiny pair). agent_mini.yaml's measure block is mini_long's,
+  unchanged (tested); its schedule keys (diagnostics_every, separation_every, ...) are run_mini's and unused here.
+- **Resume**: every checkpoints.resume_every environment steps (2,000 in agent_mini.yaml) and at every checkpoint,
+  checkpoints/resume.pt holds the whole state -- models, optimisers, switch, replay and environment (pickled), the
+  collector (counts, episode statistics, current observation, latent filter), every random stream (numpy and torch,
+  and torch's global state) and the records -- written atomically. `run_agent.py --resume <run dir>` continues in the
+  same directory. Tested: an interruption at step 150 then --resume gives the same checkpoints.jsonl, metrics.csv,
+  counts and final weights (bit for bit on CPU) as the uninterrupted run.
+
+### 4b: two accelerations of the training step, off by default (src/helplessness/agents/worldmodel/acceleration.py)
+
+- **torch.compile** of the encoder, the decoder and `RSSM.observation_core` (observation_step without its posterior
+  draw -- a refactoring with no change of behaviour: the draw, and so the latent stream, stays eager). In place:
+  parameters and state_dict unchanged. Option `runtime.compile: {backend, mode}` (mode "reduce-overhead" = CUDA
+  graphs); absent in every config, so nothing changes. Equivalence test (5 steps, both phases): tracing backend
+  (aot_eager) passes here; inductor needs a C++ compiler absent on this Windows machine (the test is skipped here and
+  will run on Linux / GPU).
+- **Several seeds in one process**: parameters stacked (torch.func.stack_module_state), every dense call vectorised
+  over the seeds (vmap + functional_call); per seed and outside the vectorised calls: the minibatch, the latent
+  draws from the seed's own generator (same calls, same order: the stream is consumed identically, tested bit for
+  bit), beta_rep, the estimator phase, the learning rate (seeds switch at different steps: StackedAdam, Adam with one
+  learning rate per seed) and the gradient-norm clipping. The GRU cell is written with its gate equations in the
+  stacked path (vmap has no batching rule for aten::gru_cell and would loop over the seeds). Equivalence test: two
+  seeds with different weights, batches, beta_rep and learning rates, one switching a step before the other, binding
+  clipping: losses within 1e-4 relative and weights within 2e-5 of the sequential step over 5 steps. Library only:
+  not wired into run_mini.py / run_agent.py (one seed per process); a multi-seed runner is worth writing only if the
+  bench shows the gain.
+- **Speed bench** in the preflight (GPU, informational, never in the verdict; alone: `preflight.py --config ...
+  --bench-accel`): the current step against compile (default and reduce-overhead) and against 2 stacked seeds, 200
+  steps per phase after warm-up, in seed-steps per second, with the warm-up (compilation) time and each variant's
+  loss difference from the current step. Results in preflight_summary.json / acceleration_bench.json. Nothing is
+  enabled on the strength of the bench without a decision.
+
+## 2026-09-30 (9) -- reading rule by zone type (correction of (7)), per-zone thresholds, one execution mode per campaign
+
+### A. Scope of the reading rule (user decision; correction of (7))
+
+The rule of (7) applies to the **controllable zones (CN, CD)** only: that is where the propagation is tested, and the
+local dynamics are the same in the environment and in its reference. In an uncontrollable zone the reference is a
+controllable zone, so the off-support condition (environment against reference) fails by construction.
+
+- **CN, CD**: b is interpretable only if the two versions of b agree, |b(I_s) - b(I_s projected)| <= tau_b(zone), and
+  the off-support mass does not differ between the environment and its reference, |difference| <= tau_off(zone).
+- **UN, UD**: b is read against the **E3-0 floor of the zone** (the b of the same zone on the E3-0 pairs), provided the
+  off-support mass of the zone on the environment side, in closed loop, stays within the interval observed on the E3-0
+  environment runs, widened by +- tau_off_floor(zone). Otherwise the zone is reported as **diagnostic only**.
+
+**This correction was made after seeing the rule fail in the uncontrollable zones of gpu_e30b** (calibration runs,
+before any closed-loop result), with the structural reason above. It is recorded as such: the first version of the
+rule ((7)) was tested on gpu_e30b and found inapplicable to UN and UD; nothing in the closed-loop pilot informed it.
+
+Implementation: `aggregate_b.py`. `aggregate(runs, tau_b, tau_off, floor)` applies the rule by zone type
+(`is_controllable`: the zone category is named after its dynamics); verdicts: "interpretable" / "NOT interpretable" /
+"partial: off-support ok|NOT ok; projected b unavailable" (CN, CD), "read against the floor" / "diagnostic only
+(off-support outside the floor's interval)" / "floor unavailable" (UN, UD). `--e30 <E3-0 runs>` derives the
+thresholds and the floor (`thresholds_from_pairs`, `floor_from_pairs`; `--write-thresholds` saves them), or
+`--thresholds <json>` (default `configs/e3/bias_control_thresholds.json`). The scalar thresholds of (7) (TAU_B = 0.14,
+TAU_OFF = 0.02) are removed. Tested (tests/e3/test_e3_aggregate_b.py).
+
+### B. Thresholds (user decision; definition fixed before the values were computed)
+
+TAU_B = 0.14 is dropped: dominated by UN, where the rule no longer applies, and seven times the size of E2's effect in
+CN. New definition, **per zone, for CN and CD**: twice the standard deviation of the tested quantity itself,
+estimated over the win64 pairs of gpu_e30b (seeds 0 and 5; sample sd, ddof = 1):
+
+- tau_b(zone) = 2 x sd over pairs of [ b(I_s) - b(I_s projected) ];
+- tau_off(zone) = 2 x sd over pairs of [ off-support(environment) - off-support(reference) ].
+
+Limits, stated now: **two seeds only, of different block classes**, so a standard deviation over n = 2 values: a fragile
+estimate (one degree of freedom), which also mixes the seed effect with the class effect. The thresholds are an order
+of magnitude, not a calibrated noise level.
+
+For UN and UD the text of the decision fixes the interval as "+- TAU_OFF of the zone" without a definition of that
+TAU_OFF (B defines thresholds for CN and CD only). **Implementer's reading, to be confirmed**: tau_off_floor(zone) =
+2 x sd, over the E3-0 environment runs, of the environment-side off-support mass of the zone (the quantity the interval
+bounds -- same principle: twice the sd of the tested quantity itself; here also n = 2).
+
+### C. Accelerations: one execution mode per campaign (user decision)
+
+The execution modes (compile or not, stacked seeds or not) are not bit-equivalent. **All the conditions of one
+campaign -- environment, reference, and E3-0 if it is rerun -- run in the same mode.** Implementation
+(`acceleration.execution_mode`, `mixed_modes`, `preflight.execution_mode_problems`):
+
+- the preflight reads every config of the campaign (`--config`, `--extra-config`, and `--campaign-config` for
+  configs that belong to the campaign but are not launched by this job) and **fails if their modes differ**;
+- **runtime.compile is refused** unless the equivalence gate passes, which only runs on **Linux with CUDA**
+  (`acceleration.check_compile_equivalence`): the eager and the inductor-compiled step take the same 4 steps (both
+  phases) from the same weights, batches and generators, the loss difference must be <= 1e-4 (relative), and **TF32
+  must still be off after the compiled steps** (torch.backends.cuda.matmul / cudnn allow_tf32 false,
+  float32_matmul_precision "highest", in the state `configure_runtime` leaves). The compilation's own failure is a
+  refusal. On any other platform or device the option is refused as well: **no silent fallback** to the eager step;
+- `runtime.stacked_seeds` is refused: no runner trains stacked seeds (library only);
+- the mode of each config is printed and stored in preflight_summary.json (`execution_mode`).
+Tested on the CPU with the tracing backend (the gate's logic, failing and passing cases, the TF32 check) and with
+mocks for the Linux / CUDA branch; the inductor run itself happens on the GPU machine.
+
+### gpu_e30b: state of the recomputation and what could be computed (status at the end of the day)
+
+- **Blocked: the weights** (2026-09-30). Only 2 of the 4 win64 runs had their `weights_final.pt` here (experimental seed
+  0, control seed 5: two seeds AND two conditions, so no pair). I_s projected needs the weights (it was not measured on
+  the GPU). The CPU recomputation of these two runs was started, then **interrupted before the end on the user's
+  decision** (30 Sept., evening: too long; more than 35 CPU-minutes each, single thread, K = 1,358). **No result of it
+  is retained** (its partial outputs were deleted) and **it is not to be relaunched**: the measurement is redone on the
+  GPU for the four runs by the batch gpu_e30b_measures, 2026-10-01 (10). Nothing was changed in the definition.
+- **Computable from the existing arrays (GPU runs, no recomputation), definition (B) unchanged**, n = 2 pairs:
+  tau_off(CN) = 0.0154, tau_off(CD) = 0.0035 (differences env - ref: CN +0.0124, +0.0015; CD -0.0015, +0.0009);
+  tau_off_floor (implementer's reading, to be confirmed): UD = 0.0175, UN = 0.0214.
+  E3-0 floor (win64 pairs, b on I_s): UD -2.254 (-2.239, -2.268), UN -1.771 (-1.792, -1.750); environment-side
+  off-support interval: UD [0.047, 0.060], UN [0.142, 0.157].
+  tau_b(CN, CD): not computed (needs I_s projected).
+
+## 2026-10-01 (10) -- gpu_e30b_measures: the four win64 runs of gpu_e30b measured again on the GPU (no training)
+
+### What and why (user decision)
+
+**No training: only the measurement is redone.** The four win64 runs of gpu_e30b (experimental and reference, seeds 0
+and 5) are measured again by `recompute_measures.py` from their own final weights, on the A100, in one job. Reason:
+**I_s projected on the support did not exist when gpu_e30b ran** (added 2026-09-30 (5)), and the thresholds of the
+reading rule ((9), B) need it on both sides of both pairs. Both sides of each pair are measured on the same platform
+with the same version of the code: that is the reason for the batch (a CPU recomputation of some runs next to GPU
+measurements of others would mix platforms). The measurement configuration is each run's own `config.yaml` (K = 1,358,
+measurement streams, ghost thresholds, real-context settings), TF32 off and deterministic algorithms on, as in gpu_e30b;
+nothing is overridden (no `--kernel-draws`).
+
+The two CPU recomputations started on 2026-09-30 (experimental seed 0, control seed 5) were **interrupted before the
+end by the user's decision; no result of them is retained, and they are not relaunched** (see (9)).
+
+### Inventory and integrity of the weights (2026-10-01)
+
+`handoff/gpu_e30b/weights/` holds the four win64 final weights (the last two pushed by the supervisor on 2026-10-01).
+- Checksums: the SHA-256 of each file is the one `handoff/gpu_e30b/handoff.md` lists for its source run (4 / 4). The
+  run archives of gpu_e30b contain no weights (by design), so there is no second, independent checksum to compare with.
+- Identity, checked on the content (not on the file names): each file's model, run on its run's own pre-rendered images
+  (canonical probe, deterministic), reproduces the posterior probabilities stored in **its** run's `arrays.npz` to
+  1.3e-6 to 1.6e-6 (GPU float vs CPU float), and differs from those of the three other runs by 0.99. Gradient step
+  60,000 and switch step equal to the run's (`meta.yaml`) in all four. Seed, condition and window of each directory
+  name agree with its `meta.yaml` and `config.yaml`. **No discrepancy.**
+
+### The weights do not travel
+
+The jobs read the runs in place, on the volume where gpu_e30b wrote them
+(`/scratch/helplessness-worldmodels-gpu_e30b/results/E3_worldmodel_4zones/<run>`), and write only into the job's own
+directory (`recompute_measures.py --out-dir`); each job checks its weights' SHA-256 before measuring
+(`--weights-sha256`, the values above). The copies in `handoff/gpu_e30b/weights/` are not used by the batch.
+
+### Engineering (implementer)
+
+- `submit_kubeflow.py`: measurement batches (`MEASURE_BATCHES`, phases `preflight` and `measure` only; `train` and
+  `resume` refused for them, `measure` refused for a training batch); batch `gpu_e30b_measures`, 5 CPUs prescribed.
+- `preflight_measures.py`: CUDA, TF32 off / deterministic after `configure_runtime`; **CPUs: requested = prescribed =
+  usable = 5, otherwise a problem (not a warning)**; the checkout's source hash = the one RUN_GPU.md states; each source
+  run present, its name / `meta.yaml` / window = the job's, weights SHA-256 as expected; one full measurement of the
+  first run on the GPU (timed, outputs complete, TF32 off recorded); its comparison with the run's original arrays is
+  reported, not judged. Decision launch / stop, no retry branch.
+- `make_handoff.py --measure-dir`: one light archive per run (`<run>.recomputed.tgz`: results.json, arrays.npz,
+  SUMMARY.md, comparison_with_run.json, artifacts; no `.pt`), `handoff.md` with each job's code hash, weights checksum
+  and comparison with the original; into `handoff/gpu_e30b_measures/`.
+- `recompute_measures.py`: `--out-dir` (the run directory only read), `--weights-sha256`, and the measuring
+  environment (code hash, device, GPU, TF32) recorded in results.json (`reproducibility`).
+- `tau_gpu_e30b.py`: one command once the archive is in `handoff/` (below).
+
+### Consistency check (to be read in the aggregation)
+
+gpu_e30b's original measurements were made on the same GPU. The re-measurement must therefore find again the stored
+I_s, I_z (real contexts) and off-support mass. `tau_gpu_e30b.py` compares them by run and zone (and the per-state
+arrays real_I_s, real_I_z, real_p_hat), with a tolerance of 1e-6; any difference above it is flagged **"DIFFERS -- to
+be reported"** (either the measurement code changed or the platform differs) and the script exits with 1. It is
+reported to the user, not resolved by the implementer.
+
+### Thresholds: the computation, prepared before any value (definitions of (9) unchanged)
+
+`python experiments/E3_worldmodel_4zones/tau_gpu_e30b.py` checks the batch (the four runs, expected weights, one code
+hash, one device and GPU, TF32 off, same K), the consistency above, then computes on the two win64 pairs, by
+`aggregate_b.thresholds_from_pairs`: for CN and CD, tau_b = 2 x sd of b(I_s) - b(I_s projected) and tau_off = 2 x sd of
+off-support(env) - off-support(ref); for UN and UD, tau_off_floor and the E3-0 floor (the reading of (9) for UN / UD,
+still to be confirmed); and the rule's verdict on every pair and zone. Outputs in `reports/tau_gpu_e30b/` (TAU.md,
+B_BY_ZONE.md, thresholds.json); it refuses an output directory that already holds files.
+
+**Raised to the user before any value (applicability with two seeds).** The definition is computable, but:
+1. one degree of freedom: with n = 2, sd = |q0 - q5| / sqrt(2), so tau = sqrt(2) |q0 - q5|. The 95 % interval of a
+   standard deviation estimated with 1 degree of freedom runs from about 0.45 to 32 times the estimate: tau is an order
+   of magnitude at best, and can be arbitrarily small when the two seeds happen to agree;
+2. **circularity of the verdict on gpu_e30b itself**: on the two pairs that set the thresholds, pair i passes the b
+   condition iff |q_i| <= sqrt(2) |q0 - q5|. When the two seeds share a bias of the same sign and size (a systematic
+   bias), tau is small and both pairs fail; when their differences have opposite signs, both pass. The verdict on
+   gpu_e30b is thus set by the relative position of two numbers, not by an independent noise level: it can be reported
+   as a description, not as a test. The thresholds are meaningful for pairs that did not set them (the closed-loop
+   pilot);
+3. the two seeds are of different block classes (A and B), so the spread mixes seed and class effects.
+None of this changes the definition; the script applies it as fixed. Whether the gpu_e30b verdict is reported as a
+test or as a description is the user's decision.

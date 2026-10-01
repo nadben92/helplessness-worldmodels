@@ -304,8 +304,12 @@ def run(
     legacy_snapshot_rng: bool = False,
     themes=None,
     replicate: int | None = None,
+    n_vars: int | None = None,
+    n_classes: int | None = None,
 ) -> dict:
-    """k=None uses configs/e3/mini.yaml's own render scale. themes: a fixed
+    """n_vars, n_classes: the latent's shape instead of configs/e3/mini.yaml's
+    (docs/e3/DECISIONS.md, 2026-09-30 (6): start-up test of the 4 x 32 latent).
+    k=None uses configs/e3/mini.yaml's own render scale. themes: a fixed
     Themes object instead of the seed's theme draw (run_mini.build_run).
     replicate (theme-sensitivity replicates, docs/e3/THEME_SENSITIVITY.md):
     keeps the colours, the layout and the network initialisation of `seed`,
@@ -328,7 +332,7 @@ def run(
     side = 12 * k
     rssm = RSSM(RSSMConfig(
         image_size=(side, side), base_depth=cfg["model"]["base_depth"], embed_dim=cfg["model"]["embed_dim"],
-        h_dim=cfg["model"]["h_dim"], n_vars=cfg["model"]["n_vars"], n_classes=cfg["model"]["n_classes"],
+        h_dim=cfg["model"]["h_dim"], n_vars=n_vars or cfg["model"]["n_vars"], n_classes=n_classes or cfg["model"]["n_classes"],
         n_actions=5, unimix=cfg["model"]["unimix"],
     ))
     batch_rng = np.random.default_rng(seed)
@@ -350,7 +354,7 @@ def run(
     )
     final = out["curve"][-1]
     return {
-        "estimator": estimator, "seed": seed, "replicate": replicate, "k": k, "n_steps": n_steps, "lr": lr, "batch_size": batch_size,
+        "estimator": estimator, "seed": seed, "replicate": replicate, "k": k, "n_vars": rssm.cfg.n_vars, "n_classes": rssm.cfg.n_classes, "n_steps": n_steps, "lr": lr, "batch_size": batch_size,
         "schedule": None if schedule is None else {k: v for k, v in schedule.__dict__.items() if k != "history"},
         "switch_step": schedule.switch_step if isinstance(schedule, SeparationSwitch) else None,
         "aid": None if probs_aid is None else dataclasses.asdict(probs_aid),

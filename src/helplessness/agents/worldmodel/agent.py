@@ -10,10 +10,13 @@ T_hat, per the ABC's own contract (see agents/base.py). The POLICY
 choice, Phase 5) never calls it -- pinned by
 tests/agents/worldmodel/test_worldmodel_agent.py's mock test.
 
-`act()` is a placeholder (`NotImplementedError`) here: the real policy
-(K_act rollouts, the Q formula, the goal head, the critic) is Phase 5
-scope. Only the measurement bridge is decided and built now (see
-docs/e3/DECISIONS.md, point 2).
+`act()` is a placeholder (`NotImplementedError`) here. The real policy
+(K_act lookahead draws, the Q formula, the goal head, the critic) acts on
+the latent state (h, z), not on a state index: it lives in policy.py,
+heads.py, imagination.py and closed_loop.py (Phase 5, docs/e3/DECISIONS.md
+2026-09-30 (5)) and never calls this measurement bridge. What remains to
+be built on this class is the canonical-probe greedy policy of spec 5.7
+(Delta under P of the world-model agent).
 """
 
 from __future__ import annotations

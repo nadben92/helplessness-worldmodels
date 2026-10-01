@@ -182,3 +182,44 @@ def test_cpu_request_reaches_the_preflight_and_the_worker(tmp_path, monkeypatch)
         monkeypatch.setenv(name, os.environ.get(name, ""))
     cluster._run_e3(str(tmp_path), "preflight", str(tmp_path / "logs"), "", "", batch="gpu_e30b", cpus=5)
     assert calls[-1][calls[-1].index("--cpu") + 1] == "5"
+
+
+def test_a_batch_s_prescribed_cpus_cannot_be_missed(tmp_path, capsys):
+    """docs/e3/DECISIONS.md, 2026-09-30 (5): gpu_e30b was prescribed 5 CPUs and ran on 3 (the default)."""
+    assert cluster.resolve_cpus("gpu_e30b", None) == 5 and cluster.resolve_cpus("gpu_e30", None) == 3
+    assert cluster.resolve_cpus("gpu_e30b", 5) == 5
+    with pytest.raises(ValueError, match="prescribed 5 CPUs"):
+        cluster.resolve_cpus("gpu_e30b", 3)
+    assert cluster.resolve_cpus("gpu_e30b", 3, allow_override=True) == 3
+    default = cluster.commands("preflight", "python", tmp_path, batch="gpu_e30b")[0][1]
+    assert default[default.index("--cpus") + 1] == "5"  # without --cpu, the batch's own number
+    with pytest.raises(SystemExit):  # refused at submission, before anything is sent
+        cluster.main(["--phase", "preflight", "--batch", "gpu_e30b", "--cpu", "3"])
+    assert "prescribed 5 CPUs" in capsys.readouterr().err
+
+
+def test_measurement_batch_reads_the_runs_in_place_and_never_trains(tmp_path):
+    """docs/e3/DECISIONS.md, 2026-10-01 (10): gpu_e30b_measures = recompute_measures.py on the four win64 runs, read where
+    they were trained, outputs in the job's own directory, the weights' checksums checked; no training phase."""
+    jobs = cluster.commands("measure", "python", tmp_path, batch="gpu_e30b_measures")
+    assert [name for name, _ in jobs] == ["win64_seed0_experimental", "win64_seed0_reference", "win64_seed5_experimental",
+                                          "win64_seed5_reference"]
+    for name, command in jobs:
+        run_dir, sha = cluster.MEASURE_BATCHES["gpu_e30b_measures"]["runs"][name]
+        assert command[2].endswith("recompute_measures.py") and "run_mini.py" not in " ".join(command)
+        assert command[3] == f"{cluster.GPU_E30B_RESULTS}/{run_dir}"
+        assert command[command.index("--out-dir") + 1] == str(tmp_path / "runs")
+        assert command[command.index("--weights-sha256") + 1] == sha and command[command.index("--device") + 1] == "cuda"
+        assert "--kernel-draws" not in command  # the runs' own K_s (1,358): the measurement configuration is the run's
+    for phase in ("train", "resume"):
+        with pytest.raises(ValueError, match="measurement batch"):
+            cluster.commands(phase, "python", tmp_path, resume="x", batch="gpu_e30b_measures")
+    with pytest.raises(ValueError, match="phase measure"):
+        cluster.commands("measure", "python", tmp_path, batch="gpu_e30b")
+    pre = cluster.commands("preflight", "python", tmp_path, batch="gpu_e30b_measures", max_parallel=4)[0][1]
+    assert pre[2].endswith("preflight_measures.py") and pre[pre.index("--cpus") + 1] == "5" and pre[pre.index("--parallel") + 1] == "4"
+    assert cluster.resolve_cpus("gpu_e30b_measures", None) == 5
+    with pytest.raises(ValueError):
+        cluster.resolve_cpus("gpu_e30b_measures", 3)
+    with pytest.raises(SystemExit):
+        cluster.main(["--phase", "train", "--batch", "gpu_e30b_measures"])

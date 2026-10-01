@@ -13,14 +13,19 @@ bit for bit (checked and printed when the run has its arrays.npz).
 
 Usage, from the repo root:
     python experiments/E3_worldmodel_4zones/recompute_measures.py <run dir> [--checkpoint final|all|failure|<step> ...] [--device cpu|cuda]
-        [--kernel-draws K]
+        [--kernel-draws K] [--out-dir DIR] [--weights-sha256 HEX]
 Outputs: <run dir>/recomputed/<checkpoint>__<UTC>/ with results.json, arrays.npz, SUMMARY.md and
 artifacts/ (plus REPORT.md, the run's report with the recomputed measures, when the run finished).
+With --out-dir, the same tree goes to <out dir>/<run name>/recomputed/<checkpoint>__<UTC>/ instead and
+nothing is written into the run directory, which is then only read (the measurement batch
+gpu_e30b_measures reads the original runs in place, docs/e3/DECISIONS.md 2026-10-01 (10)).
+--weights-sha256: the expected SHA-256 of the checkpoint file; a mismatch stops before measuring.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from datetime import datetime, timezone
@@ -64,12 +69,15 @@ def summary_lines(label: str, step: int, fields: dict) -> list[str]:
     lines = [f"# Recomputed measures -- {label} (gradient step {step})", "",
              f"Real contexts: {rc['n_contexts_total']} contexts, {rc['n_states_measured']} / 144 states measured "
              f"(not measured: {rc['not_measured_states'] or 'none'}).", "",
-             "| zone | dynamics | I_s real, MAIN (mean [se], bias) | I_z real, secondary (mean [se], n measured) | KL real (bits) | "
+             "| zone | dynamics | I_s real, MAIN (mean [se], bias) | off-support mass | I_s projected, secondary (mean [se]) | "
+             "I_z real, secondary (mean [se], n measured) | KL real (bits) | "
              f"L1(WM, P) real | L1 floor (exact kernel, {rc['kernel_draws']} draws) | L1(B, P) | I_z canonical |",
-             "|---|---|---|---|---|---|---|---|---|"]
+             "|---|---|---|---|---|---|---|---|---|---|---|"]
     for cat in fields["zone_categories"]:
         iz, i_s = rc["I_z_by_zone"][cat], rc["I_s_by_zone"][cat]
+        proj = rc["I_s_projected_by_zone"][cat]
         lines.append(f"| {cat} | {kinds[cat]} | {i_s['mean']:.4f} [{i_s['se']:.4f}], {i_s['bias']:.4f} | "
+                     f"{rc['off_support_mass_by_zone'][cat]:.4f} | {proj['mean']:.4f} [{proj['se']:.4f}] | "
                      f"{iz['mean']:.4f} [{iz['se']:.4f}], {iz['n_measured']}/{iz['n_states']} | "
                      f"{rc['kl_by_zone'][cat]:.4f} | {rc['l1_vs_p_by_zone'][cat]:.4f} | {rc['l1_floor_by_zone'][cat]:.4f} | "
                      f"{rc['l1_b_vs_p_by_zone'][cat]:.4f} | "
@@ -84,11 +92,23 @@ def summary_lines(label: str, step: int, fields: dict) -> list[str]:
     return lines
 
 
-def recompute(run_dir: Path, which: list[str], device_arg: str | None, kernel_draws: int | None = None) -> list[Path]:
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def recompute(run_dir: Path, which: list[str], device_arg: str | None, kernel_draws: int | None = None,
+              out_dir: Path | None = None, weights_sha256: str | None = None) -> list[Path]:
     """kernel_draws: overrides the run's K_s (measure.kernel_k_s and measure.real_context.kernel_draws) --
     e.g. to measure a run made before 2026-09-29 at the corrected K_s (docs/e3/DECISIONS.md); the output
-    directory is then labelled __ks<K>, and no bit-for-bit comparison with the run's own arrays is made."""
+    directory is then labelled __ks<K>, and no bit-for-bit comparison with the run's own arrays is made.
+    out_dir: write under <out_dir>/<run name>/recomputed/ instead of the run directory (read-only then).
+    weights_sha256: the checkpoint's expected SHA-256 (one checkpoint only); ValueError on a mismatch."""
     run_dir = Path(run_dir)
+    out_root = (run_dir if out_dir is None else Path(out_dir) / run_dir.name) / "recomputed"
     cfg = run_mini.load_mini_config(run_dir / "config.yaml")
     if kernel_draws is not None:
         cfg["measure"]["kernel_k_s"] = kernel_draws
@@ -104,8 +124,15 @@ def recompute(run_dir: Path, which: list[str], device_arg: str | None, kernel_dr
         replay.to_device(device)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     outputs = []
-    for label, path in checkpoint_files(run_dir, which):
-        out_dir = run_dir / "recomputed" / f"{label}{'' if kernel_draws is None else f'__ks{kernel_draws}'}__{stamp}"
+    files = checkpoint_files(run_dir, which)
+    if weights_sha256 is not None:
+        if len(files) != 1:
+            raise ValueError("--weights-sha256 checks one checkpoint: ask for exactly one")
+        found = file_sha256(files[0][1])
+        if found != weights_sha256.lower():
+            raise ValueError(f"{files[0][1]}: SHA-256 {found}, expected {weights_sha256}: not the expected weights, nothing measured")
+    for label, path in files:
+        out_dir = out_root / f"{label}{'' if kernel_draws is None else f'__ks{kernel_draws}'}__{stamp}"
         (out_dir / "artifacts").mkdir(parents=True)
         log = run_mini.RunLog(out_dir / "console.log", f"[recompute {label}]")
         state = torch.load(path, map_location="cpu", weights_only=False)
@@ -117,7 +144,9 @@ def recompute(run_dir: Path, which: list[str], device_arg: str | None, kernel_dr
         streams = run_mini.seed_streams(seed, device, condition)
         fields, arrays = run_mini.measure_final(rssm, world, replay, N, cfg, streams, out_dir, log, step)
         fields.pop("diagnostics_final")
-        results = {"run_dir": str(run_dir), "checkpoint": label, "weights": path.name, "step": step, "seed": seed,
+        results = {"run_dir": str(run_dir), "checkpoint": label, "weights": path.name, "weights_sha256": file_sha256(path),
+                   "reproducibility": run_mini.environment_metadata(device),  # code version (source_sha256), device, TF32, determinism
+                   "step": step, "seed": seed,
                    "condition": condition, "device": str(device), "kernel_draws_override": kernel_draws, **fields}
         (out_dir / "results.json").write_text(json.dumps(run_mini._jsonable(
             {k: v for k, v in results.items() if k not in run_mini.ARRAY_FIELDS}), indent=1), encoding="utf-8")
@@ -144,8 +173,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--checkpoint", nargs="+", default=["final"], help="final (default), all, failure, or gradient steps")
     parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default=None)
     parser.add_argument("--kernel-draws", type=int, default=None, help="override K_s (canonical and real-context kernels)")
+    parser.add_argument("--out-dir", type=Path, default=None, help="write under <out dir>/<run name>/recomputed/; the run directory is only read")
+    parser.add_argument("--weights-sha256", default=None, help="expected SHA-256 of the checkpoint: refuse to measure other weights")
     args = parser.parse_args(argv)
-    recompute(args.run_dir, args.checkpoint, args.device, args.kernel_draws)
+    recompute(args.run_dir, args.checkpoint, args.device, args.kernel_draws, args.out_dir, args.weights_sha256)
     return 0
 
 

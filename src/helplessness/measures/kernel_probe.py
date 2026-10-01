@@ -20,15 +20,9 @@ from __future__ import annotations
 import numpy as np
 
 
-def match_templates(decoded_images: np.ndarray, templates: np.ndarray, margin_threshold: float) -> dict[str, np.ndarray]:
-    """decoded_images: (K, ...) -- K decoded samples for one (s, a)
-    pair, any per-image shape (flattened internally). templates: (n_states,
-    ...), same per-image shape. margin_threshold: minimum (second-best -
-    best) squared-L2 distance gap required to accept the nearest match;
-    below it, the draw is classified a ghost.
-
-    Returns nearest_state (K,) int, is_ghost (K,) bool, margin (K,)
-    float (second-best minus best distance, always >= 0)."""
+def template_distances(decoded_images: np.ndarray, templates: np.ndarray) -> np.ndarray:
+    """(K, n_states) squared L2 distances between K decoded images and the
+    n_states templates (any per-image shape, flattened)."""
     K = decoded_images.shape[0]
     n_states = templates.shape[0]
     flat_dec = decoded_images.reshape(K, -1).astype(np.float64)
@@ -38,16 +32,55 @@ def match_templates(decoded_images: np.ndarray, templates: np.ndarray, margin_th
     # O(K * n_states). The direct (K, n_states, D) broadcast was 2.6 GB per
     # call at 72x72x3 with 144 templates (docs/e3/DECISIONS.md, 2026-09-24).
     dists = (flat_dec**2).sum(axis=1)[:, None] + (flat_tmpl**2).sum(axis=1)[None, :] - 2.0 * (flat_dec @ flat_tmpl.T)
-    dists = np.maximum(dists, 0.0)  # clip the expansion's float rounding below zero
+    return np.maximum(dists, 0.0)  # clip the expansion's float rounding below zero
+
+
+def match_from_distances(dists: np.ndarray, margin_threshold: float, allowed: np.ndarray | None = None) -> dict[str, np.ndarray]:
+    """THE matching rule, on (K, n_states) distances: the nearest template,
+    and a ghost when the margin (second-best minus best distance) is below
+    margin_threshold. allowed: (K, n_states) bool -- the templates each
+    draw may be matched to (the projection on a support of
+    docs/e3/DECISIONS.md, 2026-09-30 (5): the nearest and the second-best are
+    taken among the allowed templates only); None = all of them. A draw
+    with a single allowed template has an infinite margin (never a ghost);
+    one with none is a ghost.
+
+    Returns nearest_state (K,) int, is_ghost (K,) bool, margin (K,) float."""
+    n_states = dists.shape[1]
+    if allowed is not None:
+        dists = np.where(allowed, dists, np.inf)
     order = np.argsort(dists, axis=1)
     best_idx = order[:, 0]
     second_idx = order[:, 1] if n_states > 1 else order[:, 0]
     best_d = np.take_along_axis(dists, best_idx[:, None], axis=1)[:, 0]
     second_d = np.take_along_axis(dists, second_idx[:, None], axis=1)[:, 0]
-    margin = second_d - best_d
+    with np.errstate(invalid="ignore"):
+        margin = np.where(np.isfinite(best_d), second_d - best_d, -np.inf)  # no allowed template: a ghost
     is_ghost = margin < margin_threshold
-
     return {"nearest_state": best_idx, "is_ghost": is_ghost, "margin": margin}
+
+
+def match_templates(decoded_images: np.ndarray, templates: np.ndarray, margin_threshold: float) -> dict[str, np.ndarray]:
+    """decoded_images: (K, ...) -- K decoded samples for one (s, a)
+    pair, any per-image shape (flattened internally). templates: (n_states,
+    ...), same per-image shape. margin_threshold: minimum (second-best -
+    best) squared-L2 distance gap required to accept the nearest match;
+    below it, the draw is classified a ghost.
+
+    Returns nearest_state (K,) int, is_ghost (K,) bool, margin (K,)
+    float (second-best minus best distance, always >= 0)."""
+    return match_from_distances(template_distances(decoded_images, templates), margin_threshold)
+
+
+def off_support_mass(p_hat: np.ndarray, support: np.ndarray) -> np.ndarray:
+    """The share of a kernel's mass on states outside the reachable
+    successors (docs/e3/DECISIONS.md, 2026-09-30 (5)): p_hat (n_states,
+    n_actions, n_states), support (n_states, n_states) bool (state s's
+    reachable successors, e.g. envs.zones.geographic_support_mask -- the
+    support of the tabular twin's prior). Returns (n_states, n_actions);
+    NaN where the row is NaN (state not measured)."""
+    outside = np.where(support[:, None, :], 0.0, p_hat).sum(axis=-1)
+    return np.where(np.isfinite(p_hat).all(axis=-1), outside, np.nan)
 
 
 def kernel_from_matches(nearest_state: np.ndarray, is_ghost: np.ndarray, n_states: int) -> dict[str, np.ndarray | float | int]:

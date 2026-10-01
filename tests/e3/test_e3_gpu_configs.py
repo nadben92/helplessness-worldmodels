@@ -72,3 +72,26 @@ def test_every_e3_config_measures_at_the_corrected_k_with_a_reduced_training_k()
         assert m["kernel_k_s_training"] == m["real_context"]["kernel_draws_training"] == 256, name
         assert m["is_bootstrap"] == 200, name
         assert m["is_per_context"] == {"states_per_zone": 4, "contexts": 10, "draws": 512}, name
+
+
+def test_scale_free_switch_threshold_reproduces_the_8x8_behaviour_exactly():
+    """docs/e3/DECISIONS.md, 2026-09-30 (7): 0.375 per variable x 8 = 3 bits, bit for bit; existing configs unchanged."""
+    est = {"switch_js_threshold_per_var": 0.375, "collapse_js_threshold_per_var": 0.125}
+    assert run_mini.switch_thresholds_bits(est, 8) == (3.0, 1.0)
+    assert run_mini.switch_thresholds_bits(est, 4) == (1.5, 0.5)
+    for name in ("mini.yaml", "mini_long.yaml", "gpu_e30.yaml", "gpu_e30_bridge.yaml", "gpu_e30b_win64.yaml", "gpu_e30b_win16.yaml",
+                 "agent_mini.yaml"):
+        cfg = _load(name)
+        legacy = cfg["train"]["latent_estimator"]
+        switch, _ = run_mini.build_separation_switch(cfg)
+        assert (switch.threshold_bits, switch.collapse_threshold_bits) == (legacy["switch_js_threshold"], legacy["collapse_js_threshold"])
+        scale_free = {**cfg, "train": {**cfg["train"], "latent_estimator": {
+            **{k: v for k, v in legacy.items() if k not in ("switch_js_threshold", "collapse_js_threshold")},
+            "switch_js_threshold_per_var": legacy["switch_js_threshold"] / cfg["model"]["n_vars"],
+            "collapse_js_threshold_per_var": legacy["collapse_js_threshold"] / cfg["model"]["n_vars"]}}}
+        s2, _ = run_mini.build_separation_switch(scale_free)
+        assert (s2.threshold_bits, s2.collapse_threshold_bits) == (switch.threshold_bits, switch.collapse_threshold_bits), name
+    import pytest
+    with pytest.raises(ValueError, match="choose one"):
+        run_mini.switch_thresholds_bits({"switch_js_threshold": 3.0, "switch_js_threshold_per_var": 0.375,
+                                         "collapse_js_threshold": 1.0}, 8)

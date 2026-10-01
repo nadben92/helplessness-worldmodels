@@ -33,7 +33,13 @@ from helplessness.agents.worldmodel.rssm import RSSM, categorical_kl, sample_cat
 from helplessness.measures.context_summary import per_state_context_summary
 from helplessness.measures.diagnostics import alpha_app as alpha_app_fn
 from helplessness.measures.diagnostics import jensen_shannon_product, mean_pairwise_jensen_shannon
-from helplessness.measures.kernel_probe import kernel_from_matches, kernel_probe, match_templates
+from helplessness.measures.kernel_probe import (
+    kernel_from_matches,
+    kernel_probe,
+    match_from_distances,
+    match_templates,
+    template_distances,
+)
 from helplessness.measures.latent_controllability import latent_controllability, latent_state_information, per_variable_entropy
 
 
@@ -250,6 +256,32 @@ def z_only_probe_chunked(
     s = torch.as_tensor(np.concatenate(labels), dtype=torch.long, device=device)
     return {**linear_state_probe(x, s, n_states, test_frac, rng, epochs=epochs, lr=lr),
             "mean_posterior_entropy": mean_posterior_entropy, "latent": latent}
+
+
+def replay_posterior_codes(rssm: RSSM, chunks, generator: torch.Generator | None = None, max_images: int | None = None) -> dict:
+    """The posterior codes the model actually produces on its replay
+    (docs/e3/DECISIONS.md, 2026-09-30 (5), hybrid-codes test): every window of
+    `chunks` (an iterable of (ModelBatch, LabelBatch), e.g.
+    replay.iter_chronological_windows) is unrolled as in training, with hard
+    posterior samples. Returns, per window and step (n_windows, T):
+    z_index (..., n_vars) the drawn class of each latent variable, h
+    (..., h_dim, torch, on the model's device), s (the true state, a label:
+    used to select and group, never fed to the model), a and is_first."""
+    device = next(rssm.parameters()).device
+    z_index, hs, labels, actions, firsts = [], [], [], [], []
+    with torch.no_grad():
+        for model_batch, label_batch in chunks:
+            embeds = encode_windows(rssm, model_batch.x, device, max_images)
+            a_seq = torch.as_tensor(model_batch.a, dtype=torch.long, device=device)
+            is_first_seq = torch.as_tensor(model_batch.is_first, dtype=torch.bool, device=device)
+            out = unroll_observation(rssm, None, a_seq, is_first_seq, generator=generator, decode=False, embeds=embeds)
+            z_index.append(out["z"].argmax(dim=-1).cpu().numpy())
+            hs.append(out["h"])
+            labels.append(np.asarray(label_batch.s))
+            actions.append(np.asarray(torch.as_tensor(model_batch.a).cpu()))
+            firsts.append(np.asarray(torch.as_tensor(model_batch.is_first).cpu()))
+    return {"z_index": np.concatenate(z_index), "h": torch.cat(hs), "s": np.concatenate(labels).astype(np.int64),
+            "a": np.concatenate(actions).astype(np.int64), "is_first": np.concatenate(firsts).astype(bool)}
 
 
 def context_state_probes(contexts: dict, test_frac: float, rng: np.random.Generator, epochs: int = 300) -> dict[str, dict]:
@@ -605,7 +637,7 @@ def real_context_iz(contexts: dict, M: int, rng: np.random.Generator) -> dict[st
 
 def real_context_kernel(
     rssm: RSSM, contexts: dict, templates: torch.Tensor, draws: int, margin_threshold: float,
-    generator: torch.Generator | None = None, chunk: int = 1024,
+    generator: torch.Generator | None = None, chunk: int = 1024, support: np.ndarray | None = None,
 ) -> dict[str, np.ndarray]:
     """The s-space kernel (spec 5.3) from the real contexts: for every
     measured state s and action a, `draws` samples z' ~ p(. | h_{t+1,a}),
@@ -613,12 +645,18 @@ def real_context_kernel(
     decode(h_{t+1,a}, z') and matched to the n_states templates
     (measures.kernel_probe). p_hat (n_states, n_actions, n_states) and
     ghost_fraction (n_states, n_actions) are NaN for a state without a
-    context."""
+    context. support: (n_states, n_states) bool, state s's reachable
+    successors; when given, THE SAME DRAWS are also matched among the
+    templates of s's successors only (same margin rule, measures.
+    kernel_probe.match_from_distances) and the result returned as
+    p_hat_projected / ghost_fraction_projected -- the kernel projected on
+    the support, a SECONDARY measure (docs/e3/DECISIONS.md, 2026-09-30 (5))."""
     device = next(rssm.parameters()).device
     n_states, A = contexts["n_states"], rssm.cfg.n_actions
     templates_np = templates.detach().cpu().numpy()
     p_hat = np.full((n_states, A, n_states), np.nan)
     ghost = np.full((n_states, A), np.nan)
+    p_hat_proj, ghost_proj = p_hat.copy(), ghost.copy()
     rows_ctx, rows_a, rows_owner = [], [], []
     for s in range(n_states):
         ctx_s = np.flatnonzero(contexts["states"] == s)
@@ -629,11 +667,13 @@ def real_context_kernel(
             rows_ctx.append(ctx)
             rows_a.append(np.full(draws, a))
             rows_owner.append(np.full(draws, s * A + a))
+    projected = {"p_hat_projected": p_hat_proj, "ghost_fraction_projected": ghost_proj} if support is not None else {}
     if not rows_ctx:
-        return {"p_hat": p_hat, "ghost_fraction": ghost}
+        return {"p_hat": p_hat, "ghost_fraction": ghost, **projected}
     rows_ctx, rows_a, rows_owner = np.concatenate(rows_ctx), np.concatenate(rows_a), np.concatenate(rows_owner)
     nearest = np.empty(rows_ctx.size, dtype=np.int64)
     is_ghost = np.empty(rows_ctx.size, dtype=bool)
+    nearest_proj, is_ghost_proj = nearest.copy(), is_ghost.copy()
     with torch.no_grad():
         for first in range(0, rows_ctx.size, chunk):
             sl = slice(first, min(first + chunk, rows_ctx.size))
@@ -642,14 +682,21 @@ def real_context_kernel(
             probs = contexts["prior_probs_t"][c, a]
             z = F.one_hot(sample_categorical_index(probs, generator), num_classes=probs.shape[-1]).to(probs.dtype)
             decoded = rssm.decode(contexts["h_next"][c, a], z).cpu().numpy()
-            matched = match_templates(decoded, templates_np, margin_threshold)
+            dists = template_distances(decoded, templates_np)
+            matched = match_from_distances(dists, margin_threshold)
             nearest[sl], is_ghost[sl] = matched["nearest_state"], matched["is_ghost"]
+            if support is not None:
+                restricted = match_from_distances(dists, margin_threshold, allowed=support[rows_owner[sl] // A])
+                nearest_proj[sl], is_ghost_proj[sl] = restricted["nearest_state"], restricted["is_ghost"]
     for owner in np.unique(rows_owner):
         idx = rows_owner == owner
         result = kernel_from_matches(nearest[idx], is_ghost[idx], n_states)
         s, a = divmod(int(owner), A)
         p_hat[s, a], ghost[s, a] = result["p_hat"], result["ghost_fraction"]
-    return {"p_hat": p_hat, "ghost_fraction": ghost}
+        if support is not None:
+            result = kernel_from_matches(nearest_proj[idx], is_ghost_proj[idx], n_states)
+            p_hat_proj[s, a], ghost_proj[s, a] = result["p_hat"], result["ghost_fraction"]
+    return {"p_hat": p_hat, "ghost_fraction": ghost, **projected}
 
 
 def real_context_action_samples(
@@ -768,3 +815,58 @@ def d2_neighbor_distances_contexts(contexts: dict, layout) -> dict[str, np.ndarr
                 same = layout.zone_at((r, c)).appearance.category == layout.zone_at((r2, c2)).appearance.category
                 (within_zone if same else boundary).append(js)
     return {"boundary": np.array(boundary), "within_zone": np.array(within_zone)}
+
+
+# ---------------------------------------------------------------------
+# spec 5.7 -- Delta under P of the world-model agent (Phase 5)
+# ---------------------------------------------------------------------
+
+
+def agent_greedy_policy(rssm: RSSM, goal_head, critic, h: torch.Tensor, z: torch.Tensor, states: np.ndarray, n_states: int, cfg,
+                        generator: torch.Generator | None = None, chunk: int = 512) -> dict[str, np.ndarray]:
+    """The agent's greedy policy by state, read from latent states whose
+    true state is known (docs/e3/DECISIONS.md, 2026-09-30 (7)): Q(h, z, a)
+    of the agent's own lookahead (policy.q_values, K_act draws) at every
+    given (h, z) -- real contexts, or the canonical probe's (h0, mode z0) --,
+    averaged over each state's latent states; the policy is uniform over the
+    greedy tie set (policy.tie_set: the relative tolerance), E2's convention
+    for Delta (evaluation.tiebreak.uniform_tie_policy_probs, with the
+    agent's own tolerance). A state with no latent state gets the uniform
+    policy (every action tied). Returns Q (n_states, A; NaN where unmeasured)
+    and policy_probs (n_states, A)."""
+    from helplessness.agents.worldmodel.policy import q_values, tie_set
+
+    A = rssm.cfg.n_actions
+    q_ctx = torch.cat([q_values(rssm, goal_head, critic, h[i:i + chunk], z[i:i + chunk], cfg.k_act, cfg, generator)
+                       for i in range(0, h.shape[0], chunk)]).cpu()
+    Q = np.full((n_states, A), np.nan)
+    sums = np.zeros((n_states, A))
+    np.add.at(sums, np.asarray(states), q_ctx.numpy())
+    counts = np.bincount(np.asarray(states), minlength=n_states)
+    measured = counts > 0
+    Q[measured] = sums[measured] / counts[measured, None]
+    probs = np.full((n_states, A), 1.0 / A)
+    tied = tie_set(torch.as_tensor(Q[measured]), cfg).numpy()
+    probs[measured] = tied / tied.sum(axis=1, keepdims=True)
+    return {"Q": Q, "policy_probs": probs, "measured": measured}
+
+
+def delta_under_p(policy_probs: np.ndarray, P: np.ndarray, R: np.ndarray, terminal: np.ndarray, gamma: float) -> np.ndarray:
+    """Delta(s) = V*_P(s) - V^pi_P(s), pi evaluated EXACTLY under the true
+    kernel (spec 5.7: never under the model), with E2's planning primitives
+    and E1's floating-point floor clamp (as experiments/E2_online_4zones/twin.py)."""
+    from helplessness.planning.value_iteration import policy_evaluation_stochastic, value_iteration
+
+    V_pi = policy_evaluation_stochastic(policy_probs, P, R, terminal, gamma=gamma)
+    V_star, _ = value_iteration(P, R, terminal, gamma=gamma)
+    delta = V_star - V_pi
+    return np.where(np.abs(delta) < 1e-9, 0.0, delta)
+
+
+@torch.no_grad()
+def canonical_latents(rssm: RSSM, templates: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """The canonical probe's latent state of every state (spec 5.1): h0 and the posterior mode z0 of render(s)."""
+    device = next(rssm.parameters()).device
+    x = templates.to(device)
+    h0, _ = rssm.initial_state(x.shape[0], device)
+    return h0, categorical_mode(rssm.posterior_probs(h0, rssm.encoder(x)))

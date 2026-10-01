@@ -1,4 +1,8 @@
-"""Submit E3 to UCL ARC Kubeflow; default to preflight, never implicit training."""
+"""Submit E3 to UCL ARC Kubeflow; default to preflight, never implicit training.
+
+Two kinds of batch: training batches (BATCHES: phases preflight, train, resume; run_mini.py) and
+measurement batches (MEASURE_BATCHES: phases preflight and measure only; recompute_measures.py on
+existing runs read in place, no training -- docs/e3/DECISIONS.md, 2026-10-01 (10))."""
 
 from __future__ import annotations
 
@@ -30,16 +34,62 @@ BATCHES = {
     "gpu_e30b": {f"{tag}_seed{seed}_{condition}": (config, seed, condition)
                  for tag, config in (("win64", WIN64_CONFIG), ("win16", WIN16_CONFIG)) for seed in (0, 5) for condition in CONDITIONS},
 }
+# Measurement batches: existing runs measured again by recompute_measures.py, read in place where they were
+# trained (the weights never leave the volume), outputs into the job's own directory. Each run: its directory
+# name under source_root and the SHA-256 of its checkpoints/weights_final.pt (handoff/gpu_e30b/handoff.md).
+GPU_E30B_RESULTS = "/scratch/helplessness-worldmodels-gpu_e30b/results/E3_worldmodel_4zones"
+MEASURE_BATCHES = {
+    "gpu_e30b_measures": {
+        "source_root": GPU_E30B_RESULTS,
+        "runs": {
+            "win64_seed0_experimental": ("grid12x12__4zones__pair-experimental__worldmodel-gpu_e30b_win64__seed00__20260929T183427Z",
+                                         "f60377e0e7a8e46f9e24fd7af203eb724b6d35a7f56ce1033476358daf2f9ae2"),
+            "win64_seed0_reference": ("grid12x12__4zones__pair-control__worldmodel-gpu_e30b_win64__seed00__20260929T183428Z",
+                                      "fa60ea69d694db6fd062171296f7af107f9b71f4609491353831a0f5effecbb9"),
+            "win64_seed5_experimental": ("grid12x12__4zones__pair-experimental__worldmodel-gpu_e30b_win64__seed05__20260929T183427Z",
+                                         "9cc40755cc6110ac0a5e15805f3cf6853fda1bdd1528d34f2b52cc0d4bef6038"),
+            "win64_seed5_reference": ("grid12x12__4zones__pair-control__worldmodel-gpu_e30b_win64__seed05__20260929T183427Z",
+                                      "690ea27d22a4a87eb8a4f310c0eac0fd3925525fd668b6ff006610c948e96fa2"),
+        },
+    },
+}
 DEFAULT_BATCH = "gpu_e30"
-DEFAULT_CPUS = 3  # the job's CPU request (--cpu); the first batch ran on 3
+# The job's CPU request, PER BATCH (docs/e3/DECISIONS.md, 2026-09-30 (5)): gpu_e30b was prescribed 5 CPUs and ran on 3,
+# because --cpu defaulted to 3 and a command without it (or with another value) was accepted silently. The
+# request now defaults to the batch's own value, and a different --cpu is refused unless --allow-cpu-override.
+BATCH_CPUS = {"gpu_e30": 3, "gpu_e30b": 5, "gpu_e30b_measures": 5}
+DEFAULT_CPUS = BATCH_CPUS[DEFAULT_BATCH]
+
+
+def resolve_cpus(batch: str, cpu: int | None, allow_override: bool = False) -> int:
+    """The CPUs to request for a batch: its prescribed number; an explicit
+    --cpu must equal it (ValueError otherwise) unless allow_override."""
+    prescribed = BATCH_CPUS[batch]
+    if cpu is None or cpu == prescribed:
+        return prescribed
+    if not allow_override:
+        raise ValueError(f"batch {batch} is prescribed {prescribed} CPUs, got --cpu {cpu}; pass --allow-cpu-override to "
+                         "request another number on purpose (and record why)")
+    return cpu
 RUNS = BATCHES[DEFAULT_BATCH]
+
+
+def all_batches() -> list[str]:
+    return [*BATCHES, *MEASURE_BATCHES]
+
+
+def batch_runs(batch: str) -> dict:
+    """The batch's runs, name -> definition (training: (config, seed, condition); measurement: (run dir, sha256))."""
+    if batch in BATCHES:
+        return BATCHES[batch]
+    if batch in MEASURE_BATCHES:
+        return MEASURE_BATCHES[batch]["runs"]
+    raise ValueError(f"unknown batch {batch!r}; choose among {all_batches()}")
 
 
 def select_runs(runs: list[str] | None, batch: str = DEFAULT_BATCH) -> list[str]:
     """The requested subset of the batch's runs, in launch order (all of them for None)."""
-    if batch not in BATCHES:
-        raise ValueError(f"unknown batch {batch!r}; choose among {list(BATCHES)}")
-    known = BATCHES[batch]
+    known = batch_runs(batch)
     if not runs:
         return list(known)
     unknown = sorted(set(runs) - set(known))
@@ -58,16 +108,20 @@ def n_concurrent(runs: list[str] | None, max_parallel: int | None, batch: str = 
 
 
 def preflight_command(python: str, output: Path, runs: list[str] | None, max_parallel: int | None,
-                      batch: str = DEFAULT_BATCH, cpus: int = DEFAULT_CPUS) -> list[str]:
-    """preflight.py for the planned launch: --parallel is the number of
+                      batch: str = DEFAULT_BATCH, cpus: int | None = None) -> list[str]:
+    """preflight.py (preflight_measures.py for a measurement batch) for the planned launch: --parallel is the number of
     processes that will share the GPU, filled with the heaviest config
     first (its first config in the batch's order), plus one process of each
     other selected config when there is room, so the memory and throughput
     tests see the worst mix the launch can produce and every config's
     duration is projected."""
-    known = BATCHES[batch]
     selected = select_runs(runs, batch)
     parallel = n_concurrent(runs, max_parallel, batch)
+    cpus = BATCH_CPUS[batch] if cpus is None else cpus
+    if batch in MEASURE_BATCHES:
+        return [python, "-u", f"{SCRIPT}/preflight_measures.py", "--batch", batch, "--runs", *selected, "--parallel", str(parallel),
+                "--cpus", str(cpus), "--device", "cuda", "--out-dir", str(output / "runs")]
+    known = BATCHES[batch]
     configs = list(dict.fromkeys(known[name][0] for name in selected))
     primary, others = configs[0], configs[1:]
     n_primary = sum(known[name][0] == primary for name in selected)
@@ -80,7 +134,7 @@ def preflight_command(python: str, output: Path, runs: list[str] | None, max_par
 
 
 def commands(phase: str, python: str, output: Path, resume: str = "", runs: list[str] | None = None,
-             max_parallel: int | None = None, batch: str = DEFAULT_BATCH, cpus: int = DEFAULT_CPUS) -> list[tuple[str, list[str]]]:
+             max_parallel: int | None = None, batch: str = DEFAULT_BATCH, cpus: int | None = None) -> list[tuple[str, list[str]]]:
     """Return foreground commands, preserving the scientific configs unchanged.
     batch: a key of BATCHES; runs: a subset of its runs (default: all);
     max_parallel: the most processes run at once (default: all), which the
@@ -89,6 +143,15 @@ def commands(phase: str, python: str, output: Path, resume: str = "", runs: list
     base = [python, "-u", f"{SCRIPT}/run_mini.py"]
     if phase == "preflight":
         return [("preflight", preflight_command(python, output, runs, max_parallel, batch, cpus))]
+    if batch in MEASURE_BATCHES:
+        if phase != "measure":
+            raise ValueError(f"{batch} is a measurement batch: phases preflight and measure only, never {phase}")
+        root, known = MEASURE_BATCHES[batch]["source_root"], MEASURE_BATCHES[batch]["runs"]
+        return [(name, [python, "-u", f"{SCRIPT}/recompute_measures.py", f"{root}/{known[name][0]}", "--checkpoint", "final",
+                        "--device", "cuda", "--out-dir", str(output / "runs"), "--weights-sha256", known[name][1]])
+                for name in select_runs(runs, batch)]
+    if phase == "measure":
+        raise ValueError(f"phase measure is for the measurement batches {list(MEASURE_BATCHES)}, not {batch}")
     if phase == "resume":
         if not resume:
             raise ValueError("resume requires a run directory")
@@ -237,18 +300,21 @@ def runtime_patch(volume: str, mount: str, secret: str | None) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--phase", choices=("preflight", "train", "resume"), default="preflight")
+    parser.add_argument("--phase", choices=("preflight", "train", "resume", "measure"), default="preflight",
+                        help="measure: a measurement batch's recomputation (MEASURE_BATCHES), no training")
     parser.add_argument("--repo-dir", default="/scratch/helplessness-worldmodels")
     parser.add_argument("--volume", default="scratch-volume")
     parser.add_argument("--mount", default="/scratch")
-    parser.add_argument("--cpu", type=int, default=DEFAULT_CPUS,
-                        help="CPUs requested for the job (default 3); the preflight projects the duration under it")
+    parser.add_argument("--cpu", type=int, default=None,
+                        help="CPUs requested for the job (default: the batch's prescribed number, BATCH_CPUS; another value is "
+                             "refused without --allow-cpu-override); the preflight checks and projects under it")
+    parser.add_argument("--allow-cpu-override", action="store_true", help="accept a --cpu different from the batch's prescribed number")
     parser.add_argument("--memory", default="64Gi")
     parser.add_argument("--image", default=IMAGE)
     parser.add_argument("--wandb-secret", help="Secret containing WANDB_API_KEY; ignored for preflight")
     parser.add_argument("--resume", default="", help="Existing run directory (phase=resume only)")
     parser.add_argument("--output", help="New persistent directory for supervisor logs/status")
-    parser.add_argument("--batch", choices=list(BATCHES), default=DEFAULT_BATCH, help="which batch's runs (default: gpu_e30)")
+    parser.add_argument("--batch", choices=all_batches(), default=DEFAULT_BATCH, help="which batch's runs (default: gpu_e30)")
     parser.add_argument("--runs", nargs="+", default=None,
                         help="subset of the batch's runs (default: all); pass the same to the preflight and the training")
     parser.add_argument("--max-parallel", type=int, default=None,
@@ -261,6 +327,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--max-parallel must be >= 1")
     try:
         select_runs(args.runs, args.batch)
+        commands(args.phase, "python", Path("."), args.resume or "x", runs=args.runs, batch=args.batch)  # phase / batch compatibility
+        args.cpu = resolve_cpus(args.batch, args.cpu, args.allow_cpu_override or args.worker)  # the worker gets the resolved value
     except ValueError as err:
         parser.error(str(err))
     repo = Path(args.repo_dir).resolve()
@@ -269,7 +337,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.worker:
         jobs = commands(args.phase, sys.executable, output, args.resume, runs=args.runs, max_parallel=args.max_parallel,
                         batch=args.batch, cpus=args.cpu)
-        return supervise(jobs, repo, output, max_parallel=args.max_parallel if args.phase == "train" else None)
+        return supervise(jobs, repo, output, max_parallel=args.max_parallel if args.phase in ("train", "measure") else None)
     if output.exists():
         parser.error(f"Output already exists: {output}")
     if not repo.is_relative_to(Path(args.mount).resolve()) or not output.is_relative_to(Path(args.mount).resolve()):
@@ -278,7 +346,7 @@ def main(argv: list[str] | None = None) -> int:
     import kubeflow.trainer
     from kubeflow.trainer.options.kubernetes import RuntimePatch
 
-    secret = args.wandb_secret if args.phase != "preflight" else None
+    secret = args.wandb_secret if args.phase in ("train", "resume") else None
     client = kubeflow.trainer.TrainerClient()
     job_id = client.train(
         runtime=client.get_runtime("torch-distributed"),

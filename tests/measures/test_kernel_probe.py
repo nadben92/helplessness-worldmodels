@@ -138,3 +138,43 @@ def test_draws_for_l1_floor_is_the_smallest_sufficient_k():
     assert K == 1358
     assert all(expected_l1_sampling_floor(P[0], k) <= 0.02 for k in range(K, 2 * K + 1))
     assert expected_l1_sampling_floor(P[0], K - 1) > 0.02
+
+
+# ---------------------------------------------------------------------------
+# projection on a support and off-support mass (docs/e3/DECISIONS.md, 2026-09-30 (5))
+# ---------------------------------------------------------------------------
+
+
+def test_match_from_distances_is_match_templates_and_projects_on_a_support():
+    from helplessness.measures.kernel_probe import match_from_distances, template_distances
+
+    rng = np.random.default_rng(0)
+    templates = rng.random((6, 3, 4, 4))
+    decoded = templates[[0, 3, 5, 5]] + 0.01 * rng.standard_normal((4, 3, 4, 4))
+    dists = template_distances(decoded, templates)
+    full = match_from_distances(dists, 1e-3)
+    ref = match_templates(decoded, templates, 1e-3)
+    for key in ("nearest_state", "is_ghost", "margin"):
+        assert np.array_equal(full[key], ref[key])
+    assert full["nearest_state"].tolist() == [0, 3, 5, 5]
+    allowed = np.zeros((4, 6), dtype=bool)
+    allowed[0, [0, 1]] = True   # the true match is allowed: unchanged
+    allowed[1, [1, 2]] = True   # it is not: reassigned to the nearest allowed template
+    allowed[2, [5]] = True      # a single allowed template: never a ghost
+    proj = match_from_distances(dists, 1e-3, allowed=allowed)  # row 3: nothing allowed
+    assert proj["nearest_state"][0] == 0 and proj["nearest_state"][1] in (1, 2) and proj["nearest_state"][2] == 5
+    assert proj["is_ghost"].tolist() == [False, False, False, True]
+
+
+def test_off_support_mass():
+    from helplessness.measures.kernel_probe import off_support_mass
+
+    p_hat = np.zeros((3, 2, 3))
+    p_hat[0, 0] = [0.7, 0.2, 0.1]
+    p_hat[0, 1] = [1.0, 0.0, 0.0]
+    p_hat[1] = [[0.0, 0.5, 0.5], [0.0, 0.0, 1.0]]
+    p_hat[2] = np.nan
+    support = np.array([[True, True, False], [False, True, False], [True, True, True]])
+    out = off_support_mass(p_hat, support)
+    assert out[0].tolist() == pytest.approx([0.1, 0.0]) and out[1].tolist() == pytest.approx([0.5, 1.0])
+    assert np.isnan(out[2]).all()

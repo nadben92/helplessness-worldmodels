@@ -348,6 +348,25 @@ class RSSM(nn.Module):
         alone, so a window's images can be encoded in one pass -- audit
         7.1); x_t is then not used and may be None.
         """
+        h_t, prior, post, e_t = self.observation_core(h_prev, z_prev, a_prev_onehot, x_t, is_first, context, embed)
+        z_t = sample_posterior(post, estimator or LatentEstimator(), generator)
+        return {"h": h_t, "z": z_t, "prior_probs": prior, "post_probs": post, "embed": e_t}
+
+    def observation_core(
+        self,
+        h_prev: torch.Tensor,
+        z_prev: torch.Tensor,
+        a_prev_onehot: torch.Tensor,
+        x_t: torch.Tensor | None,
+        is_first: torch.Tensor,
+        context: dict | None = None,
+        embed: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        """observation_step without its only random part, the posterior
+        draw: (h_t, prior probs, posterior probs, e_t). A separate method so
+        the accelerated training paths (acceleration.py: torch.compile, and
+        the stacked multi-seed step, which draws each seed's latents from
+        its own stream outside the vectorised call) reuse it unchanged."""
         batch = h_prev.shape[0]
         device = h_prev.device
         h0, z0 = self.initial_state(batch, device)
@@ -367,9 +386,7 @@ class RSSM(nn.Module):
 
         e_t = self.encoder(x_t) if embed is None else embed
         post = self.posterior_probs(h_t, e_t)
-        z_t = sample_posterior(post, estimator or LatentEstimator(), generator)
-
-        return {"h": h_t, "z": z_t, "prior_probs": prior, "post_probs": post, "embed": e_t}
+        return h_t, prior, post, e_t
 
     def imagination_step(
         self,

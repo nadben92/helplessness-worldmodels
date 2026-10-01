@@ -13,6 +13,16 @@ config (a few minutes). One command:
    (default 5, the number of runs launched together: the --extra-config
    runs, one process each, and --config for the rest), peak GPU memory,
    and the projected duration of one run of each config.
+3c. Execution mode (DECISIONS 2026-09-30 (9)): every config of the campaign (--config, --extra-config, --campaign-config)
+   must have the same runtime.compile / runtime.stacked_seeds, else PREFLIGHT FAILED. runtime.compile is allowed only
+   on Linux / CUDA after the inductor equivalence gate (losses within 1e-4 of the eager step over a few steps in both
+   phases, TF32 still off once compiled); anything else refuses the option, with no silent fallback.
+3a. Speed bench of the optional accelerations (acceleration.py, docs/e3/DECISIONS.md
+   2026-09-30 (8); GPU only, informational, --skip-accel-bench to leave it out; alone:
+   --bench-accel): the current training step against torch.compile (inductor, default and
+   reduce-overhead = CUDA graphs) and against --bench-accel-seeds seeds stacked in one
+   process, --bench-accel-steps steps per phase, with each variant's loss difference from
+   the current step. It measures the gain; nothing is switched on.
 3b. Memory with the same --parallel processes (docs/e3/DECISIONS.md, 2026-09-29):
    each trains the config's model a few steps, waits for the others, then
    takes one training-diagnostic point and one final measurement at the
@@ -112,6 +122,91 @@ def bench(cfg: dict, device: torch.device, n_steps: int) -> dict:
         out[phase] = n_steps / (time.perf_counter() - t0)
         assert all(np.isfinite(float(v)) for k, v in res.items() if k != "post_probs"), "non-finite loss"
     out["peak_memory_mb"] = torch.cuda.max_memory_allocated(device) / 1e6 if device.type == "cuda" else None
+    return out
+
+
+def bench_accelerations(cfg: dict, device: torch.device, n_steps: int = 200, n_seeds: int = 2, n_check: int = 4) -> dict:
+    """The speed bench of the two optional accelerations (acceleration.py; docs/e3/DECISIONS.md, 2026-09-30 (8)):
+    the current step against torch.compile (inductor, default and reduce-overhead = CUDA graphs) and against
+    n_seeds seeds stacked in one process, n_steps timed steps in each estimator phase after a warm-up. It only
+    measures -- nothing here enters the verdict. Per variant: training steps per second summed over the seeds
+    it trains (seed-steps/s: one seed for the current and compiled steps, n_seeds for the stacked one), per phase, the one-off
+    warm-up time (the compilation), and the largest relative loss difference from the current step over n_check
+    steps from the same weights, batches and generators (half probabilities, half straight-through)."""
+    from helplessness.agents.worldmodel import acceleration as acc
+
+    world, replay = setup(cfg, device)
+    bg = world.background_t.to(device)
+    tr = cfg["train"]
+    loss_cfg = run_mini.WorldModelLossConfig(k=cfg["render"]["k"], w_patch=tr["w_patch"])
+    rng = np.random.default_rng(0)
+    batches = [replay.sample(tr["batch_size"], tr["seq_len"], rng)[0] for _ in range(n_seeds * (n_steps + 3) + n_check)]
+    phases = (("probabilities", LatentEstimator("probs")), ("straight-through", LatentEstimator("straight_through")))
+    check_ests = [phases[0][1]] * (n_check // 2) + [phases[1][1]] * (n_check - n_check // 2)
+
+    def fresh(seed: int):
+        torch.manual_seed(seed)
+        return run_mini.build_rssm(cfg).to(device)
+
+    def single(model, check_only=False):
+        opt = torch.optim.Adam(model.parameters(), lr=1e-4, eps=1e-8)
+        gen = torch.Generator(device=device).manual_seed(0)
+        check = [run_mini.train_world_model_step(model, opt, mb, bg, loss_cfg, clip_norm=tr["clip_norm"], estimator=est, generator=gen)
+                 for mb, est in zip(batches[:n_check], check_ests)]
+        if check_only:
+            return check, None
+        rates, warm = {}, 0.0
+        for phase, est in phases:
+            t0 = time.perf_counter()
+            for mb in batches[:3]:
+                run_mini.train_world_model_step(model, opt, mb, bg, loss_cfg, clip_norm=tr["clip_norm"], estimator=est, generator=gen, sync=False)
+            _sync(device)
+            warm += time.perf_counter() - t0
+            t0 = time.perf_counter()
+            for mb in batches[3:3 + n_steps]:
+                run_mini.train_world_model_step(model, opt, mb, bg, loss_cfg, clip_norm=tr["clip_norm"], estimator=est, generator=gen, sync=False)
+            _sync(device)
+            rates[phase] = n_steps / (time.perf_counter() - t0)
+        return check, {"seed_steps_per_s": rates, "warmup_seconds": warm}
+
+    out: dict = {"n_steps": n_steps, "n_seeds_stacked": n_seeds, "device": str(device)}
+    reference, out["current"] = single(fresh(0))
+    for name, mode in (("compile_default", None), ("compile_reduce_overhead", "reduce-overhead")):
+        try:
+            torch._dynamo.reset()
+            check, timing = single(acc.compile_rssm(fresh(0), backend="inductor", mode=mode))
+            out[name] = {**timing, "max_rel_loss_diff": acc.max_relative_difference(check, reference)}
+        except Exception as err:  # reported, never fatal: the bench only measures
+            out[name] = {"error": f"{type(err).__name__}: {str(err).splitlines()[0][:300] if str(err) else ''}"}
+    try:
+        stack = acc.StackedRSSM([fresh(s) for s in range(n_seeds)])
+        opt = acc.StackedAdam(stack.parameters(), n_seeds, lr=1e-4, eps=1e-8)
+        gens = [torch.Generator(device=device).manual_seed(0) for _ in range(n_seeds)]
+        per_seed = lambda k: [batches[k]] * n_seeds  # noqa: E731 -- the check: every seed on the reference's batches
+        check = [acc.stacked_train_step(stack, opt, per_seed(k), [bg] * n_seeds, [loss_cfg] * n_seeds, [est] * n_seeds, gens,
+                                        clip_norm=tr["clip_norm"])[0] for k, est in enumerate(check_ests)]
+        rates, warm = {}, 0.0
+        for phase, est in phases:
+            t0 = time.perf_counter()
+            for k in range(3):
+                acc.stacked_train_step(stack, opt, batches[k * n_seeds:(k + 1) * n_seeds], [bg] * n_seeds, [loss_cfg] * n_seeds,
+                                       [est] * n_seeds, gens, clip_norm=tr["clip_norm"])
+            _sync(device)
+            warm += time.perf_counter() - t0
+            t0 = time.perf_counter()
+            for k in range(3, 3 + n_steps):
+                acc.stacked_train_step(stack, opt, batches[k * n_seeds:(k + 1) * n_seeds], [bg] * n_seeds, [loss_cfg] * n_seeds,
+                                       [est] * n_seeds, gens, clip_norm=tr["clip_norm"])
+            _sync(device)
+            rates[phase] = n_seeds * n_steps / (time.perf_counter() - t0)  # every seed advances one step per call
+        out[f"stacked_{n_seeds}_seeds"] = {"seed_steps_per_s": rates, "warmup_seconds": warm,
+                                           "max_rel_loss_diff": acc.max_relative_difference(check, reference)}
+    except Exception as err:
+        out[f"stacked_{n_seeds}_seeds"] = {"error": f"{type(err).__name__}: {str(err).splitlines()[0][:300] if str(err) else ''}"}
+    base = out["current"]["seed_steps_per_s"]
+    for name, v in out.items():
+        if isinstance(v, dict) and "seed_steps_per_s" in v:
+            v["speedup"] = {ph: v["seed_steps_per_s"][ph] / base[ph] for ph in base}
     return out
 
 
@@ -223,6 +318,34 @@ def device_check(cfg: dict, device: torch.device) -> dict:
     return on_device
 
 
+def execution_mode_problems(cfg: dict, device: torch.device, campaign: dict[str, dict], platform: str | None = None) -> tuple[list[str], dict]:
+    """DECISIONS 2026-09-30 (9), C. (1) Every config of the campaign (this one, --extra-config, --campaign-config:
+    environment, reference, E3-0 if rerun) must have the same execution mode (runtime.compile, runtime.stacked_seeds):
+    the modes are not bit-equivalent. (2) runtime.compile is allowed only after the equivalence gate has passed on
+    Linux / CUDA: inductor's losses within tolerance of the eager step and TF32 still off once compiled. (3)
+    runtime.stacked_seeds has no runner that implements it: refused. Any failed check refuses the option -- no silent
+    fallback to the eager step. Returns (problems, gate result or {})."""
+    from helplessness.agents.worldmodel import acceleration as acc
+
+    platform = sys.platform if platform is None else platform
+    problems = acc.mixed_modes({name: acc.execution_mode(c) for name, c in campaign.items()})
+    mode = acc.execution_mode(cfg)
+    gate: dict = {}
+    if mode["stacked_seeds"]:
+        problems.append(f"runtime.stacked_seeds = {mode['stacked_seeds']}: no runner trains stacked seeds; refused (no fallback)")
+    if mode["compile"]:
+        if not (platform.startswith("linux") and device.type == "cuda"):
+            problems.append(f"runtime.compile = {mode['compile']} refused: the inductor equivalence gate runs on Linux / CUDA only "
+                            f"(here {platform} / {device.type}); no fallback to the eager step")
+        else:
+            tr = cfg["train"]
+            gate = acc.check_compile_equivalence(lambda: run_mini.build_rssm(cfg), (tr["batch_size"], tr["seq_len"]), device,
+                                                 backend=mode["compile"]["backend"], mode=mode["compile"]["mode"], k=cfg["render"]["k"])
+            if not gate["passed"]:
+                problems.append(f"runtime.compile = {mode['compile']} refused: equivalence gate failed ({gate['error']}); no fallback")
+    return problems, gate
+
+
 def effective_cpus() -> dict:
     """The CPUs this process can use: the container's cgroup quota when there is one (cgroup v2 cpu.max, or
     v1 cfs quota / period), the scheduler affinity, and os.cpu_count() (the node's, inside a container)."""
@@ -270,10 +393,10 @@ def decide(verdict: dict, max_batch_hours: float, fallback_parallel: int) -> str
 
 
 def write_verdict(out_dir: Path, problems: list[str], memory_problems: list[str], warnings: list[str], parallel: int,
-                  hours: float | None, max_batch_hours: float, fallback_parallel: int) -> str:
+                  hours: float | None, max_batch_hours: float, fallback_parallel: int, cpus: dict | None = None) -> str:
     verdict = {"passed": not problems, "problems": problems, "memory_problems": memory_problems, "warnings": warnings,
                "parallel": parallel, "projected_batch_hours": hours, "max_batch_hours": max_batch_hours,
-               "fallback_parallel": fallback_parallel}
+               "fallback_parallel": fallback_parallel, "cpus": cpus}
     verdict["decision"] = decide(verdict, max_batch_hours, fallback_parallel)
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "preflight_verdict.json").write_text(json.dumps(run_mini._jsonable(verdict), indent=1), encoding="utf-8")
@@ -322,6 +445,15 @@ def main(argv: list[str] | None = None) -> int:
                              "batch's wall time counts the queue")
     parser.add_argument("--max-batch-hours", type=float, default=20.0, help="launch rule: projected batch wall time at most this")
     parser.add_argument("--fallback-parallel", type=int, default=4, help="launch rule: parallelism to retry at after a memory failure")
+    parser.add_argument("--campaign-config", type=Path, nargs="*", default=[],
+                        help="configs of the same campaign that are not launched here (e.g. the E3-0 floor rerun): their execution "
+                             "mode (runtime.compile / stacked_seeds) must equal this config's, or the preflight fails")
+    parser.add_argument("--bench-accel", action="store_true",
+                        help="only the speed bench of the optional accelerations (acceleration.py): prints its JSON and writes "
+                             "<out-dir>/acceleration_bench.json; the full preflight runs it too on a GPU (informational)")
+    parser.add_argument("--bench-accel-steps", type=int, default=200, help="timed steps per phase of the acceleration bench")
+    parser.add_argument("--bench-accel-seeds", type=int, default=2, help="seeds stacked in one process in the acceleration bench")
+    parser.add_argument("--skip-accel-bench", action="store_true", help="leave the acceleration bench out of the full preflight")
     parser.add_argument("--bench-only", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--memory-only", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--barrier", type=Path, default=None, help=argparse.SUPPRESS)
@@ -340,6 +472,12 @@ def main(argv: list[str] | None = None) -> int:
             print(f"PREFLIGHT DECISION: {decision}", flush=True)
         return 1
     device = run_mini.configure_runtime(cfg)
+    if args.bench_accel:
+        result = run_mini._jsonable(bench_accelerations(cfg, device, args.bench_accel_steps, args.bench_accel_seeds))
+        args.out_dir.mkdir(parents=True, exist_ok=True)
+        (args.out_dir / "acceleration_bench.json").write_text(json.dumps(result, indent=1), encoding="utf-8")
+        print(json.dumps(result), flush=True)
+        return 0
     if args.bench_only:
         print(json.dumps(bench(cfg, device, args.bench_steps)), flush=True)
         return 0
@@ -359,6 +497,13 @@ def main(argv: list[str] | None = None) -> int:
         warnings.append(f"{args.cpus} CPU(s) requested but {summary['cpus']['usable']} usable here ({summary['cpus']}): the "
                         "throughput and the projection are measured on the latter")
         print(f"[preflight] WARNING: {warnings[-1]}", flush=True)
+
+    campaign = {Path(c).name: run_mini.load_mini_config(c) for c in (args.config, *args.extra_config, *args.campaign_config)}
+    mode_problems, gate = execution_mode_problems(cfg, device, campaign)
+    summary["execution_mode"] = {"per_config": {n: {k: v for k, v in c.get("runtime", {}).items() if k in ("compile", "stacked_seeds")}
+                                                 for n, c in campaign.items()}, "compile_gate": gate}
+    print(f"[preflight] execution mode: {summary['execution_mode']}", flush=True)
+    problems += mode_problems
 
     summary["on_device"] = device_check(cfg, device)
     print(f"[preflight] on {device}: {summary['on_device']}", flush=True)
@@ -385,6 +530,16 @@ def main(argv: list[str] | None = None) -> int:
             "per_process": {c: {ph: float(np.mean([o[ph] for o in os_])) for ph in ("probabilities", "straight-through")}
                             for c, os_ in per_config.items()}}
         print(f"[preflight] throughput, {len(configs)} processes side by side: {summary['throughput_parallel']}", flush=True)
+
+    # The acceleration bench (informational: never a problem nor a warning, docs/e3/DECISIONS.md 2026-09-30 (8)).
+    if device.type == "cuda" and not args.skip_accel_bench:
+        print(f"[preflight] acceleration bench (current step vs torch.compile vs {args.bench_accel_seeds} stacked seeds, "
+              f"{args.bench_accel_steps} steps per phase; measures only) ...", flush=True)
+        try:
+            summary["acceleration_bench"] = bench_accelerations(cfg, device, args.bench_accel_steps, args.bench_accel_seeds)
+        except Exception as err:
+            summary["acceleration_bench"] = {"error": f"{type(err).__name__}: {err}"}
+        print(f"[preflight] acceleration bench: {json.dumps(run_mini._jsonable(summary['acceleration_bench']))}", flush=True)
 
     # Memory with the planned number of processes: each trains a few steps, waits for the others, then
     # takes one diagnostic point and one final measurement at the same time as the others.
@@ -489,7 +644,8 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print("PREFLIGHT PASSED", flush=True)
     decision = write_verdict(args.out_dir, problems, memory_problems, warnings, len(configs), summary.get("projected_batch_hours"),
-                             args.max_batch_hours, args.fallback_parallel)
+                             args.max_batch_hours, args.fallback_parallel, cpus=summary["cpus"])
+    print(f"[preflight] CPUs: {summary['cpus']['requested']} requested, {summary['cpus']['usable']} usable", flush=True)
     print(f"PREFLIGHT DECISION: {decision}  (rule of RUN_GPU.md step 3; details in {args.out_dir / 'preflight_verdict.json'})",
           flush=True)
     return 1 if problems else 0

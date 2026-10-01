@@ -406,7 +406,16 @@ def _world_model_loss_and_unroll(
     is_first_seq = torch.as_tensor(model_batch.is_first, dtype=torch.bool, device=device)
 
     out = unroll_observation(rssm, x_seq, a_seq, is_first_seq, estimator=estimator, generator=generator)
+    return losses_from_unroll(x_seq, out, background, cfg), out
 
+
+def losses_from_unroll(x_seq: torch.Tensor, out: dict[str, torch.Tensor], background: torch.Tensor,
+                       cfg: WorldModelLossConfig) -> dict[str, torch.Tensor]:
+    """The world-model loss terms of one unrolled window: x_seq (B, T, C,
+    H, W) float, `out` as unroll_observation returns it (decoded, prior and
+    posterior probabilities). Shared by the training step and the stacked
+    multi-seed step (acceleration.py), one model's slice at a time."""
+    device = x_seq.device
     B, T = x_seq.shape[0], x_seq.shape[1]
     bg = background.to(device).unsqueeze(0).unsqueeze(0).expand(B, T, -1, -1, -1)
     x_flat = x_seq.reshape(B * T, *x_seq.shape[2:])
@@ -437,7 +446,7 @@ def _world_model_loss_and_unroll(
         "kl_rep": kl["rep"],
         "kl_dyn_raw_mean": kl["dyn_raw_mean"],
         "kl_rep_raw_mean": kl["rep_raw_mean"],
-    }, out
+    }
 
 
 def train_world_model_step(
@@ -451,6 +460,7 @@ def train_world_model_step(
     return_posteriors: bool = False,
     generator: torch.Generator | None = None,
     sync: bool = True,
+    return_states: bool = False,
 ) -> dict:
     """One Adam step (lr/eps set on the optimizer by the caller, spec
     3.3: lr=1e-4, eps=1e-8) with gradient-norm clipping (clip_norm=None:
@@ -465,7 +475,9 @@ def train_world_model_step(
     scalars as detached 0-d tensors on the model's device instead of
     Python floats: each float() forces a device synchronisation, so a
     caller that logs every step converts them in batches (audit 7.2;
-    same values)."""
+    same values). return_states=True adds "h" and "z" (B, T, ...): this
+    batch's posterior latent states, detached, on the model's device --
+    what the agent's heads are trained on (Phase 5, imagination.py)."""
     optimizer.zero_grad()
     losses, out = _world_model_loss_and_unroll(rssm, model_batch, background, cfg, estimator=estimator, generator=generator)
     losses["total"].backward()
@@ -478,4 +490,6 @@ def train_world_model_step(
     if return_posteriors:
         post = out["post_probs"]
         result["post_probs"] = post.reshape(-1, *post.shape[2:]).detach().cpu().numpy()
+    if return_states:
+        result["h"], result["z"] = out["h"].detach(), out["z"].detach()
     return result

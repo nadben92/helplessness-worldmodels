@@ -109,7 +109,7 @@ Last updated: 2026-09-28.
   - *Phase 0 validation, adjustment D; 2026-09-24 Phase 3 points 1-2.*
 - §3.5 replay ratio: unchanged (calibrated in Phase 4). Note: run_mini's `replay_ratio` counts gradient steps per environment step, the spec's replayed steps per environment step; configs state both. *2026-09-28 first GPU run.*
 
-### §4 — Agent — amended (§4.1, §4.3, §4.5, §4.6); not implemented yet (Phase 5)
+### §4 — Agent — amended (§4.1, §4.3, §4.5, §4.6); first version implemented on the CPU (Phase 5, 2026-09-30 (5))
 
 - **§4.1 goal head: amended.** The reward read from the goal head is
   r = 50·p_goal − 1·(1 − p_goal), not r = 50·p_goal. This matches E2's
@@ -119,7 +119,15 @@ Last updated: 2026-09-28.
   convention confirmed, E3 aligns with it). *2026-09-25 independent
   streams, point 5; 2026-09-25 theme sensitivity.* Not implemented yet
   (Phase 5).
-- §4.2, §4.4: unchanged, not implemented yet.
+- §4.2, §4.4: unchanged; implemented (`agents/worldmodel/heads.py`, `imagination.py`). Untrained heads start with a
+  zero output layer, and train from the estimator switch on. *2026-09-30 (5), F.*
+- **Replay of the closed loop (§3.4, §4.1): amended.** A stored step is an observation with the reward received on
+  arriving at it; the goal's observation is stored (terminal). E3-0's replay never held it. *2026-09-30 (5), F.*
+- §5.7 Delta of the world-model agent: implemented in closed loop (`run_agent.py`, every checkpoint; real contexts main,
+  canonical probe secondary); the E3 measures (I_s, I_s projected, off-support, I_z) at the end of a closed-loop run,
+  paired by `aggregate_b.py` with the bias-control reading rule; resume after interruption. *2026-09-30 (7), (8).*
+- Training-step accelerations (torch.compile, stacked seeds): implemented behind options, off by default, timed by the
+  preflight's bench; no decision yet. *2026-09-30 (8).*
 - **§4.3:** the tie-break tolerance is **relative**,
   `tol = max(1e-6, 0.01·std(Q))`. *Phase 0 validation, point 8.*
 - **§4.5:** E2 had **no burn-in**; E3 has none either. A minimal prefill
@@ -181,7 +189,11 @@ Last updated: 2026-09-28.
   real contexts at every diagnostic point: how much of the state information travels through h.
   *2026-09-30.*
 - §5.5 context dispersion: read from the real contexts (per zone, mean |I_real - I_canonical| and the sd over a state's contexts). *2026-09-28 first GPU run.*
-- §5.6, §5.7: unchanged. D1 (§8) is still computed on I_z (no s-space version yet).
+- **§5.3 (added): off-support mass and I_s projected on the support.** I_s stays computed on the kernel as it is;
+  the share of the kernel's mass outside the 5 reachable successors is reported by zone, and a secondary I_s on the
+  kernel projected on that support (for the comparison with twin B). *2026-09-30 (5), C.*
+- §5.6: unchanged. §5.7 (Delta under P): computed for the twin; not yet for the world-model agent. D1 (§8) is still
+  computed on I_z (no s-space version yet).
 - The measures are pure numpy functions in `src/helplessness/measures/`
   (the prompt's `measure/`). *Phase 0 validation, adjustment B.*
 

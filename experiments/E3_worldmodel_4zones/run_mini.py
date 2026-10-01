@@ -69,6 +69,7 @@ import rng_streams as e3_rng
 from wandb_logger import WandbLogger
 
 from helplessness.agents.tabular import TabularModelBasedAgent
+from helplessness.agents.worldmodel.acceleration import compile_from_config
 from helplessness.agents.worldmodel.agent import categorical_mode
 from helplessness.agents.worldmodel.losses import reconstruction_mask
 from helplessness.agents.worldmodel.loop import (
@@ -97,7 +98,7 @@ from helplessness.measures.diagnostics import (
     summarize_alpha_app,
 )
 from helplessness.measures.controllability import controllability_bootstrap, controllability_per_state
-from helplessness.measures.kernel_probe import expected_l1_sampling_floor
+from helplessness.measures.kernel_probe import expected_l1_sampling_floor, off_support_mass
 from helplessness.measures.latent_controllability import latent_state_information
 from helplessness.runs import (
     code_provenance,
@@ -472,12 +473,30 @@ def build_separation_switch(cfg: dict) -> tuple[SeparationSwitch, int]:
     if not isinstance(est["switch_max_steps"], int):
         raise ValueError(f"train.latent_estimator.switch_max_steps must be an absolute number of gradient steps, got "
                          f"{est['switch_max_steps']!r} (docs/e3/DECISIONS.md, 2026-09-25)")
+    threshold, collapse = switch_thresholds_bits(est, cfg["model"]["n_vars"])
     switch = SeparationSwitch(
-        max_steps=est["switch_max_steps"], threshold_bits=est["switch_js_threshold"], consecutive=est["switch_consecutive"],
+        max_steps=est["switch_max_steps"], threshold_bits=threshold, consecutive=est["switch_consecutive"],
         eval_every=est["switch_eval_every"], min_steps=est["switch_min_steps"],
-        collapse_threshold_bits=est["collapse_js_threshold"], collapse_consecutive=est["collapse_consecutive"],
+        collapse_threshold_bits=collapse, collapse_consecutive=est["collapse_consecutive"],
     )
     return switch, est["switch_n_pairs"]
+
+
+def switch_thresholds_bits(est: dict, n_vars: int) -> tuple[float, float]:
+    """The switch and collapse thresholds in bits of the batch-pair JS
+    (a SUM over the latent variables, each bounded by 1 bit). A config gives
+    them either in bits (switch_js_threshold, collapse_js_threshold: every
+    config written before 2026-09-30 (7)) or as a fraction of the ceiling,
+    scale-free in the number of variables (switch_js_threshold_per_var,
+    collapse_js_threshold_per_var: threshold = fraction x n_vars; 0.375 and
+    0.125 reproduce 3 and 1 bits at n_vars = 8 exactly). Not both."""
+    out = []
+    for key in ("switch_js_threshold", "collapse_js_threshold"):
+        per_var = est.get(f"{key}_per_var")
+        if per_var is not None and key in est:
+            raise ValueError(f"train.latent_estimator gives both {key} and {key}_per_var: choose one")
+        out.append(float(per_var) * n_vars if per_var is not None else float(est[key]))
+    return out[0], out[1]
 
 
 def load_episode_config() -> dict:
@@ -839,8 +858,11 @@ def real_context_measures(
                                       max_images=max_images_per_forward(cfg))
     iz = e3_probe.real_context_iz(ctx, M=M, rng=rng)
     kl = per_state_context_summary(ctx["kl_next_bits"], ctx["states"], N_STATES)
+    # The reachable successors of each state: the support of the tabular twin's prior (build_tabular_twin).
+    support = geographic_support_mask(GRID_SHAPE)
     kernel = e3_probe.real_context_kernel(rssm, ctx, world.templates_t, draws=draws,
-                                          margin_threshold=cfg["measure"]["kernel_margin_threshold"], generator=generator)
+                                          margin_threshold=cfg["measure"]["kernel_margin_threshold"], generator=generator,
+                                          support=support)
     acc = e3_probe.real_context_template_accuracy(rssm, ctx, world.templates_t)
     l1_vs_p = np.abs(kernel["p_hat"] - P_true).sum(axis=-1)  # (144, 5), NaN for unmeasured states
     l1_vs_b = np.abs(kernel["p_hat"] - T_hat_B).sum(axis=-1)
@@ -850,6 +872,13 @@ def real_context_measures(
     I_s = controllability_of_kernel(kernel["p_hat"])
     boot = controllability_bootstrap(kernel["p_hat"], draws, cfg["measure"].get("is_bootstrap", 200), rng)
     probes = e3_probe.context_state_probes(ctx, cfg["measure"]["z_only_test_frac"], rng) if ctx["positions"].size else None
+    # docs/e3/DECISIONS.md, 2026-09-30 (5): I_s above is computed on the kernel as it is (the model's actual belief,
+    # off-support mass included). Reported next to it: the share of that mass outside the reachable successors, and
+    # I_s of the kernel projected on the support (SECONDARY: for the comparison with the tabular twin, whose prior
+    # is restricted to the same support). The projected bootstrap draws last, so everything above is unchanged.
+    off_support = off_support_mass(kernel["p_hat"], support)
+    I_s_projected = controllability_of_kernel(kernel["p_hat_projected"])
+    boot_projected = controllability_bootstrap(kernel["p_hat_projected"], draws, cfg["measure"].get("is_bootstrap", 200), rng)
     cats = list(e3_env.ZONE_CATEGORIES)
 
     def by_zone(arr: np.ndarray) -> dict[str, float]:
@@ -868,6 +897,10 @@ def real_context_measures(
         "l1_floor_by_zone": by_zone(l1_floor),
         "kernel_draws": draws,
         "I_s_by_zone": is_by_zone(I_s, boot, layout),
+        "I_s_projected_by_zone": is_by_zone(I_s_projected, boot_projected, layout),
+        "off_support_mass_by_zone": by_zone(off_support),
+        "ghost_fraction_projected_mean": (float(np.nanmean(kernel["ghost_fraction_projected"]))
+                                          if np.isfinite(kernel["ghost_fraction_projected"]).any() else float("nan")),
         "I_z_by_zone": {cat: zone_mean_with_se(iz["I_z"], iz["se"], zone_states(layout, cat)) for cat in cats},
         "state_probe_h": None if probes is None else probes["h"]["test_accuracy"],
         "state_probe_z": None if probes is None else probes["z"]["test_accuracy"],
@@ -882,7 +915,9 @@ def real_context_measures(
         "settings": rc,
     }
     arrays = {"contexts": ctx, "iz": iz, "kl": kl, "kernel": kernel, "l1_vs_p": l1_vs_p, "l1_vs_b": l1_vs_b,
-              "l1_b_vs_p": l1_b_vs_p, "I_s": I_s, "I_s_se": boot["se"], "I_s_bias": boot["bias"]}
+              "l1_b_vs_p": l1_b_vs_p, "I_s": I_s, "I_s_se": boot["se"], "I_s_bias": boot["bias"],
+              "I_s_projected": I_s_projected, "I_s_projected_se": boot_projected["se"], "I_s_projected_bias": boot_projected["bias"],
+              "off_support": off_support}
     return record, arrays
 
 
@@ -1112,6 +1147,8 @@ def measure_final(rssm: RSSM, world: World, replay: ReplayBuffer, N: np.ndarray,
         "I_by_category": {cat: float(iz_result["I_z"][zone_states(layout, cat)].mean()) for cat in e3_env.ZONE_CATEGORIES},
         "I_by_category_real": {cat: final["real_context"]["I_z_by_zone"][cat]["mean"] for cat in e3_env.ZONE_CATEGORIES},
         "I_s_by_category_real": {cat: final["real_context"]["I_s_by_zone"][cat]["mean"] for cat in e3_env.ZONE_CATEGORIES},
+        "I_s_projected_by_category_real": {cat: final["real_context"]["I_s_projected_by_zone"][cat]["mean"]
+                                           for cat in e3_env.ZONE_CATEGORIES},
         "accuracies": {key: final[key] for key in ACC_LABELS},
         "ghost_fraction_mean": final["ghost_fraction_mean"],
         "z_only_probe": z_probe_result,
@@ -1143,6 +1180,9 @@ def measure_final(rssm: RSSM, world: World, replay: ReplayBuffer, N: np.ndarray,
         "posterior_probs": probe["posterior_probs"], "prior_probs": probe["prior_probs"],
         "l1_vs_p": extras["l1_vs_p"], "l1_vs_b": extras["l1_vs_b"], "l1_b_vs_p": extras["l1_b_vs_p"],
         "real_I_s": real["I_s"], "real_I_s_se": real["I_s_se"], "real_I_s_bias": real["I_s_bias"],
+        "real_I_s_projected": real["I_s_projected"], "real_I_s_projected_se": real["I_s_projected_se"],
+        "real_I_s_projected_bias": real["I_s_projected_bias"], "real_p_hat_projected": real["kernel"]["p_hat_projected"],
+        "real_ghost_fraction_projected": real["kernel"]["ghost_fraction_projected"], "real_off_support": real["off_support"],
         "real_I_z": real["iz"]["I_z"], "real_I_z_se": real["iz"]["se"], "real_I_z_sd": real["iz"]["sd"],
         "real_n_contexts": real["iz"]["n_contexts"], "real_I_z_context": real["iz"]["I_z_context"],
         "real_I_z_context_se": real["iz"]["se_context"], "real_kl_per_state": real["kl"]["mean"],
@@ -1348,7 +1388,7 @@ def run_one_seed(cfg: dict, seed: int, run_dir: Path, device: torch.device, max_
     P_true = world.env.transition_tensor()
 
     torch.manual_seed(streams["network_init_seed"])  # initialisation only: built on the CPU, then moved (same weights on every device)
-    rssm = build_rssm(cfg).to(device)
+    rssm = compile_from_config(build_rssm(cfg).to(device), cfg)  # runtime.compile: off unless set (acceleration.py)
     rssm_cfg = rssm.cfg
     optimizer = torch.optim.Adam(rssm.parameters(), lr=cfg["train"]["lr"], eps=cfg["train"]["adam_eps"])
     loss_cfg = WorldModelLossConfig(
@@ -1970,12 +2010,22 @@ def write_report(seed_reports: list[dict], out_dir: Path, cfg_name: str) -> Path
                 "state's contexts; per zone: mean over measured states, se of the mean and mean plug-in bias from the bootstrap)")
             add("")
             if ok_mech:
-                add("| zone | dynamics here | mean I_s | se of the mean | plug-in bias (bootstrap) | states measured |")
-                add("|---|---|---|---|---|---|")
+                proj, off = rc.get("I_s_projected_by_zone"), rc.get("off_support_mass_by_zone")  # from 2026-09-30 (5) on
+                add("| zone | dynamics here | mean I_s | se of the mean | plug-in bias (bootstrap) | states measured | "
+                    "off-support mass | I_s projected on the support (SECONDARY) [se] |")
+                add("|---|---|---|---|---|---|---|---|")
                 for cat in categories:
                     st = rc["I_s_by_zone"][cat]
                     add(f"| {cat} | {kinds[cat]} | {_fmt(_nan(st['mean']))} | {_fmt(_nan(st['se']))} | {_fmt(_nan(st['bias']))} | "
-                        f"{st['n_measured']}/{st['n_states']} |")
+                        f"{st['n_measured']}/{st['n_states']} | {_fmt(_nan(off[cat])) if off else '-'} | "
+                        + (f"{_fmt(_nan(proj[cat]['mean']))} [{_fmt(_nan(proj[cat]['se']))}] |" if proj else "- |"))
+                if proj:
+                    add("")
+                    add("I_s is computed on the kernel as it is: the model's actual belief, off-support mass included (the mass of "
+                        "p_hat(s' | s, a) on states that are not one of the 5 reachable successors of s). The projected version "
+                        "matches the same draws among the successors' templates only (same ghost rule) and renormalises; it uses "
+                        "the environment's truth, so it is a secondary measure, for the comparison with the tabular twin whose prior "
+                        f"has the same support (ghost rate of the projection: {_fmt(_nan(rc.get('ghost_fraction_projected_mean')))}).")
             else:
                 add(f"{NOT_EVALUABLE}.")
             add("")

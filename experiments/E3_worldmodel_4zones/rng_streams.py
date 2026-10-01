@@ -15,6 +15,9 @@ after them:
   latent_sample  every latent draw of the training step (a torch.Generator)
   switch_pairs   the label-free batch-pair statistic of the estimator switch
   measure        parent of every measurement's own streams (measure_streams)
+  agent_init     the global torch RNG, seeded once just before the agent's heads are built (Phase 5)
+  act_latent     the latent draws of acting: the filter's posterior draws and the lookahead's prior draws
+  imagination    every draw of the critic's imagined rollouts (latents, epsilon, tie-breaks)
 
 explore is the collection policy's action stream (E2's epsilon-greedy
 action choice); env_dynamics seeds the environment exactly as E2 does:
@@ -38,7 +41,9 @@ from helplessness.experiment_loader import load_experiment_module
 
 e2_rng = load_experiment_module("E2_online_4zones", "rng.py", "e3_rng_streams_e2_rng")
 
-E3_ONLY_STREAMS = ("theme", "network_init", "replay_sample", "latent_sample", "switch_pairs", "measure")
+E3_ONLY_STREAMS = ("theme", "network_init", "replay_sample", "latent_sample", "switch_pairs", "measure",
+                   # Phase 5 (closed loop), appended so every earlier stream keeps its child index:
+                   "agent_init", "act_latent", "imagination")
 STREAM_NAMES = tuple(e2_rng.STREAM_NAMES) + E3_ONLY_STREAMS
 N_MEASURE_SLOTS = 32
 CONDITIONS = ("experimental", "reference")

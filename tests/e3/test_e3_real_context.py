@@ -219,6 +219,15 @@ def test_is_is_the_main_measure_with_state_probes(trained):
     assert 0.0 <= rc["state_probe_h"] <= 1.0 and 0.0 <= rc["state_probe_z"] <= 1.0
     assert report["h_only_probe"]["latent"] == "h" and report["z_only_probe"]["latent"] == "z"
     assert report["h_only_probe"]["n_test"] == report["z_only_probe"]["n_test"]
+    # 2026-09-30 (5): off-support mass and I_s projected on the support (secondary), from the same draws
+    support = run_mini.geographic_support_mask(run_mini.GRID_SHAPE)
+    off = arrays["real_off_support"]
+    assert np.allclose(off[measured], np.where(support[:, None, :], 0.0, arrays["real_p_hat"]).sum(-1)[measured])
+    proj = arrays["real_p_hat_projected"]
+    ok = np.isfinite(proj).all(axis=(1, 2))
+    assert np.all(proj[ok][~np.broadcast_to(support[:, None, :], proj.shape)[ok]] == 0.0)  # no mass outside the support
+    for cat in run_mini.e3_env.ZONE_CATEGORIES:
+        assert set(rc["I_s_projected_by_zone"][cat]) >= {"mean", "se", "bias"} and cat in rc["off_support_mass_by_zone"]
     pc = report["is_per_context"]  # the secondary per-context check (2026-09-30)
     assert pc["settings"] == {"states_per_zone": 2, "contexts": 2, "draws": 8} and pc["states"]
     for row in pc["states"]:
@@ -228,6 +237,8 @@ def test_is_is_the_main_measure_with_state_probes(trained):
     assert all("I_s_by_zone" in d["real_context"] and "I_s_by_zone" in d for d in diagnostics)
     text = (run_dir / "REPORT.md").read_text(encoding="utf-8")
     assert "### I_s in real contexts (MAIN" in text and "I_z in real contexts (SECONDARY" in text and "h-only linear probe" in text
+    if run_mini.mechanics_ok(report["accuracies"]["acc_replay_hard"]):  # the table is printed only for a working model
+        assert "off-support mass" in text and "I_s projected on the support (SECONDARY)" in text
 
 
 def test_training_diagnostics_use_the_reduced_kernel_size(tmp_path):

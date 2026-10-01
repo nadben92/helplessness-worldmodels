@@ -1,0 +1,161 @@
+# Phase 5 test bench (docs/e3/DECISIONS.md, 2026-09-30 (5)): the agent in closed loop on the CPU, with
+# EXACTLY mini_long.yaml's network and world-model training procedure (the `model`, `render` and `train`
+# blocks below are mini_long's, checked by tests/e3/test_e3_closed_loop.py). Run with
+#     python experiments/E3_worldmodel_4zones/run_agent.py --config configs/e3/agent_mini.yaml
+# The agent does not depend on the latent's size: only `model` would change.
+
+model:
+  n_vars: 8
+  n_classes: 8
+  h_dim: 64
+  embed_dim: 64
+  base_depth: 8
+  unimix: 0.01
+
+render:
+  k: 6  # spec default (72x72). k=2 made the agent marker a single pixel -- not the design (DECISIONS.md, 2026-09-24)
+  grid_lines: false
+  cielab_min_dist: 30.0
+  cielab_marker_min_dist: 30.0
+
+budget:
+  total_steps: 19744       # + prefill 256 = 20,000 environment steps, as mini_long; x replay_ratio 2 = 40,000 gradient steps
+  # Minimal prefill (spec 4.5, amended: E2 had no burn-in): played under the agent's own policy (epsilon 0.1), counted in
+  # the budget; it only delays the first gradient step until the replay holds a few windows.
+  prefill_steps: 256
+
+collection:
+  start_distribution: uniform_non_terminal   # E2's protocol (spec 4.6)
+
+train:
+  batch_size: 8
+  seq_len: 16
+  replay_ratio: 2
+  # Two-phase learning rate (DECISIONS.md, 2026-09-24): lr until the
+  # EFFECTIVE estimator switch (option (i): the probabilities phase does not
+  # separate at 1e-4), then lr_after_switch (the spec's 1e-4) for the rest
+  # of training, on every world-model parameter. lr is calibrated in Phase 4.
+  lr: 1.0e-3
+  lr_after_switch: 1.0e-4
+  adam_eps: 1.0e-8
+  # Global gradient clipping DISABLED (null; the key stays for the record).
+  # A global threshold does not act on the mechanism of the late collapse
+  # and a threshold of 500 broke the probabilities phase (DECISIONS.md,
+  # 2026-09-24). The lr drop at the switch is the retained guard.
+  clip_norm: null
+  w_patch: 10.0
+  beta_dyn: 0.5
+  beta_rep: 0.1
+  free_bits: 0.0             # stays 0: the collapse happens with no KL at all (DECISIONS.md, 2026-09-24)
+  free_bits_mode: per_step
+  # beta_dyn (KL(sg(q) || p)) runs at full weight from step 0: it only
+  # trains the prior, never pulls the posterior. beta_rep (KL(q || sg(p)))
+  # is 0 until the estimator switch, then ramps linearly to its full value
+  # over rep_warmup_steps; null = 20% of the budget left after the switch
+  # (docs/e3/DECISIONS.md, 2026-09-24).
+  rep_warmup_steps: null
+  # Posterior estimator (training procedure only), selected by the
+  # estimator comparison (docs/e3/ESTIMATOR_COMPARISON.md): the decoder
+  # receives the posterior probabilities, then plain straight-through
+  # samples once the posteriors are separated. The switch is triggered by
+  # a LABEL-FREE criterion: mean JS (bits) between the posteriors of
+  # switch_n_pairs random image pairs of the current training batch,
+  # evaluated every switch_eval_every steps; switch once it exceeds
+  # switch_js_threshold on switch_consecutive consecutive evaluations, not
+  # before switch_min_steps. Not reached by switch_max_steps -- an ABSOLUTE
+  # number of gradient steps, never a fraction of the budget (DECISIONS.md,
+  # 2026-09-25) -> the run stops with SeparationNotReachedError, never a
+  # silent switch. The margin (deadline - switch step) is logged in every
+  # report.
+  latent_estimator:
+    kind: warmup_probs_until_separated
+    switch_js_threshold: 3.0
+    switch_consecutive: 5
+    switch_eval_every: 50
+    switch_min_steps: 500
+    switch_max_steps: 25000    # 62.5% of the 40,000-step budget (DECISIONS.md, 2026-09-25: theme sensitivity)
+    switch_n_pairs: 64
+    # Guard after the switch: the same label-free statistic falling back
+    # below collapse_js_threshold bits on collapse_consecutive consecutive
+    # evaluations -> CollapseAfterSwitchError (checkpoint + diagnostic
+    # saved), never a silent collapse (DECISIONS.md, 2026-09-24).
+    collapse_js_threshold: 1.0
+    collapse_consecutive: 5
+
+# The agent (spec section 4, as amended). gamma, the goal reward, the step cost and the horizon H are E2's and come
+# from experiments/E3_worldmodel_4zones/config.yaml (episode block), never from here.
+agent:
+  epsilon: 0.1             # constant (spec 4.6)
+  k_act: 16                # prior draws per action to act (4.3)
+  k_imag: 4                # prior draws per action in imagination (4.3)
+  horizon: 15              # imagined steps (4.4)
+  lam: 0.95                # lambda-returns (4.4)
+  slow_tau: 0.02           # EMA of the slow critic (4.2)
+  tie_tol_rel: 0.01        # tie-break tolerance max(tie_tol_min, tie_tol_rel * std(Q)) (4.3, amended: relative)
+  tie_tol_min: 1.0e-6
+  hidden_dim: 128          # width of the two heads' MLPs (not given by the spec)
+  critic_lr: 3.0e-5        # 4.2
+  critic_clip_norm: 100.0  # 4.2
+  goal_lr: 1.0e-4          # not given by the spec: the world model's learning rate after the switch
+  adam_eps: 1.0e-8
+
+# Condition B (spec 6): the tabular twin on the agent's own transitions, at every checkpoint (E2's pipeline,
+# experiments/E2_online_4zones/twin.py: Dirichlet alpha on the 5 successors, VI, b with the matched-count reference).
+twin:
+  alpha: 1.0
+
+# The E3 measures (mini_long's block, unchanged). In closed loop they are taken at the END of the run (final: true,
+# run_mini.measure_final on the closed-loop replay) and the agent's own Delta under P at every checkpoint; the
+# diagnostics_every / diagnostics_at_checkpoints / separation_every / monitor_every keys are run_mini.py's and unused here.
+measure:
+  final: true
+  # Monte-Carlo samples per I_z (DECISIONS.md, 2026-09-25): 2000 for the diagnostics during training,
+  # the spec's 4096 for the final measures (and for calibration).
+  iz_mc_samples_training: 2000
+  iz_mc_samples_final: 4096
+  kernel_k_s: 1358   # K_s: expected L1 floor of an exact kernel <= 0.02 in a 0.9/4x0.025 zone (DECISIONS 2026-09-29; was 16)
+  kernel_k_s_training: 256           # canonical kernel, training diagnostics (as kernel_draws_training)
+  is_bootstrap: 200                  # parametric-bootstrap replicates for the se and bias of I_s (DECISIONS 2026-09-30)
+  is_per_context: {states_per_zone: 4, contexts: 10, draws: 512}   # secondary: I_s per context vs pooled (DECISIONS 2026-09-30)
+  kernel_margin_threshold: 1.0e-3
+  z_only_test_frac: 0.2
+  context_dispersion_n_samples: 100
+  # D1: a (L, L') contrast is accepted only if |I_L' - I_L| > max(d1_contrast_min_bits,
+  # 3 x combined MC se) (DECISIONS.md, 2026-09-25).
+  d1_contrast_min_bits: 0.25
+  separation_every: 250       # training steps between canonical separation measurements (JS, accuracy)
+  monitor_every: 500          # console line: step, batch-pair JS, labelled JS, phase, beta_rep, recon_patch, grad_norm, lr
+  # Training diagnostics (KL / L1 / I_z by zone, frequent outcome, posterior
+  # entropy, template accuracies), appended to diagnostics.jsonl every this many
+  # gradient steps; null = only the final point. Each point costs ~2.5 min at
+  # this model size (mostly the s-space kernel, 144 x 5 x kernel_k_s decodes).
+  diagnostics_every: 2000
+  # Main measure in REAL contexts (docs/e3/DECISIONS.md, 2026-09-28): contexts (h_t, z_t) of replay
+  # windows of window_len steps (null = train.seq_len) unrolled with their true history, excluding
+  # the first burn_in steps of each window and the is_first steps; up to max_per_state per state,
+  # drawn from the measurement stream. kernel_draws: prior samples decoded per (s, a) for the
+  # s-space kernel, spread over the state's contexts.
+  real_context:
+    window_len: null
+    burn_in: 8
+    max_per_state: 50
+    kernel_draws: 1358           # K_s, as kernel_k_s (DECISIONS 2026-09-29; was 32)
+    kernel_draws_training: 256       # reduced K for the training diagnostics (DECISIONS 2026-09-30): I_s plug-in bias
+                                     # <= 0.013 bits, L1 floor 0.046; the final measures use kernel_draws
+  diagnostics_at_checkpoints: true
+
+checkpoints:
+  grid: e2                 # E2's checkpoint grid, in environment steps (the points <= the budget, and the end)
+  resume_every: 2000       # environment steps between resume points (checkpoints/resume.pt), and at every checkpoint
+
+log:
+  monitor_every: 1000      # environment steps between console lines
+  behaviour_window: 100    # finished episodes of the success-rate / episode-length window
+
+runtime:
+  num_threads: 4
+  device: auto
+  deterministic: true
+
+seeds: [0]
+conditions: [experimental]

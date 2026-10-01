@@ -17,6 +17,14 @@ otherwise. It never writes outside --out, and refuses an --out that already hold
 Usage, from the repo root:
     python experiments/E3_worldmodel_4zones/make_handoff.py --train-dir logs/kubeflow/train-<UTC> \\
         [--preflight-dir logs/kubeflow/preflight-<UTC> ...] --out handoff/gpu_e30b
+    python experiments/E3_worldmodel_4zones/make_handoff.py --measure-dir logs/kubeflow/measure-<UTC> \\
+        [--preflight-dir logs/kubeflow/preflight-<UTC> ...] --out handoff/gpu_e30b_measures
+
+A measurement batch (submit_kubeflow.MEASURE_BATCHES, docs/e3/DECISIONS.md 2026-10-01 (10)) is
+handed off with --measure-dir instead of --train-dir: one light archive per run,
+<run directory name>.recomputed.tgz, of the recomputation the job wrote under <measure dir>/runs/
+(results.json, arrays.npz, SUMMARY.md, comparison_with_run.json, console.log, artifacts); the
+original run directories are not read.
 """
 
 from __future__ import annotations
@@ -70,10 +78,36 @@ def run_row(name: str, job: dict, run_dir: Path | None) -> dict:
     return row
 
 
+def measure_row(name: str, job: dict, measure_dir: Path) -> tuple[dict, Path | None]:
+    """A measurement job (recompute_measures.py <source run> ... --out-dir <measure dir>/runs): its row and the
+    directory to archive (<measure dir>/runs/<run name>), None when the job wrote nothing."""
+    command = job["command"]
+    script = next(i for i, c in enumerate(command) if c.endswith("recompute_measures.py"))
+    run_name = Path(command[script + 1]).name
+    out = measure_dir / "runs" / run_name
+    row = {"job": name, "exit_code": job.get("exit_code"), "started_at": job.get("started_at"), "finished_at": job.get("finished_at"),
+           "not_started": bool(job.get("not_started")), "run_dir": run_name, "finished": False}
+    outputs = sorted((out / "recomputed").glob("final__*")) if out.exists() else []
+    if outputs:
+        last = outputs[-1]
+        row["output"] = f"{run_name}/recomputed/{last.name}"
+        row["finished"] = (last / "results.json").exists() and (last / "arrays.npz").exists()
+        if (last / "comparison_with_run.json").exists():
+            same = json.loads((last / "comparison_with_run.json").read_text(encoding="utf-8"))
+            row["identical_to_original"] = all(same.values())
+        if (last / "results.json").exists():
+            res = json.loads((last / "results.json").read_text(encoding="utf-8"))
+            row["source_sha256"] = (res.get("reproducibility") or {}).get("source_sha256")
+            row["weights_sha256"] = res.get("weights_sha256")
+    return row, (out if outputs else None)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--train-dir", type=Path, default=None,
                         help="the training supervisor's output directory (with status.json); omit it when the training was not launched")
+    parser.add_argument("--measure-dir", type=Path, default=None,
+                        help="a measurement batch's supervisor output directory (instead of --train-dir)")
     parser.add_argument("--preflight-dir", type=Path, nargs="*", default=[], help="the preflight's output directories")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--results-root", type=Path, default=RESULTS_ROOT)
@@ -81,11 +115,22 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.out.exists() and any(args.out.iterdir()):
         parser.error(f"{args.out} already holds files: choose a new directory")
-    status = json.loads((args.train_dir / "status.json").read_text(encoding="utf-8")) if args.train_dir else {}
+    if args.train_dir and args.measure_dir:
+        parser.error("--train-dir and --measure-dir: one batch at a time")
+    supervisor = args.train_dir or args.measure_dir
+    status = json.loads((supervisor / "status.json").read_text(encoding="utf-8")) if supervisor else {}
     args.out.mkdir(parents=True, exist_ok=True)
 
     rows, archives = [], []
-    for name, job in status.items():
+    for name, job in (status.items() if args.measure_dir else ()):
+        row, out = measure_row(name, job, args.measure_dir) if not job.get("not_started") else ({"job": name, "not_started": True}, None)
+        rows.append(row)
+        if out is not None:
+            archive = args.out / f"{out.name}.recomputed.tgz"
+            with tarfile.open(archive, "w:gz") as tar:
+                tar.add(out, arcname=out.name, filter=_excluded)
+            archives.append(archive)
+    for name, job in (status.items() if args.train_dir else ()):
         run_dir = run_of_job(job["command"], job.get("started_at"), args.results_root) if not job.get("not_started") else None
         rows.append(run_row(name, job, run_dir))
         if run_dir is not None:
@@ -95,8 +140,11 @@ def main(argv: list[str] | None = None) -> int:
             archives.append(archive)
     logs = args.out / "logs.tgz"
     with tarfile.open(logs, "w:gz") as tar:
-        for d in [*([args.train_dir] if args.train_dir else []), *args.preflight_dir]:
+        for d in [*([supervisor] if supervisor else []), *args.preflight_dir]:
             tar.add(d, arcname=f"logs/kubeflow/{d.name}", filter=_excluded)
+            submission = d.parent / f"{d.name}.submission.json"  # the submission record (job id, requested CPUs, runs)
+            if submission.exists():
+                tar.add(submission, arcname=f"logs/kubeflow/{submission.name}")
     archives.append(logs)
     too_big = [(a.name, a.stat().st_size / 2**20) for a in archives if a.stat().st_size / 2**20 > MAX_ARCHIVE_MB]
 
@@ -104,20 +152,32 @@ def main(argv: list[str] | None = None) -> int:
     for d in args.preflight_dir:
         for verdict_path in sorted(d.rglob("preflight_verdict.json")):
             v = json.loads(verdict_path.read_text(encoding="utf-8"))
-            decisions.append(f"`{d.name}`: decision **{v['decision']}**, parallel {v['parallel']}, projected batch hours "
+            cpus = v.get("cpus") or {}
+            decisions.append(f"`{d.name}`: decision **{v['decision']}**, parallel {v['parallel']}, CPUs requested / usable "
+                             f"{cpus.get('requested', '?')} / {cpus.get('usable', '?')}, projected batch hours "
                              f"{v.get('projected_batch_hours')}, problems {v['problems'] or 'none'}, warnings {v['warnings'] or 'none'}")
     lines = [f"# GPU batch handoff -- {args.out.name}", "",
              f"Written {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')} by make_handoff.py from "
-             f"`{args.train_dir.name if args.train_dir else 'no training (not launched)'}`. "
+             f"`{supervisor.name if supervisor else 'no training / measurement (not launched)'}`. "
              "No weights (.pt) in any archive.", "", "## Preflight", ""]
     lines += [f"- {d}" for d in decisions] or ["- (no preflight directory given)"]
     lines += ["", "## Runs", ""]
-    if not args.train_dir:
+    rows_for_train = rows
+    if args.measure_dir:
+        rows_for_train = []
+        lines += ["Measurement batch: no training; each run re-measured by recompute_measures.py from its own weights.", "",
+                  "| job | exit code | run | output | finished | identical to the original arrays | code source_sha256 | weights SHA-256 |",
+                  "|---|---|---|---|---|---|---|---|"]
+        for r in rows:
+            lines.append(f"| {r['job']} | {'not started' if r.get('not_started') else r.get('exit_code')} | {r.get('run_dir', '-')} | "
+                         f"{r.get('output', 'none')} | {'yes' if r.get('finished') else 'no'} | {r.get('identical_to_original', '-')} | "
+                         f"{r.get('source_sha256', '-')} | {r.get('weights_sha256', '-')} |")
+    elif not args.train_dir:
         lines.append("Training not launched (see the preflight above).")
     else:
         lines += ["| job | exit code | status (meta.yaml) | gradient steps done | switch step | finished (results.json) | error |",
                   "|---|---|---|---|---|---|---|"]
-    for r in rows:
+    for r in rows_for_train:
         if r["not_started"]:
             lines.append(f"| {r['job']} | - | not started | - | - | - | - |")
             continue
