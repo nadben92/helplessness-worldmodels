@@ -2826,8 +2826,11 @@ a. **Verdict of the rule: general insufficiency of the prior in rarely visited c
    at 20,000 (final measures, 158 pairs) -- both <= 0.5; median mass on the goal of the four goal pairs: 0.000 at
    both. The mass rises with the visits (median of the per-n medians): n 0-1: 0.11 / 0.12 (63 / 59 pairs); 2-8: 0.30 /
    0.32; 9-20: 0.81 / 0.79 (100 / 99); 21-50: 0.94 / 0.93 (66 / 73); 51-100: 0.97 / 0.97 (33 / 41); > 100: 0.99 /
-   0.99 (29 / 31). Ghosts take 1 to 4 % of the draws (raw masses within 0.02 of the renormalised ones). The four goal
-   pairs (n = 3, 7, 1 -> 8, 2) sit where any pair with so few visits sits; they are not singled out.
+   0.99 (29 / 31). Ghosts take 1 to 4 % of the draws (raw masses within 0.02 of the renormalised ones).
+   **Corrected 2026-10-02 (13)**: the sentence first written here, "the four goal pairs sit where any pair with so few
+   visits sits; they are not singled out", was wrong. Their percentile rank among the deterministic pairs with the
+   same number of visits is 0 (1.5 for one pair at 18,000): they are the lowest of their visit class at both weight
+   sets (see (13)). This is descriptive, not a criterion: the verdict of the rule is unchanged.
 b. The four goal pairs: mass on the goal 0.000 to 0.001 at both weight sets (their argmax: other states, 0.10 to
    0.38). p_goal on latents drawn from the PRIOR at their real contexts (512 draws per context): mean 1e-10 to 0.004,
    at most 0.3 % of the draws above 0.5 -- the head recognises the goal in the rare draws that hold its code, and the
@@ -2850,9 +2853,9 @@ e. The templates cover the goal: the observation is the goal's template by const
    7 %, and sit as far from the goal's template as any other state (median distance 10.6 to 11.7). No
    under-estimation of the goal by ghost classification.
 
-**Reading (implementer, for the user):** the prior's failure on the goal is the general failure of the prior on
-transitions seen fewer than ~9 times, not something specific to the goal; the goal's transitions are among the
-rarest, and the goal frame the most distinctive image, so the prior never puts mass there. Nothing is changed on this
+**Reading (implementer, for the user; corrected 2026-10-02 (13)):** the rule's verdict is the general failure of the
+prior on transitions seen fewer than ~9 times; within it, the four goal pairs are the lowest of their visit class
+(percentile rank 0), with the goal frame the most distinctive image of the grid. Nothing is changed on this
 basis (options 2-4 of (11) stay unimplemented).
 
 ### Tie-break: absolute tolerance from the protocol (user decision, implemented)
@@ -2920,3 +2923,77 @@ empirical successors rather than toward P is not learning the dynamics).
 
 Not launched: N and the starting point await the user's agreement (cost and the starting point's constraint in the
 report of 2026-10-02).
+
+### Goal pairs' percentile ranks (item 1 of 2026-10-02; descriptive, the rule's verdict is unchanged)
+
+Mass on the right successor (the goal) of each pair into the goal, ranked among the deterministic pairs off the goal
+with the same number of visits n (ties count half); `diagnose_world_model_goal.py --ranks`, output
+`reports/diagnostics_wm_goal_ranks_<run>/ranks.json` (the 18,000 kernel recomputed with the same seeds: its rule median
+0.2836 is the one of (12); saved as kernel_18000.npz).
+
+| pair (s, a) | 18,000: n, mass, peers, rank, peers' median | 20,000: n, mass, peers, rank, peers' median |
+|---|---|---|
+| (1, 3) | 3, 0.000, 29, **0.0**, 0.15 | 3, 0.000, 25, **0.0**, 0.16 |
+| (11, 1) | 7, 0.000, 18, **0.0**, 0.44 | 7, 0.001, 18, **0.0**, 0.35 |
+| (12, 0) | 1, 0.000, 34, **1.5**, 0.14 | 8, 0.000, 16, **0.0**, 0.53 |
+| (132, 2) | 2, 0.000, 40, **0.0**, 0.23 | 2, 0.000, 34, **0.0**, 0.23 |
+
+At 20,000 no peer of any of the four classes has a mass below 0.01; the goal pairs are below all of them.
+
+### Gradients against data: cost and starting point (proposal; nothing launched)
+
+- Starting point: the weights at 20,000 have no optimiser state (agent_final.pt) and the replay at 20,000 was not
+  saved (only the resume point's, at 18,000). The only consistent start is the **resume point at 18,000** (weights,
+  Adam state, separation switch, learning-rate / beta_rep schedule -- constant there: lr 1e-4 after the switch, the
+  representation warm-up over -- and its replay of 18,510 observations). Its baseline is already measured: median mass
+  at n = 2-8 = **0.284** (kernel_18000.npz). Starting from the 20,000 weights would mean a fresh Adam state and a
+  replay without the last 2,000 steps: proposed against.
+- Cost on this CPU (4 threads, measured): world-model step 0.24 s in the run (0.29 s in an isolated benchmark); the
+  kernel measurement 6.2 min (K = 1,358). N = 10,000: about 45 min; **N = 20,000 (proposed): about 1.5 h**, plus the
+  measurement. Minibatches from the diagnostic's own stream; the run directory only read.
+- Noisy pairs at the start (reported alongside): controllable noisy zone, 125 pairs, visits median 16 (10-90 %: 3-76),
+  L1(world model, P) median 0.61; uncontrollable noisy zone, 125 pairs, visits median 5 (1-17), L1 median 0.97.
+  Memorisation reference: the empirical successor frequencies of those visits have L1 0.20 to P (median, both zones)
+  -- P puts 0.9 on one successor and 0.025 on each of four, so a pair whose few samples all fell on the main successor
+  scores exactly 0.2. A kernel approaching 0.2 by collapsing onto the main successor (mass on the four minor successors
+  -> 0 instead of 0.1) would be memorising: the mass on the minor successors is reported with the L1.
+
+### Forecast for the closed-loop pilot (item 3; an estimate, not a decision)
+
+Assumptions: behaviour = the uniform policy (the agent without value information, with the absolute tie tolerance of
+(12)); 2 gradient steps per environment step, as agent_mini; the mass-versus-visits curve of (12) holds at any run
+length (data-limited -- if the gradients-vs-data diagnostic says gradient-limited, this is pessimistic); the critic
+and goal head follow once the prior predicts the goal (their own delay not modelled).
+- Visits under the uniform policy (exact, from P: uniform starts over the non-terminal states, H = 36, goal absorbing,
+  E[length] 34.97): each of the four goal pairs gets 3.1e-4 to 3.5e-4 visits per environment step, ~6.5 per 20,000
+  steps (agent_mini's 2-8 visits agree).
+- Mass versus visits ((12), median per visit class, 18,000 / 20,000): n 6-7: 0.49 / 0.50; 8-9: 0.60 / 0.54; 10-12:
+  0.66 / 0.72; 13-15: 0.82 / 0.74; 16-20: 0.86 / 0.82; 21-25: 0.86 / 0.92; 31-40: 0.93 / 0.92; 41-60: 0.94 / 0.94.
+- Goal pairs at n ~ 9 (mass ~0.5) after **~27,000** environment steps; at n ~ 20 (mass ~0.8-0.9) after **~60,000**;
+  at n ~ 30 after ~90,000. For the information to reach states far from the goal, the pairs along the paths matter
+  too: 90 % of the deterministic pairs reach n = 20 after ~94,000 steps and n = 30 after ~140,000.
+- **Estimate: no improvement beyond the uniform policy before ~60,000 environment steps (near the goal); a general one
+  around 100,000-150,000** (200,000-300,000 gradient steps). The goal pairs being at percentile rank 0 of their class,
+  the goal may need more visits than the median pair: the estimate is optimistic on that side.
+
+### Costs for the budget (measured on this CPU, 4 threads; agent_mini's configuration)
+
+- Gradient step: world model 0.24 s + agent heads 0.25 s (run log: 0.48 s per environment step before the switch, 2
+  world-model steps; 0.98 s after it); isolated benchmark 0.29 s + 0.31 s.
+- Environment step (filter, one-step lookahead with K = 16 draws per action, epsilon-greedy): 0.006 s.
+- Checkpoint measurements (twin B, agent Delta): negligible (< 2 s each in the run log).
+- Final measurements: 15 min 16 s for a 20,000-step replay (file times of the run), of which the kernel 6.2 min; the
+  replay-wide probes grow with the replay.
+- 10^6 environment steps = 2 x 10^6 gradient steps: about 2 x 10^6 x 0.49 s = **~11 days per run on this CPU**, plus
+  ~1.7 h of environment steps. The GPU throughput for this batch shape (8 x 16 windows, the bench network) is not
+  measured; the preflight's bench would give it.
+
+### Measurement code of the batch gpu_e30b_measures (item 4)
+
+origin/main is at e0889bd (the batch commit); its RUN_GPU.md states the hash 99efffaf... / 261 files, which is that
+commit's own tree (recomputed from `git archive e0889bd`). Since e0889bd, no file read by recompute_measures.py has
+changed (its import closure: run_mini, probe, env, rng_streams, the src modules measures/*, kernel_probe, controllability,
+agents/worldmodel/{rssm, loop, replay, losses, agent, acceleration}, envs/*, runs, config): the commits since touch
+heads.py, policy.py, run_agent.py, agent_mini.yaml, the diagnostic scripts, docs and tests. The batch launched from
+origin/main measures with the same code as this branch. The branch's RUN_GPU.md carries the branch's own hash (it
+changes with every code commit); whichever tree main holds at launch, the preflight checks its RUN_GPU.md against it.

@@ -196,11 +196,58 @@ def goal_appearance(rssm, world, cfg, ctx, episodes, gen) -> dict:
             "prior_draws_of_goal_pairs": prior}
 
 
+def percentile_ranks(p_hat, N, P, goal) -> list[dict]:
+    """For each pair into the goal: the percentile rank of its mass on its right successor (the goal) among the
+    deterministic pairs off the goal with the same number of visits n (ties count half). Descriptive only
+    (docs/e3/DECISIONS.md, 2026-10-02 (13)); it does not enter the reading rule."""
+    s, a, succ = deterministic_pairs(P, goal)
+    n_all = N[s, a].sum(-1)
+    mass = p_hat[s, a, succ]
+    out = []
+    for gs, ga in zip(*goal_pairs(P, goal)):
+        n, m = int(N[gs, ga].sum()), float(p_hat[gs, ga, goal])
+        peers = mass[(n_all == n) & np.isfinite(mass)]
+        rank = float(((peers < m).sum() + 0.5 * (peers == m).sum()) / peers.size * 100) if peers.size else float("nan")
+        out.append({"s": int(gs), "a": int(ga), "n": n, "mass_on_goal": m, "peers_same_n": int(peers.size), "percentile_rank": rank,
+                    "peers_median": float(np.median(peers)) if peers.size else float("nan"),
+                    "peers_with_mass_below_0.01": int((peers < 0.01).sum())})
+    return out
+
+
+def ranks_main(run_dir: Path, out: Path) -> dict:
+    """The percentile ranks at both weight sets: 18,000 recomputes the kernel exactly as main() did (same weights,
+    replay, settings and seeds) and saves it (kernel_18000.npz: the baseline of the gradients-vs-data diagnostic);
+    20,000 uses the final measures (arrays.npz)."""
+    d = diag.load(run_dir)
+    cfg, acfg, world = d["cfg"], d["acfg"], d["world"]
+    P, goal = world.env.transition_tensor(), e3_env.goal_state()
+    resume = torch.load(run_dir / "checkpoints" / "resume.pt", map_location="cpu", weights_only=False)
+    replay = pickle.loads(resume["replay"])
+    rssm, _, _ = diag.models(cfg, acfg, resume)
+    _, kernel = kernel_at_resume_point(rssm, world, replay, cfg, np.random.default_rng(SEED), torch.Generator().manual_seed(SEED))
+    out.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(out / "kernel_18000.npz", p_hat=kernel["p_hat"], ghost_fraction=kernel["ghost_fraction"], N=resume["collector"]["N"])
+    arrays = np.load(run_dir / "arrays.npz")
+    return {"18000": percentile_ranks(kernel["p_hat"], resume["collector"]["N"], P, goal),
+            "20000": percentile_ranks(arrays["real_p_hat"], arrays["N"], P, goal),
+            "check_rule_median_18000": rule(kernel["p_hat"], kernel["ghost_fraction"], resume["collector"]["N"], P, goal)["median_mass_right_successor_n2_8"]}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("run_dir", type=Path)
     parser.add_argument("--out", type=Path, default=None)
+    parser.add_argument("--ranks", action="store_true", help="only the goal pairs' percentile ranks (and the 18,000 kernel saved)")
     args = parser.parse_args(argv)
+    if args.ranks:
+        out = args.out or run_mini.REPO_ROOT / "reports" / f"diagnostics_wm_goal_ranks_{args.run_dir.name}"
+        if out.exists() and any(out.iterdir()):
+            parser.error(f"{out} already holds files")
+        torch.set_num_threads(4)
+        res = ranks_main(args.run_dir, out)
+        (out / "ranks.json").write_text(json.dumps(run_mini._jsonable(res), indent=1), encoding="utf-8")
+        print(json.dumps(run_mini._jsonable(res), indent=1))
+        return 0
     out = args.out or run_mini.REPO_ROOT / "reports" / f"diagnostics_wm_goal_{args.run_dir.name}"
     if out.exists() and any(out.iterdir()):
         parser.error(f"{out} already holds files")
