@@ -1,5 +1,7 @@
 # E3 — World model validation, 4 zones
 
+**Status (2026-10-01, later): agent_mini (closed loop, CPU) recorded as FAILED (shapes 3 and 4 contradicted); read-only diagnostics: the goal head separates perfectly, the world model's prior never predicts the goal, so r_hat = -1 everywhere and the policy follows critic noise. Closed-loop GPU pilot suspended; options pending.** Details: `docs/e3/DECISIONS.md`, 2026-10-01 (11).
+
 **Status (2026-10-01): measurement batch gpu_e30b_measures ready, not launched** -- the four win64 runs of gpu_e30b measured again on the A100 from their own weights (no training), for I_s projected and the reading rule's thresholds (`tau_gpu_e30b.py`); reading rule by zone type and one execution mode per campaign decided; agent_mini (closed loop, CPU) run, analysis deferred. Details: `docs/e3/DECISIONS.md`, 2026-09-30 (9) and 2026-10-01 (10); instructions: `experiments/E3_worldmodel_4zones/RUN_GPU.md`.
 
 **Status (2026-09-30, decisions after gpu_e30b): window shape 16 x 64 retained; C-b kept, hybrid-codes test ready (`hybrid_codes_check.py`, waiting for three runs' weights); off-support mass and projected I_s added to the measures; Phase 5 started on the CPU (agent heads, policy, imagination, closed loop with twin B: `run_agent.py`, `configs/e3/agent_mini.yaml`), first version tested, no full run yet.** Details: `docs/e3/DECISIONS.md`, 2026-09-30 (5).

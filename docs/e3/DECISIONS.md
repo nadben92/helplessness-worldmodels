@@ -2726,3 +2726,68 @@ B_BY_ZONE.md, thresholds.json); it refuses an output directory that already hold
 3. the two seeds are of different block classes (A and B), so the spread mixes seed and class effects.
 None of this changes the definition; the script applies it as fixed. Whether the gpu_e30b verdict is reported as a
 test or as a description is the user's decision.
+
+## 2026-10-01 (11) -- agent_mini recorded as FAILED; read-only diagnostics; closed-loop GPU pilot suspended
+
+### Status (user decision)
+
+The bench run `results/E3_worldmodel_4zones/grid12x12__4zones__pair-experimental__worldmodel-agent-agent_mini__seed00__20260930T193212Z`
+(configs/e3/agent_mini.yaml, seed 0, experimental, 20,000 environment steps, finished, 18,383 s on the CPU) is recorded
+as **failed**: expected shapes 3 and 4 of (7) are contradicted (shapes 1, 2 and 5 hold). The run directory is kept as
+it is: not overwritten, not relaunched. The closed-loop GPU pilot is suspended.
+
+### Diagnostics (read-only; `experiments/E3_worldmodel_4zones/diagnose_agent_run.py`, output in
+`reports/diagnostics_<run directory name>/diagnostics.json`)
+
+Only two weight sets exist (the resume point, environment step 18,000, and the end, 20,000): run_agent.py saves no
+weights at the checkpoints. Held-out frames: 4,000 fresh episodes of the uniform policy (own seeds; 175 reach the goal).
+
+a. **Goal frames.** 4 goal observations in the replay at the switch (environment step 2,382), 13 of 18,510 stored at
+   18,000 (0.07 %). A training batch (8 x 16 = 128 frames) holds 0.21 positives on average at the switch, 0.09 at
+   18,000; **81 % to 91 % of batches hold none**. The goal head saw at most about 3,200 positive frames over ~31,000
+   updates. Cumulative successes: 4 by 2,512, 13 by 18,000 (510 episodes), 20 by 20,000 (568 episodes).
+b. **The goal head separates perfectly and is calibrated**, at both weight sets, on the replay and on the held-out
+   frames: AUC 1.000; p_goal on positives = 1.00 (5 % quantile 1.00), on negatives 0.00 (95 % quantile 0.00); mean
+   p_goal over all frames = the true frequency of positives (0.0007 vs 0.0007 on the replay, 0.0012 vs 0.0012 held
+   out). The recall logged in checkpoints.jsonl is computed on ONE batch with 0/max(1, n_pos): a batch without positive
+   (81-91 % of them) logs 0. Shape 3's "goal_recall rises toward 1" was therefore not a valid test of the head.
+c. **The break is upstream of the head: the world model's prior never predicts the goal.** For the four
+   (state, action) pairs that lead deterministically into the goal (visited 2 to 8 times), the decoded kernel gives the
+   goal a probability of 0.000 to 0.001 (its prediction is diffuse elsewhere, max 0.10-0.36). On the frames one step
+   from the goal, p_goal of the imagined next state for the action into the goal is ~1e-11 (median), and the argmax
+   picks that action in 10 % of them (chance 20 %). Hence r_hat = -1.0000 for every imagined step, and the critic has
+   learnt V = -10.01 (5-95 %: -10.05 to -9.98) everywhere = -1/(1 - gamma): the value of never reaching the goal. Its
+   ranking of states is unrelated to V* (Spearman -0.08 at 18,000, +0.14 at 20,000).
+   **Policy.** The Q gap between the best and the second action is 0.005-0.007 (median), entirely from gamma c V
+   (spread over actions 0.024-0.027; r_hat's spread is 0), i.e. the critic's residual noise around -10. The tie
+   tolerance, relative (1 % of the std of Q over the actions), is ~1e-4: the gap is 60-75 times the tolerance (median),
+   so ties vanish (0.8 % of frames) **without any information** -- this is the fall of the tie fraction from 1.0 to
+   0.13. The argmax is neither constant nor cyclic in itself: all five actions win somewhere, a state's argmax agrees
+   across its contexts in 74 % of reads (context-dependent in the rest), and it is an optimal action under P in 41-46 %
+   of frames against 41 % for a uniform choice. Played actions become skewed (after 10,000: 0.23 / 0.23 / 0.13 / 0.30 /
+   0.12; repeating the previous action 27 % vs 20 % before the switch). Unlike E2's tabular agent, whose Q ties exactly
+   where it has no information (uniform tie-break), this agent turns the absence of information into an arbitrary
+   deterministic preference.
+d. **Success after the switch, pooled**: from the checkpoint records (2,512 to 20,000) 16 / 496 = 0.032, Wilson 95 %
+   [0.020, 0.052], exact two-sided binomial p = 0.16 against the uniform rate 0.0459; from the replay (2,512 to 18,000)
+   9 / 437 = 0.021 [0.011, 0.039], p = 0.008. Observed afterwards, not tested before: the last 2,000 steps hold 7 / 58
+   successes (0.12); a window chosen after seeing the curve, not a result.
+e. **Shape 5 holds**: the twin's L1 to P decreases at every checkpoint in all four zones (UD 1.27 -> 0.52, CN 0.76 ->
+   0.19, UN 1.03 -> 0.31, CD 0.83 -> 0.17); Delta >= 0 everywhere; b at 20,000: UD -1.03, UN -1.06, CN +0.01, CD 0.00.
+
+### Options raised to the user (nothing implemented: each changes what the agent believes or does)
+
+1. Tie tolerance: absolute, or tied to the estimation noise of Q (e.g. its Monte Carlo standard error over the K draws,
+   or a fixed fraction of |goal_reward|), instead of 1 % of the spread of Q. No effect on p_goal. Restores E2's
+   behaviour when the value information is absent (exact-tie analogue -> uniform tie-break); the threshold is a
+   choice that also sets when real but small preferences are ignored.
+2. Goal head: positive weighting of the BCE, or balanced batches for the head only. The head is not the bottleneck
+   (AUC 1, calibrated); a weight w inflates p_goal's odds by w, so r_hat and c would have to be corrected (odds / w)
+   to stay calibrated. Little expected effect.
+3. Replay sampling for the world model: over-sample windows that contain a goal arrival, so the prior learns the
+   transitions into the goal (the actual break). Changes the world model's data distribution: its predicted kernel
+   near the goal (and p_goal's base rate seen by the head) is biased toward the goal unless importance-corrected; it
+   departs from E2's twin, which counts every transition once.
+4. Data: the goal observation is rare because the agent rarely gets there (and E3-0's replay never stored it).
+   Seeding the world model with goal arrivals (e.g. prefill under the uniform policy for longer) changes the protocol
+   of section 4.5 (minimal prefill).
