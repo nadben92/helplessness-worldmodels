@@ -77,11 +77,26 @@ def test_q_is_the_mean_over_the_prior_draws_of_r_plus_discounted_value():
     assert torch.allclose(h_next[:, 2], rssm.gru_step(h, z, a2), atol=1e-6)
 
 
-def test_tie_tolerance_is_relative_with_a_floor():
-    Q = torch.tensor([[0.0, 0.0, 0.0, 0.0, 1.0], [2.0, 2.0, 2.0, 2.0, 2.0], [1.0, 0.999, 0.0, 0.0, 0.5]])
-    tol = policy.tie_tolerance(Q, CFG)
-    assert tol[0] == pytest.approx(0.01 * 0.4) and tol[1] == pytest.approx(1e-6)  # std 0: the floor
+def test_tie_tolerance_is_absolute_from_the_horizon():
+    """docs/e3/DECISIONS.md, 2026-10-01 (12): half the smallest Q gap of information at H = 36 (6 x 0.9^35)."""
+    assert heads.horizon_information_gap(0.9, 50.0, -1.0, 36) == pytest.approx(6 * 0.9 ** 35)
+    assert CFG.tie_tol_abs == pytest.approx(0.5 * 6 * 0.9 ** 35) and CFG.tie_tol_rel is None
+    Q = torch.tensor([[0.0, 0.05, 0.01, 0.07, 0.0], [0.0, 0.0, 0.0, 0.0, 0.2], [100.0, 100.07, 99.9, 50.0, 0.0]])
+    assert torch.allclose(policy.tie_tolerance(Q, CFG), torch.full((3,), 0.5 * 6 * 0.9 ** 35))  # the same for every row
     ties = policy.tie_set(Q, CFG)
+    assert ties[0].all() and ties[1].tolist() == [False] * 4 + [True] and ties[2].tolist() == [True, True, False, False, False]
+    with pytest.raises(ValueError, match="choose one"):
+        AgentConfig(tie_tol_abs=0.1, tie_tol_rel=0.01)
+
+
+def test_legacy_relative_tie_tolerance_reads_old_runs():
+    legacy = AgentConfig(k_act=6, k_imag=3, horizon=4, tie_tol_rel=0.01)
+    assert legacy.tie_tol_abs is None
+    Q = torch.tensor([[0.0, 0.0, 0.0, 0.0, 1.0], [2.0, 2.0, 2.0, 2.0, 2.0], [1.0, 0.999, 0.0, 0.0, 0.5]])
+    CFG_ = legacy
+    tol = policy.tie_tolerance(Q, CFG_)
+    assert tol[0] == pytest.approx(0.01 * 0.4) and tol[1] == pytest.approx(1e-6)  # std 0: the floor
+    ties = policy.tie_set(Q, CFG_)
     assert ties[0].tolist() == [False, False, False, False, True] and ties[1].all()
     assert ties[2].tolist() == [True, True, False, False, False]  # 0.999 is within 0.01 * std of the max
 

@@ -135,6 +135,11 @@ def test_closed_loop_run_outputs_and_twin(tmp_path):
     assert counts["N_300"].sum() == 300 and counts["N_100"].sum() == 100
     state = torch.load(run_dir / "checkpoints" / "agent_final.pt", weights_only=False)
     assert {"rssm", "goal_head", "critic", "slow_critic"} <= set(state)
+    # the weights at every checkpoint (2026-10-01 (12)); the last one is the final state
+    saved = [torch.load(run_dir / "checkpoints" / f"agent_env{e:06d}.pt", weights_only=False) for e in (100, 200, 300)]
+    assert [w["env_step"] for w in saved] == [100, 200, 300]
+    assert all(torch.equal(saved[-1]["rssm"][k], state["rssm"][k]) for k in state["rssm"])
+    assert not all(torch.equal(saved[0]["rssm"][k], state["rssm"][k]) for k in state["rssm"])
     rows = (run_dir / "metrics.csv").read_text(encoding="utf-8").strip().splitlines()
     assert len(rows) == 1 + 3 * 4
     assert [json.loads(line)["env_step"] for line in (run_dir / "checkpoints.jsonl").read_text().splitlines()] == [100, 200, 300]

@@ -2814,3 +2814,89 @@ Rule: over the pairs with 2 <= n <= 8, the **median** mass on the right successo
 Applied at each of the two weight sets (environment steps 18,000 and 20,000), each with its own replay and counts
 (18,000: the replay and counts of the resume point; 20,000: the run's final measures, arrays.npz). A verdict holds
 only if both weight sets give it; otherwise undetermined.
+
+### Diagnostics of the world model around the goal (computed after the rule above was committed)
+
+`experiments/E3_worldmodel_4zones/diagnose_world_model_goal.py`, output in
+`reports/diagnostics_wm_goal_<run directory name>/diagnostics.json`; kernels with the run's own settings (K = 1,358
+draws per pair, ghost margin 0.001). 461 deterministic pairs off the goal, all measured.
+
+a. **Verdict of the rule: general insufficiency of the prior in rarely visited contexts**, at both weight sets.
+   Median mass on the right successor over the pairs with 2 <= n <= 8: **0.284** at 18,000 (170 pairs) and **0.325**
+   at 20,000 (final measures, 158 pairs) -- both <= 0.5; median mass on the goal of the four goal pairs: 0.000 at
+   both. The mass rises with the visits (median of the per-n medians): n 0-1: 0.11 / 0.12 (63 / 59 pairs); 2-8: 0.30 /
+   0.32; 9-20: 0.81 / 0.79 (100 / 99); 21-50: 0.94 / 0.93 (66 / 73); 51-100: 0.97 / 0.97 (33 / 41); > 100: 0.99 /
+   0.99 (29 / 31). Ghosts take 1 to 4 % of the draws (raw masses within 0.02 of the renormalised ones). The four goal
+   pairs (n = 3, 7, 1 -> 8, 2) sit where any pair with so few visits sits; they are not singled out.
+b. The four goal pairs: mass on the goal 0.000 to 0.001 at both weight sets (their argmax: other states, 0.10 to
+   0.38). p_goal on latents drawn from the PRIOR at their real contexts (512 draws per context): mean 1e-10 to 0.004,
+   at most 0.3 % of the draws above 0.5 -- the head recognises the goal in the rare draws that hold its code, and the
+   prior almost never draws it. Pair (12, 0) went from 1 visit at 18,000 to 8 at 20,000 (the late successes) with no
+   change of its mass on the goal.
+c. Dynamic KL (posterior vs prior, bits, per frame): goal frames median 28.1 / 29.6 (13 frames; 5-95 %: 21-44);
+   other frames median 0.42 / 0.35 (mean 2.0 / 1.8; 95 %: 8.9 / 8.4). The goal frame is the most surprising frame of
+   the replay for the prior: it is in the loss (d) with a large error, and is seen 13 times.
+d. Code read and test (`tests/e3/test_e3_terminal_frame_loss.py`): the collector stores the pre-goal observation with
+   the action taken from it and the goal's observation after it (terminal, not is_first, action 0, reward 50); the
+   training sampler draws windows over every stored step; the unroll feeds the GRU step into frame t with the action
+   stored at t - 1; the loss averages the dynamic and representation KL over every step of the window, with no
+   terminal mask. Tested on a synthetic episode ending at the goal: the goal step's KL enters the dynamic term with
+   weight 1 / (B T), changing only the goal's image changes that term and its gradient on the prior network, and the
+   GRU step into the goal receives the action that led there. **No bug found.**
+e. The templates cover the goal: the observation is the goal's template by construction (table mode raises
+   otherwise); the goal's template is the most distinctive of the 144 (squared-L2 distance to its nearest other
+   template 11.7, against 2.6 median for the others); the decoded posterior of the 13 goal frames matches the goal
+   template 13 / 13, no ghost; the decoded prior draws at the four goal pairs match the goal 0 %, are ghosts 0.4 to
+   7 %, and sit as far from the goal's template as any other state (median distance 10.6 to 11.7). No
+   under-estimation of the goal by ghost classification.
+
+**Reading (implementer, for the user):** the prior's failure on the goal is the general failure of the prior on
+transitions seen fewer than ~9 times, not something specific to the goal; the goal's transitions are among the
+rarest, and the goal frame the most distinctive image, so the prior never puts mass there. Nothing is changed on this
+basis (options 2-4 of (11) stay unimplemented).
+
+### Tie-break: absolute tolerance from the protocol (user decision, implemented)
+
+**Deviation from the spec (section 4.3 as amended in Phase 0: a relative tolerance, max(1e-6, 0.01 x std of Q over
+the actions)), decided after seeing agent_mini.** Reason: with a relative tolerance, any non-zero spread of Q sets
+its own threshold at 1 % of itself, so differences of the order of the critic's noise become strict preferences: in
+agent_mini, where the agent had no value information (r_hat = -1 everywhere), the ties fell from 1 to 0.13 and the
+policy became an arbitrary deterministic one, whereas E2's tabular agent ties exactly when it has no information and
+then plays uniformly.
+
+Required form: no value information (r_hat constant across actions, Q gaps of the order of the critic's noise) ->
+uniform policy, as E2; the tolerance is absolute, in units of value, derived from the protocol (not from agent_mini's
+gaps), proportional to the smallest Q gap that information at the truncation horizon produces.
+
+Formula (heads.horizon_information_gap, heads.AgentConfig): a state d steps from the goal along a deterministic path
+has V(d) = r_step (1 - gamma^(d-1)) / (1 - gamma) + gamma^(d-1) r_goal (E2: r_goal on the arriving step instead of the
+step cost, goal absorbing). The smallest Q gap an informative action makes -- one step closer against an action that
+leaves the distance unchanged -- in the one-step lookahead Q = r_hat + gamma c V is
+
+    delta(d) = gamma (V(d-1) - V(d)) = ((1 - gamma) r_goal - r_step) gamma^(d-1);
+    delta(36) = 6 x 0.9^35 = 0.1502;     tol = 0.5 x delta(H = 36) = **0.0751**.
+
+The factor 0.5 keeps information at the horizon at twice the tolerance. `agent.tie_fraction: 0.5` in agent_mini.yaml
+(replaces tie_tol_rel); the episode values (gamma, rewards, H = max_steps) come from the experiment's episode config.
+The relative rule stays only to read the runs made with it (AgentConfig.tie_tol_rel, legacy).
+
+Shape tests (`tests/agents/worldmodel/test_tie_break_shapes.py`, through the agent's own q_values with K = 16 draws
+and act with epsilon 0.1; stub world model and heads):
+(i) r_hat constant, V = constant + Gaussian noise of sd sigma on every evaluated latent, sigma = 0.005, 0.01, 0.02,
+    0.03, 0.05: ties >= 99 % (observed 100 %) and actions uniform (chi-square, p > 0.001) -- passed;
+(ii) a goal 20 steps away (gap 0.81), then 36 (gap 0.150), between the action one step closer and four that leave
+    the distance unchanged, with and without noise sigma = 0.05: every greedy step picks the informative action,
+    never as a tie -- passed.
+Limit, stated: the noise in (i) is drawn per evaluated latent, so Q averages it over the K = 16 draws (sd 0.9 sigma /
+4). Noise shared by the K draws of an action (a critic error that depends on h'_a only) is not averaged: then ties
+are 99.7 % at sigma = 0.03 and 93.7 % at sigma = 0.05 (all five actions tied 72 % and 24 %). No absolute tolerance
+can satisfy (i) for shared noise of sd 0.05 (it would need ~0.21) and (ii) at 36 steps (0.150) at once. In agent_mini
+the spread of gamma c V over the actions was 0.024-0.027 (median), below the tolerance.
+
+No agent run was made with the new tolerance.
+
+### Weights at every checkpoint (engineering)
+
+`run_agent.py` writes `checkpoints/agent_env<NNNNNN>.pt` (the same fields as agent_final.pt) at every checkpoint,
+atomically; nothing is drawn. Checked: a tiny run with the previous run_agent.py and with this one (same legacy tie
+rule) gives identical checkpoints.jsonl and final weights.

@@ -37,9 +37,34 @@ class AgentConfig:
     horizon: int = 15  # imagined steps (4.4)
     lam: float = 0.95  # lambda-returns (4.4)
     slow_tau: float = 0.02  # EMA of the slow critic (4.2)
-    tie_tol_rel: float = 0.01  # tie-break tolerance, relative: max(tie_tol_min, tie_tol_rel * std(Q)) (4.3, amended)
+    # Tie-break tolerance (4.3, amended twice; docs/e3/DECISIONS.md 2026-10-01 (12)): ABSOLUTE, in units of value,
+    # tie_fraction x the smallest Q gap that information at the episode horizon produces
+    # (horizon_information_gap); computed from gamma, the rewards and episode_horizon unless tie_tol_abs is given.
+    tie_fraction: float = 0.5
+    episode_horizon: int = 36  # E2's H (max_steps)
+    tie_tol_abs: float | None = None
+    tie_tol_rel: float | None = None  # LEGACY (runs before 2026-10-01 (12)): max(tie_tol_min, tie_tol_rel * std(Q)); read-only
     tie_tol_min: float = 1e-6
     hidden_dim: int = 128
+
+    def __post_init__(self):
+        if self.tie_tol_abs is None and self.tie_tol_rel is None:
+            object.__setattr__(self, "tie_tol_abs", self.tie_fraction * horizon_information_gap(
+                self.gamma, self.goal_reward, self.step_reward, self.episode_horizon))
+        if self.tie_tol_abs is not None and self.tie_tol_rel is not None:
+            raise ValueError("AgentConfig: an absolute tie tolerance and a legacy relative one; choose one")
+
+
+def horizon_information_gap(gamma: float, goal_reward: float, step_reward: float, horizon: int) -> float:
+    """The smallest Q gap that information at `horizon` steps produces (docs/e3/DECISIONS.md, 2026-10-01 (12)).
+    E2's episode: step_reward per step, goal_reward on the step that reaches the goal (instead of the step cost), the
+    goal absorbing. A state d steps from the goal along a deterministic path has
+        V(d) = step_reward (1 - gamma^(d-1)) / (1 - gamma) + gamma^(d-1) goal_reward,
+    and the one-step lookahead's Q gap between an action that brings it one step closer and one that leaves the
+    distance unchanged (the smallest gap an informative action makes) is
+        gamma (V(d-1) - V(d)) = ((1 - gamma) goal_reward - step_reward) gamma^(d-1).
+    With gamma 0.9, rewards 50 / -1 and d = 36: 6 x 0.9^35 = 0.1502."""
+    return ((1.0 - gamma) * goal_reward - step_reward) * gamma ** (horizon - 1)
 
 
 def _head_mlp(in_dim: int, hidden_dim: int, zero_init: bool) -> nn.Sequential:

@@ -50,7 +50,8 @@ Usage, from the repo root:
     python experiments/E3_worldmodel_4zones/run_agent.py --resume results/E3_worldmodel_4zones/<run directory>
 Outputs: results/E3_worldmodel_4zones/<run name>/ with config.yaml, meta.yaml, console.log, metrics.csv (one row per
 checkpoint and zone), checkpoints.jsonl, results.json, arrays.npz (the final measures), counts.npz (N at every
-checkpoint), checkpoints/agent_final.pt and checkpoints/resume.pt.
+checkpoint), checkpoints/agent_env<NNNNNN>.pt (the weights at every checkpoint), checkpoints/agent_final.pt and
+checkpoints/resume.pt.
 """
 
 from __future__ import annotations
@@ -94,7 +95,9 @@ e3_probe = load_experiment_module("E3_worldmodel_4zones", "probe.py", "run_agent
 e2_twin = load_experiment_module("E2_online_4zones", "twin.py", "run_agent_e2_twin")
 
 DEFAULT_CONFIG = run_mini.REPO_ROOT / "configs" / "e3" / "agent_mini.yaml"
-AGENT_KEYS = ("epsilon", "k_act", "k_imag", "horizon", "lam", "slow_tau", "tie_tol_rel", "tie_tol_min", "hidden_dim")
+AGENT_KEYS = ("epsilon", "k_act", "k_imag", "horizon", "lam", "slow_tau", "tie_tol_min", "hidden_dim")
+# tie_fraction (absolute tolerance, 2026-10-01 (12)) or, in configs made before it, tie_tol_rel (legacy, to read old runs)
+OPTIONAL_AGENT_KEYS = ("tie_fraction", "tie_tol_rel")
 TWIN_KEYS = ("I_hat", "I_ref", "b", "delta")
 SLOT_AGENT_DELTA = 14  # measurement slot of the agent's Delta (run_mini 1-4, 6-9, 11, 12; action_in_latent 10; hybrid codes 13)
 NUMPY_STREAMS = ("explore", "tiebreak", "start_state", "replay_sample", "switch_pairs")
@@ -105,10 +108,11 @@ class Interrupted(RuntimeError):
 
 
 def agent_config(cfg: dict) -> AgentConfig:
-    """The run config's agent block with E2's episode values (gamma, rewards)."""
+    """The run config's agent block with E2's episode values (gamma, rewards, H = max_steps for the tie tolerance)."""
     episode = run_mini.load_episode_config()
     return AgentConfig(gamma=episode["gamma"], goal_reward=episode["goal_reward"], step_reward=episode["step_reward"],
-                       **{key: cfg["agent"][key] for key in AGENT_KEYS})
+                       episode_horizon=episode["max_steps"], **{key: cfg["agent"][key] for key in AGENT_KEYS},
+                       **{key: cfg["agent"][key] for key in OPTIONAL_AGENT_KEYS if key in cfg["agent"]})
 
 
 def checkpoint_env_steps(cfg: dict, n_env_steps: int) -> list[int]:
@@ -244,6 +248,11 @@ def run_one(cfg: dict, seed: int, condition: str, run_dir: Path, device: torch.d
     progress = {"env_step": 0, "grad_step": 0, "credit": 0.0, "last_stat": float("nan"), "rep_warmup": None, "last": {},
                 "records": [], "counts": {}, "seconds": 0.0}
 
+    def agent_state() -> dict:
+        return {"rssm": rssm.state_dict(), "rssm_config": dataclasses.asdict(rssm.cfg), "goal_head": goal_head.state_dict(),
+                "critic": critic.state_dict(), "slow_critic": slow_critic.state_dict(), "agent_config": dataclasses.asdict(acfg),
+                "env_step": progress["env_step"], "step": progress["grad_step"], "switch_step": switch.switch_step}
+
     def save_resume() -> None:
         state = {
             "progress": progress, "rssm": rssm.state_dict(), "goal_head": goal_head.state_dict(), "critic": critic.state_dict(),
@@ -354,6 +363,8 @@ def run_one(cfg: dict, seed: int, condition: str, run_dir: Path, device: torch.d
                                                                device)}
             progress["records"].append(record)
             progress["counts"][f"N_{env_step}"] = collector.N.copy()
+            # the weights at every checkpoint (docs/e3/DECISIONS.md, 2026-10-01 (12)): written, nothing drawn
+            run_mini._atomic_torch_save(agent_state(), run_dir / "checkpoints" / f"agent_env{env_step:06d}.pt")
             with open(run_dir / "checkpoints.jsonl", "a", encoding="utf-8") as f:
                 f.write(json.dumps(run_mini._jsonable(record)) + "\n")
         if env_step < n_env_steps and (env_step in checkpoints or (resume_every and env_step % resume_every == 0)):
@@ -364,10 +375,7 @@ def run_one(cfg: dict, seed: int, condition: str, run_dir: Path, device: torch.d
 
     progress["seconds"] = time.perf_counter() - t0
     records, counts = progress["records"], progress["counts"]
-    torch.save({"rssm": rssm.state_dict(), "rssm_config": dataclasses.asdict(rssm.cfg), "goal_head": goal_head.state_dict(),
-                "critic": critic.state_dict(), "slow_critic": slow_critic.state_dict(), "agent_config": dataclasses.asdict(acfg),
-                "env_step": n_env_steps, "step": progress["grad_step"], "switch_step": switch.switch_step},
-               run_dir / "checkpoints" / "agent_final.pt")
+    torch.save(agent_state(), run_dir / "checkpoints" / "agent_final.pt")
     np.savez_compressed(run_dir / "counts.npz", **counts)
     with open(run_dir / "metrics.csv", "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)

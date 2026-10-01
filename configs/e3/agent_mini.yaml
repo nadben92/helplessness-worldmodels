@@ -91,7 +91,8 @@ agent:
   horizon: 15              # imagined steps (4.4)
   lam: 0.95                # lambda-returns (4.4)
   slow_tau: 0.02           # EMA of the slow critic (4.2)
-  tie_tol_rel: 0.01        # tie-break tolerance max(tie_tol_min, tie_tol_rel * std(Q)) (4.3, amended: relative)
+  tie_fraction: 0.5        # tie-break tolerance, ABSOLUTE: 0.5 x the smallest Q gap of information at H = 36 steps
+                           # = 0.5 x 6 x 0.9^35 = 0.0751 (heads.horizon_information_gap; DECISIONS 2026-10-01 (12))
   tie_tol_min: 1.0e-6
   hidden_dim: 128          # width of the two heads' MLPs (not given by the spec)
   critic_lr: 3.0e-5        # 4.2

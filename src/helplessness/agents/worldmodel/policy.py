@@ -11,8 +11,12 @@ forward pass -- and NEVER the s-space measurement bridge
 
 Action choice: with probability epsilon a uniform action; otherwise the
 argmax with a RANDOM tie-break among the actions with Q >= max Q - tol,
-tol = max(tie_tol_min, tie_tol_rel * std_a Q) (relative tolerance,
-docs/e3/SPEC_STATUS.md section 4.3). The tolerance has one implementation
+tol ABSOLUTE in units of value: half the smallest Q gap that information at
+the episode horizon produces (heads.horizon_information_gap; 0.0751 for E2's
+episode). Q gaps of the order of the critic's noise are ties, so an agent
+without value information plays uniformly, as E2's tabular agent does
+(docs/e3/DECISIONS.md, 2026-10-01 (12); it replaces the relative tolerance
+of 2026-09-30 (5), kept only to read the runs made with it). The tolerance has one implementation
 (tie_tolerance); the pick has two callers' forms: real steps draw from the
 numpy explore / tiebreak streams through evaluation.tiebreak
 .argmax_random_tie (E2's), imagination picks a whole batch on the device
@@ -66,8 +70,10 @@ def q_values(rssm: RSSM, goal_head: GoalHead, critic: Critic, h: torch.Tensor, z
 
 
 def tie_tolerance(Q: torch.Tensor, cfg: AgentConfig) -> torch.Tensor:
-    """(B,) tolerance of each row's tie-break: max(tie_tol_min,
-    tie_tol_rel * std(Q(h, z, .))), the population std over the actions."""
+    """(B,) tolerance of each row's tie-break: max(tie_tol_min, tie_tol_abs), the same for every row; LEGACY
+    configs (tie_tol_rel set, runs before 2026-10-01 (12)): max(tie_tol_min, tie_tol_rel * std(Q(h, z, .)))."""
+    if cfg.tie_tol_abs is not None:
+        return torch.full(Q.shape[:-1], max(cfg.tie_tol_min, cfg.tie_tol_abs), dtype=Q.dtype, device=Q.device)
     return torch.clamp(cfg.tie_tol_rel * Q.std(dim=-1, unbiased=False), min=cfg.tie_tol_min)
 
 

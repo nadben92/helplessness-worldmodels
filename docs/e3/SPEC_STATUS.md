@@ -128,8 +128,10 @@ Last updated: 2026-09-28.
   paired by `aggregate_b.py` with the bias-control reading rule; resume after interruption. *2026-09-30 (7), (8).*
 - Training-step accelerations (torch.compile, stacked seeds): implemented behind options, off by default, timed by the
   preflight's bench; no decision yet. *2026-09-30 (8).*
-- **§4.3:** the tie-break tolerance is **relative**,
-  `tol = max(1e-6, 0.01·std(Q))`. *Phase 0 validation, point 8.*
+- **§4.3:** the tie-break tolerance is **absolute**, in units of value: half the smallest Q gap that information at
+  the episode horizon produces, `tol = 0.5 · ((1 − γ)·50 + 1)·γ^35 = 0.0751` (γ = 0.9, H = 36). It replaces the
+  relative `max(1e-6, 0.01·std(Q))` of Phase 0 (point 8), **decided after agent_mini** (the relative rule turned the
+  critic's noise into strict preferences when the agent had no value information). *2026-10-01 (12).*
 - **§4.5:** E2 had **no burn-in**; E3 has none either. A minimal prefill
   is played under the same policy as the run it precedes and counted in
   the budget. *Phase 0 validation, point 2.*
