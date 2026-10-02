@@ -4,8 +4,8 @@
 nothing.**
 
 What it is: the agent in closed loop (`run_agent.py`), configuration `configs/e3/gpu_pilot_closed_loop.yaml`, seeds 0
-and 5, experimental environment and reference, 300,000 environment steps each, 2 gradient steps per environment step,
-no acceleration. Its purpose and the shapes expected from it are written in `docs/e3/DECISIONS.md` (2026-10-02 (19)).
+and 5, experimental environment and reference, 300,000 environment steps each, the world model trained on 16 windows
+of 64 steps (the configuration retained for E3), 2 updates per environment step, no acceleration. Its purpose and the shapes expected from it are written in `docs/e3/DECISIONS.md` (2026-10-02 (19)).
 The preflight starts with a speed bench (about 30 minutes) whose numbers are informative only. Earlier batches are in
 `RUN_GPU_HISTORY.md`: **do not use it for this batch.**
 
@@ -56,7 +56,7 @@ python -c "import sys; sys.path.insert(0, 'src'); from helplessness.runs import 
 The last command must print exactly:
 
 ```
-{'source_sha256': '67f846112510ab59d4e21a055cddabe0924c15666b6576dca9c3f68e7d9c9fc8', 'source_n_files': 268}
+{'source_sha256': '303bba6b0917a7380566d838b2baaece7109bd74a8319b040ec516f61235f7f1', 'source_n_files': 268}
 ```
 
 If `git pull` fails or the hash differs, stop: do not launch anything, go to step 5 (without training). The
@@ -122,7 +122,7 @@ Check it against `$PRE/runs/preflight_verdict.json`: launch only if `passed` is 
 `cpus.requested` and `cpus.usable` are both 3, and `decision` is the line above. If they disagree, stop (rule 4). The
 speed bench never changes the decision.
 
-## Step 4 -- follow the training (several days)
+## Step 4 -- follow the training (about 4 days or more)
 
 After the training submission, copy its `"output"` path (ending in `logs/kubeflow/train-<date>`):
 

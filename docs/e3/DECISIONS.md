@@ -3258,3 +3258,39 @@ closed-loop run produces more goal frames: **the pilot becomes the test of this 
 5. The twin's L1 falls in all four zones; Delta >= 0.
 6. Final measures: aberration control against configs/e3/e30_aberration_control.yaml; the campaign rule for the bias
    descriptive only (two seeds).
+
+## 2026-10-02 (20) -- the pilot runs the configuration retained for E3 (win64), not agent_mini's (user decision)
+
+Check before the push: configs/e3/gpu_pilot_closed_loop.yaml inherited agent_mini.yaml's training batch. Full diff of
+the world-model and training hyperparameters against configs/e3/gpu_e30b_win64.yaml (model, render and every other
+train key -- learning rates and schedule, latent estimator and switch, losses, clipping -- were already identical):
+
+| key | pilot (as committed in c3a6b99) | gpu_e30b_win64 |
+|---|---|---|
+| train.batch_size | 8 | 16 |
+| train.seq_len | 16 | 64 |
+| train.replay_ratio | 2 (world-model updates per environment step, closed loop) | 0.6 (E3-0, offline) |
+| measure.z_only_seq_len | absent (default 64) | 64 |
+| measure.max_images_per_forward | absent (one-call encoding) | 2048 |
+| budget, collection.epsilon, schedule keys, checkpoints, runtime | closed loop's own | E3-0's own |
+
+Decision: **the pilot runs win64 -- B = 16 windows of T = 64 steps, and what depends on it (the real-context windows,
+window_len null = T = 64; the z-only / h-only probe windows 64; the probes' encoder block 2048)** -- the rest of the
+pilot's protocol of (19) unchanged. The identity test now takes gpu_e30b_win64.yaml as its reference (agent_mini.yaml
+only for the agent, the twin and the logging). No technical constraint: run_agent.py ran with 16 x 64 windows (CPU
+smoke, tiny network).
+
+**Ratio 2 = 2 world-model updates per environment step = 2 x 16 x 64 = 2,048 replayed frames per environment step**
+(agent_mini: 2 x 8 x 16 = 256; E3-0 win64: 0.6 x 1,024 = 614). **The gradients-vs-data diagnostic (17) and the
+forecast of (13) were made in 8 x 16 (256 frames per environment step): they do not transpose as they are** -- eight
+times more replayed frames per environment step here.
+
+Projection (the preflight measures the real figure): world-model step 0.289 s (A100, one process, win64,
+straight-through: gpu_e30b's preflight); the heads' step at this batch is not measured -- assumed equal to the
+world-model step, the environment step negligible: ~2 x (0.289 + 0.289) = 1.16 s per environment step, i.e. **~97 h
+(4 days) for 300,000 environment steps in one process** (48 h if the heads cost nothing). Several processes share the
+GPU: in gpu_e30b, 8 processes cut the per-process rate from 3.46 to 1.01 steps/s; the preflight's 2- and 4-process
+loops give the figure for this batch.
+**100 goal arrivals**: under the uniform policy, 0.0459 successes per episode of 34.97 steps = 1.31e-3 arrivals per
+environment step (agent_mini: 20 by 20,000) -> **~76,000 environment steps, ~25 h in one process** at 1.16 s (12 h
+at the lower bound), more with several processes on the GPU.

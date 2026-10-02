@@ -1,8 +1,9 @@
-# The closed-loop GPU pilot (docs/e3/DECISIONS.md, 2026-10-02 (19)): agent_mini.yaml's network, procedure and agent
-# (absolute tie-break tolerance, weights at every checkpoint, resume, final measures), on the A100, 300,000
-# environment steps, seeds 0 and 5, environment and reference, no acceleration (no runtime.compile, no stacked
-# seeds). Differs from agent_mini.yaml only by the budget, the runtime, the seeds / conditions, the resume interval and
-# the checkpoint goal diagnostics (tested: tests/e3/test_e3_pilot_config.py). Run through RUN_GPU.md.
+# The closed-loop GPU pilot (docs/e3/DECISIONS.md, 2026-10-02 (19), (20)): the configuration retained for E3 --
+# gpu_e30b_win64.yaml's network, rendering, training procedure (16 windows x 64 steps) and measures -- with the agent of
+# agent_mini.yaml (absolute tie-break tolerance, weights at every checkpoint, resume, final measures), on the A100,
+# 300,000 environment steps, 2 world-model updates per environment step, seeds 0 and 5, environment and reference, no
+# acceleration (no runtime.compile, no stacked seeds). Identity with gpu_e30b_win64.yaml tested
+# (tests/e3/test_e3_pilot_config.py). Run through RUN_GPU.md.
 
 model:
   n_vars: 8
@@ -28,8 +29,8 @@ collection:
   start_distribution: uniform_non_terminal   # E2's protocol (spec 4.6)
 
 train:
-  batch_size: 8
-  seq_len: 16
+  batch_size: 16           # win64 (DECISIONS 2026-10-02 (20)): 16 windows x 64 steps = 1,024 frames per update
+  seq_len: 64
   replay_ratio: 2           # pilot: 2 (DECISIONS 2026-10-02 (19): gradients matter (17); 4 doubles the cost with no guarantee)
   # Two-phase learning rate (DECISIONS.md, 2026-09-24): lr until the
   # EFFECTIVE estimator switch (option (i): the probabilities phase does not
@@ -144,6 +145,8 @@ measure:
     kernel_draws_training: 256       # reduced K for the training diagnostics (DECISIONS 2026-09-30): I_s plug-in bias
                                      # <= 0.013 bits, L1 floor 0.046; the final measures use kernel_draws
   diagnostics_at_checkpoints: true
+  z_only_seq_len: 64             # as gpu_e30b_win64.yaml (the z-only / h-only probes' windows)
+  max_images_per_forward: 2048   # as gpu_e30b_win64.yaml (encoder block of the probes; memory only)
   # Pilot (DECISIONS 2026-10-02 (19)): at every checkpoint, the goal arrivals in the replay, the prior's mass on the four
   # pairs into the goal and the median mass on the right successor of the pairs visited 2-8 times (run_agent.py
   # goal_kernel_at_checkpoint): those pairs only, `draws` draws each, from real contexts.
