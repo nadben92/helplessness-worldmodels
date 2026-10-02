@@ -2474,6 +2474,8 @@ more training budget would not remove it.
 - The latent stays **8 x 8**. The 4 x 32 latent is abandoned for E3 (slower start-up, seed 1).
 - No further GPU calibration batch: the win64 8 x 8 runs of gpu_e30b are the **provisional E3-0 floor**; the final
   floor will be rerun with the final campaign (goal-storage convention aligned with the closed loop, more seeds).
+  **Superseded 2026-10-02 (16): E3-0 is not rerun; the floor and the reference of every measure come from the final
+  closed-loop campaign itself (its environment and reference runs).**
 - C-b in the noisy zones: the criterion is kept; its failure is recorded with its structural cause.
 - The next GPU batch is the **closed-loop pilot** (seeds 0 and 5, environment and reference), prepared once the
   closed-loop measures are done and agent_mini has been read, with RUN_GPU.md in the same format (replaces gpu_e30c).
@@ -3089,3 +3091,40 @@ CN and CD: the two versions of b agree within TAU_B and the off-support masses w
 | UN | -1.7921, -1.7504; **-1.7713** | 0.1421 - 0.1573 | 0.0214 | **[0.1207, 0.1787]** |
 
 Saved as reports/tau_gpu_e30b/thresholds.json (aggregate_b.py's --thresholds format); not copied into configs/.
+
+## 2026-10-02 (16) -- role of E3-0, aberration control, campaign rule for the bias, scope of E3, assumptions for E4 / E5
+
+Recorded before any closed-loop result (user decisions).
+
+1. **Role of E3-0.** E3-0 served to understand and control the measurement biases and to calibrate the world model.
+   Its thresholds (TAU per zone, (15)) and its off-support intervals (UN, UD, (15)) are now **only an aberration
+   control** for the closed loop; they are reused neither as thresholds nor as a floor. The floor and the reference of
+   every measure and every bias are those of the final closed-loop campaign (N seeds, environment and reference).
+   **E3-0 is not rerun**: the question of the goal-storage convention no longer arises, since floor and measures will
+   come from the same runs. This replaces the "final floor rerun with the final campaign" of (7) and the "E3-0 if it is
+   rerun" of (8)/(9) C (the single-execution-mode rule still holds for every run of a campaign).
+2. **Aberration control.** A closed-loop value outside E3-0's ranges -- the off-support mass of UN / UD outside its
+   interval, or in CN / CD |b(I_s) - b(I_s projected)| > TAU_B or |off-support(env) - off-support(ref)| > TAU_OFF -- is
+   flagged in aggregate_b.py's output and must be explained before interpretation; it is not excluded automatically.
+   E3-0's values are read from a versioned file, `configs/e3/e30_aberration_control.yaml` (the values of (15)).
+3. **Campaign rule for the bias (hybrid codes), N a parameter** (N even, block classes A and B in equal numbers).
+   Per controllable zone (CN, CD), over the N seeds: the mean of b(I_s) - b(I_s projected) and its 95 % confidence
+   interval (Student t, N - 1 degrees of freedom); the same for off-support(env) - off-support(ref). b is interpretable
+   in the zone if both intervals lie within +- FRACTION x REFERENCE EFFECT. **N, FRACTION and REFERENCE EFFECT are left
+   unset; the user fixes them before the campaign.** Implemented in aggregate_b.py (campaign_rule) and tested; with
+   the parameters unset, or with two seeds (the pilot), the rule is not applied and the differences are reported as a
+   description.
+4. **Scope of E3.** The campaign will probably have fewer than 20 seeds. With a small N, E3 serves as a reference and a
+   validation, and can only detect effects of the representation clearly larger than the between-seed spread seen in
+   calibration (0.01 to 0.015 bit in CN, of the order of E2's effect, -0.02 bit). **A non-significant result in a
+   controllable zone will not be read as the absence of an effect.**
+5. **E3-0's thresholds in aggregate_b.py**: no default values any more (the old 0.14 / 0.02 and the (9) derivation from
+   E3-0 runs are gone from the command line); E3-0's thresholds and intervals are read from the versioned file of 2 and
+   serve only the aberration control. The rule of (9) as applied to gpu_e30b in (15) is kept in tau_gpu_e30b.py, for
+   the record of (15) only.
+6. **Assumptions for what follows:**
+   - the floor of the E3 campaign applies to the two-zone environments (E4, E5) only if the zone types and their
+     visitations are comparable; to be checked then;
+   - E4 serves to estimate the between-seed variance that sets the number of seeds of E5. For that: the smallest
+     effect size aimed at in E5 is fixed before E4; the variance estimated is that of the paired quantity that will be
+     E5's main measure; E4 includes the E5 condition expected to be the most variable, or a margin recorded in advance.
