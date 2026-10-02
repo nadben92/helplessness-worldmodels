@@ -3294,3 +3294,36 @@ loops give the figure for this batch.
 **100 goal arrivals**: under the uniform policy, 0.0459 successes per episode of 34.97 steps = 1.31e-3 arrivals per
 environment step (agent_mini: 20 by 20,000) -> **~76,000 environment steps, ~25 h in one process** at 1.16 s (12 h
 at the lower bound), more with several processes on the GPU.
+
+## 2026-10-02 (21) -- the pilot takes win64's replay ratio, 0.6 (user decision, before any result of the pilot)
+
+The pilot's replay ratio is the retained configuration's, **0.6** (gpu_e30b_win64), instead of 2. Reasons:
+- the ratio 2 of (19) came from the diagnostic made in 8 x 16 windows (17);
+- in replayed frames per environment step, win64 at 0.6 gives 0.6 x 16 x 64 = **614**, already above the diagnostic's
+  level (~400 equivalent, where the median mass reached 0.49);
+- the goal is limited by the data, not by the gradients ((17), (19)): the compute is better spent on environment
+  steps;
+- the cost is divided by 3.3 (2 / 0.6).
+**Reservation:** at equal replayed frames, fewer optimiser steps (0.6 updates of 1,024 frames per environment step
+instead of 2 of 256). If the median mass on the right successor of the pairs visited 2 to 8 times learns poorly at the
+pilot's checkpoints, the ratio will be raised for the campaign. This decision was taken before any result of the pilot.
+
+**Rate of the agent heads:** the same as the world model's. run_agent.py makes one gradient step per unit of replay
+credit (0.6 per environment step, the fraction carried over: 3 steps every 5 environment steps), and each gradient step
+after the switch updates the world model, then the goal head and the critic (in imagination from that batch's 1,024
+posterior states) -- one heads update per world-model update, on the same batch. The bench's closed-loop loop
+(bench_agent.py --loop) follows the same rule.
+
+The rest of the protocol of (19) and the expected shapes are unchanged; (20)'s "2,048 replayed frames per environment
+step" and its projection are superseded by the figures below.
+
+Projection (world-model step 0.289 s, A100, one process, win64; the heads' step assumed equal, the environment step
+negligible -> 0.6 x (0.289 + 0.289) = 0.35 s per environment step; lower bound with free heads 0.17 s):
+
+| | environment steps | one process | sharing as observed in gpu_e30b (8 processes: 3.46 -> 1.01 steps/s, x 3.4) |
+|---|---|---|---|
+| 100 goal arrivals (uniform policy, 1.31e-3 per step) | ~76,000 | ~7 h (lower bound 4 h) | ~25 h (13 h) |
+| end of run | 300,000 | ~29 h (lower bound 14 h) | ~99 h (50 h) |
+
+The sharing factor is gpu_e30b's at 8 processes, pessimistic for the pilot's 2 or 4; the preflight measures the
+pilot's own.

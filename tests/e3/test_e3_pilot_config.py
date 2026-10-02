@@ -18,9 +18,9 @@ def test_pilot_is_win64_with_the_closed_loop_agent():
     win64 = run_mini.load_mini_config(CONFIGS / "gpu_e30b_win64.yaml")
     bench = run_mini.load_mini_config(CONFIGS / "agent_mini.yaml")
     assert pilot["model"] == win64["model"] and pilot["render"] == win64["render"]
-    # training: win64's, B = 16, T = 64; only the replay ratio is the closed loop's (2 world-model updates per env step)
-    assert {k: v for k, v in pilot["train"].items() if k != "replay_ratio"} == {k: v for k, v in win64["train"].items() if k != "replay_ratio"}
-    assert (pilot["train"]["batch_size"], pilot["train"]["seq_len"], pilot["train"]["replay_ratio"]) == (16, 64, 2)
+    # training: win64's entirely, replay ratio included (DECISIONS 2026-10-02 (21)): B = 16, T = 64, 0.6
+    assert pilot["train"] == win64["train"]
+    assert (pilot["train"]["batch_size"], pilot["train"]["seq_len"], pilot["train"]["replay_ratio"]) == (16, 64, 0.6)
     assert {k: v for k, v in pilot["measure"].items() if k not in MEASURE_SCHEDULE} == \
         {k: v for k, v in win64["measure"].items() if k not in MEASURE_SCHEDULE}
     assert pilot["measure"]["final"] is True and pilot["measure"]["checkpoint_goal_kernel"] == {"draws": 256}

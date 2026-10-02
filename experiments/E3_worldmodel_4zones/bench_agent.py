@@ -216,11 +216,13 @@ def loop(cfg: dict, device: torch.device, seconds: float) -> dict:
     gopt = torch.optim.Adam(s.goal.parameters(), lr=1e-4)
     copt = torch.optim.Adam(s.critic.parameters(), lr=3e-5)
     gen = torch.Generator(device=device).manual_seed(0)
-    ratio = cfg["train"]["replay_ratio"]
+    ratio, credit = cfg["train"]["replay_ratio"], 0.0
     t0, steps = time.perf_counter(), 0
     while time.perf_counter() - t0 < seconds:
         s.collector.step(estimator=ST)
-        for _ in range(ratio):
+        credit += ratio  # as run_agent.py: replay_ratio gradient steps per environment step, fractional ratios carried over
+        while credit >= 1.0:
+            credit -= 1.0
             mb = s.batch()
             o = train_world_model_step(s.rssm, opt, mb, s.bg, s.loss_cfg, estimator=ST, generator=gen, sync=False, return_states=True)
             train_heads_step(s.rssm, s.goal, s.critic, s.slow, gopt, copt, o["h"], o["z"], torch.as_tensor(np.asarray(mb.r), device=device),

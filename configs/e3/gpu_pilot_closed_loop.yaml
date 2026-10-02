@@ -1,7 +1,7 @@
 # The closed-loop GPU pilot (docs/e3/DECISIONS.md, 2026-10-02 (19), (20)): the configuration retained for E3 --
 # gpu_e30b_win64.yaml's network, rendering, training procedure (16 windows x 64 steps) and measures -- with the agent of
 # agent_mini.yaml (absolute tie-break tolerance, weights at every checkpoint, resume, final measures), on the A100,
-# 300,000 environment steps, 2 world-model updates per environment step, seeds 0 and 5, environment and reference, no
+# 300,000 environment steps, win64's replay ratio 0.6 (DECISIONS (21)), seeds 0 and 5, environment and reference, no
 # acceleration (no runtime.compile, no stacked seeds). Identity with gpu_e30b_win64.yaml tested
 # (tests/e3/test_e3_pilot_config.py). Run through RUN_GPU.md.
 
@@ -20,7 +20,7 @@ render:
   cielab_marker_min_dist: 30.0
 
 budget:
-  total_steps: 299744      # + prefill 256 = 300,000 environment steps; x replay_ratio 2 = ~600,000 gradient steps
+  total_steps: 299744      # + prefill 256 = 300,000 environment steps; x replay_ratio 0.6 = ~179,850 gradient steps
   # Minimal prefill (spec 4.5, amended: E2 had no burn-in): played under the agent's own policy (epsilon 0.1), counted in
   # the budget; it only delays the first gradient step until the replay holds a few windows.
   prefill_steps: 256
@@ -31,7 +31,8 @@ collection:
 train:
   batch_size: 16           # win64 (DECISIONS 2026-10-02 (20)): 16 windows x 64 steps = 1,024 frames per update
   seq_len: 64
-  replay_ratio: 2           # pilot: 2 (DECISIONS 2026-10-02 (19): gradients matter (17); 4 doubles the cost with no guarantee)
+  replay_ratio: 0.6         # win64's (DECISIONS 2026-10-02 (21)): 0.6 x 1,024 = 614 replayed frames per environment step;
+                            # one world-model update and one agent-heads update per gradient step (same rate)
   # Two-phase learning rate (DECISIONS.md, 2026-09-24): lr until the
   # EFFECTIVE estimator switch (option (i): the probabilities phase does not
   # separate at 1e-4), then lr_after_switch (the spec's 1e-4) for the rest
