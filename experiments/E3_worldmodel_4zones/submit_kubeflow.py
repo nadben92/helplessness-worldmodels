@@ -53,11 +53,21 @@ MEASURE_BATCHES = {
         },
     },
 }
+# Closed-loop agent batches (run_agent.py; docs/e3/DECISIONS.md, 2026-10-02 (19)): phases preflight (preflight_agent.py,
+# with the informative speed bench), train and resume. Jobs in launch order: the experimental runs first, so a launch
+# at --max-parallel 2 runs them before the references.
+AGENT_BATCHES = {
+    "gpu_pilot_cl": {
+        "config": "configs/e3/gpu_pilot_closed_loop.yaml",
+        "runs": {"seed0_experimental": (0, "experimental"), "seed5_experimental": (5, "experimental"),
+                 "seed0_reference": (0, "reference"), "seed5_reference": (5, "reference")},
+    },
+}
 DEFAULT_BATCH = "gpu_e30"
 # The job's CPU request, PER BATCH (docs/e3/DECISIONS.md, 2026-09-30 (5)): gpu_e30b was prescribed 5 CPUs and ran on 3,
 # because --cpu defaulted to 3 and a command without it (or with another value) was accepted silently. The
 # request now defaults to the batch's own value, and a different --cpu is refused unless --allow-cpu-override.
-BATCH_CPUS = {"gpu_e30": 3, "gpu_e30b": 5, "gpu_e30b_measures": 3}
+BATCH_CPUS = {"gpu_e30": 3, "gpu_e30b": 5, "gpu_e30b_measures": 3, "gpu_pilot_cl": 3}
 DEFAULT_CPUS = BATCH_CPUS[DEFAULT_BATCH]
 
 
@@ -75,7 +85,7 @@ RUNS = BATCHES[DEFAULT_BATCH]
 
 
 def all_batches() -> list[str]:
-    return [*BATCHES, *MEASURE_BATCHES]
+    return [*BATCHES, *MEASURE_BATCHES, *AGENT_BATCHES]
 
 
 def batch_runs(batch: str) -> dict:
@@ -84,6 +94,8 @@ def batch_runs(batch: str) -> dict:
         return BATCHES[batch]
     if batch in MEASURE_BATCHES:
         return MEASURE_BATCHES[batch]["runs"]
+    if batch in AGENT_BATCHES:
+        return AGENT_BATCHES[batch]["runs"]
     raise ValueError(f"unknown batch {batch!r}; choose among {all_batches()}")
 
 
@@ -118,6 +130,9 @@ def preflight_command(python: str, output: Path, runs: list[str] | None, max_par
     selected = select_runs(runs, batch)
     parallel = n_concurrent(runs, max_parallel, batch)
     cpus = BATCH_CPUS[batch] if cpus is None else cpus
+    if batch in AGENT_BATCHES:
+        return [python, "-u", f"{SCRIPT}/preflight_agent.py", "--batch", batch, "--cpus", str(cpus), "--device", "cuda",
+                "--out-dir", str(output / "runs")]
     if batch in MEASURE_BATCHES:
         return [python, "-u", f"{SCRIPT}/preflight_measures.py", "--batch", batch, "--runs", *selected, "--parallel", str(parallel),
                 "--cpus", str(cpus), "--device", "cuda", "--out-dir", str(output / "runs")]
@@ -143,6 +158,17 @@ def commands(phase: str, python: str, output: Path, resume: str = "", runs: list
     base = [python, "-u", f"{SCRIPT}/run_mini.py"]
     if phase == "preflight":
         return [("preflight", preflight_command(python, output, runs, max_parallel, batch, cpus))]
+    if batch in AGENT_BATCHES:
+        agent = [python, "-u", f"{SCRIPT}/run_agent.py"]
+        if phase == "resume":
+            if not resume:
+                raise ValueError("resume requires a run directory")
+            return [("resume", agent + ["--resume", resume, "--device", "cuda"])]
+        if phase != "train":
+            raise ValueError(f"{batch} is a closed-loop batch: phases preflight, train and resume, never {phase}")
+        known = AGENT_BATCHES[batch]["runs"]
+        return [(name, agent + ["--config", AGENT_BATCHES[batch]["config"], "--device", "cuda", "--seeds", str(known[name][0]),
+                                "--conditions", known[name][1]]) for name in select_runs(runs, batch)]
     if batch in MEASURE_BATCHES:
         if phase != "measure":
             raise ValueError(f"{batch} is a measurement batch: phases preflight and measure only, never {phase}")

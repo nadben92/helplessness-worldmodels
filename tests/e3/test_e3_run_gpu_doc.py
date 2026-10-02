@@ -25,28 +25,34 @@ def _commands(script: str) -> list[list[str]]:
 
 
 def test_every_submission_command_parses(tmp_path, monkeypatch):
+    """Batch gpu_pilot_cl (docs/e3/DECISIONS.md, 2026-10-02 (19)): the preflight, the training at 4 or 2 runs at once,
+    and the resume of one run after an interruption; 3 CPUs everywhere."""
     commands = _commands("submit_kubeflow.py")
-    assert len(commands) == 2  # the preflight and the measurement of gpu_e30b_measures (docs/e3/DECISIONS.md, 2026-10-01 (10))
     assert {tuple(c) for c in commands} == {
-        ("--phase", "preflight", "--batch", "gpu_e30b_measures", "--max-parallel", "4", "--cpu", "3"),
-        ("--phase", "measure", "--batch", "gpu_e30b_measures", "--max-parallel", "4", "--cpu", "3")}
-    assert not any("train" in c for c in commands)  # no training in this batch
+        ("--phase", "preflight", "--batch", "gpu_pilot_cl", "--cpu", "3"),
+        ("--phase", "train", "--batch", "gpu_pilot_cl", "--max-parallel", "4", "--cpu", "3"),
+        ("--phase", "train", "--batch", "gpu_pilot_cl", "--max-parallel", "2", "--cpu", "3"),
+        ("--phase", "resume", "--batch", "gpu_pilot_cl", "--cpu", "3", "--resume", "<the", "run's", "directory>")}
     mount = tmp_path / "scratch"
     repo = mount / "helplessness-worldmodels"
     repo.mkdir(parents=True)
     monkeypatch.setitem(sys.modules, "kubeflow", None)  # the submission itself needs the cluster's SDK
     for argv in commands:
+        if argv[argv.index("--phase") + 1] == "resume":
+            argv = argv[:argv.index("--resume") + 1] + [str(mount / "a_run")]
         with pytest.raises(ImportError):  # the arguments passed every check; only the SDK import is left
             cluster.main([*argv, "--repo-dir", str(repo), "--mount", str(mount)])
         phase = argv[argv.index("--phase") + 1]
-        jobs = cluster.commands(phase, "python", tmp_path, batch="gpu_e30b_measures",
-                                max_parallel=int(argv[argv.index("--max-parallel") + 1]), cpus=int(argv[argv.index("--cpu") + 1]))
-        assert len(jobs) == (1 if phase == "preflight" else 4)
-        if phase == "measure":
-            assert all(cmd[2].endswith("recompute_measures.py") for _, cmd in jobs)
-    for run_dir, _ in cluster.MEASURE_BATCHES["gpu_e30b_measures"]["runs"].values():
-        assert run_dir in DOC  # the doc names every run it reads
-    assert cluster.GPU_E30B_RESULTS in DOC
+        mp = int(argv[argv.index("--max-parallel") + 1]) if "--max-parallel" in argv else None
+        jobs = cluster.commands(phase, "python", tmp_path, resume=str(mount / "a_run"), batch="gpu_pilot_cl", max_parallel=mp, cpus=3)
+        if phase == "train":
+            assert [name for name, _ in jobs] == ["seed0_experimental", "seed5_experimental", "seed0_reference", "seed5_reference"]
+            assert all(cmd[2].endswith("run_agent.py") for _, cmd in jobs)
+        elif phase == "preflight":
+            assert jobs[0][1][2].endswith("preflight_agent.py")
+        else:
+            assert jobs[0][1][2].endswith("run_agent.py") and "--resume" in jobs[0][1]
+    assert cluster.AGENT_BATCHES["gpu_pilot_cl"]["config"] in DOC
 
 
 def test_handoff_commands_use_existing_options(capsys):
@@ -58,8 +64,7 @@ def test_handoff_commands_use_existing_options(capsys):
     for argv in commands:
         for flag in (a for a in argv if a.startswith("--")):
             assert flag in help_text, flag
-        assert "--out" in argv and argv[argv.index("--out") + 1] == "handoff/gpu_e30b_measures"
-        assert "--train-dir" not in argv
+        assert "--out" in argv and argv[argv.index("--out") + 1] == "handoff/gpu_pilot_cl"
 
 
 def test_hash_command_runs_on_the_standard_library_alone():
@@ -74,9 +79,8 @@ def test_hash_command_runs_on_the_standard_library_alone():
 
 
 def test_decision_lines_are_the_preflight_s():
-    preflight_src = (REPO / "experiments" / "E3_worldmodel_4zones" / "preflight_measures.py").read_text(encoding="utf-8")
+    preflight_src = (REPO / "experiments" / "E3_worldmodel_4zones" / "preflight_agent.py").read_text(encoding="utf-8")
     assert 'print(f"PREFLIGHT DECISION: {decision}' in preflight_src
-    for decision in ("launch", "stop"):
+    for decision in ("launch-max-parallel-4", "launch-max-parallel-2", "stop"):
         assert f"PREFLIGHT DECISION: {decision}" in DOC
-    assert "retry" not in DOC.split("## Step 3")[1].split("## Step 4")[0].replace("no retry branch", "")
-    assert "<= 4" in DOC and 'parser.add_argument("--max-batch-hours", type=float, default=4.0)' in preflight_src
+    assert 'return f"launch-max-parallel-{parallel}"' in preflight_src

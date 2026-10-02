@@ -62,7 +62,7 @@ def test_decision(tmp_path, monkeypatch):
     monkeypatch.setitem(pm.cluster.MEASURE_BATCHES, "gpu_e30b_measures",
                         {"source_root": str(tmp_path / "src"), "runs": {"win64_seed5_reference": (NAME, sha)}})
     out = tmp_path / "pre"
-    # 3 CPUs requested for a batch prescribed 5: a problem, so stop -- whatever the rest
-    assert pm.main(["--batch", "gpu_e30b_measures", "--cpus", "3", "--device", "cpu", "--out-dir", str(out), "--skip-smoke"]) == 1
+    # 5 CPUs requested for a batch prescribed 3 (2026-10-01 (18)): a problem, so stop -- whatever the rest
+    assert pm.main(["--batch", "gpu_e30b_measures", "--cpus", "5", "--device", "cpu", "--out-dir", str(out), "--skip-smoke"]) == 1
     verdict = yaml.safe_load((out / "preflight_verdict.json").read_text(encoding="utf-8"))
-    assert verdict["decision"] == "stop" and any("CPUs requested 3" in p for p in verdict["problems"])
+    assert verdict["decision"] == "stop" and any("CPUs requested 5" in p for p in verdict["problems"])

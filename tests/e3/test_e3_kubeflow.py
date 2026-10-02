@@ -223,3 +223,22 @@ def test_measurement_batch_reads_the_runs_in_place_and_never_trains(tmp_path):
         cluster.resolve_cpus("gpu_e30b_measures", 5)
     with pytest.raises(SystemExit):
         cluster.main(["--phase", "train", "--batch", "gpu_e30b_measures"])
+
+
+def test_closed_loop_pilot_batch():
+    """docs/e3/DECISIONS.md, 2026-10-02 (19): gpu_pilot_cl runs run_agent.py, experimental runs first, 3 CPUs; its
+    preflight is preflight_agent.py; resume continues one run; no measure phase."""
+    from pathlib import Path
+
+    jobs = cluster.commands("train", "python", Path("/o"), batch="gpu_pilot_cl")
+    assert [n for n, _ in jobs] == ["seed0_experimental", "seed5_experimental", "seed0_reference", "seed5_reference"]
+    for name, cmd in jobs:
+        assert cmd[2].endswith("run_agent.py") and cmd[cmd.index("--config") + 1] == "configs/e3/gpu_pilot_closed_loop.yaml"
+        assert "--compile" not in cmd and cmd[cmd.index("--device") + 1] == "cuda"
+    pre = cluster.commands("preflight", "python", Path("/o"), batch="gpu_pilot_cl")[0][1]
+    assert pre[2].endswith("preflight_agent.py") and pre[pre.index("--cpus") + 1] == "3"
+    res = cluster.commands("resume", "python", Path("/o"), resume="/r/run", batch="gpu_pilot_cl")[0][1]
+    assert res[2].endswith("run_agent.py") and res[res.index("--resume") + 1] == "/r/run"
+    with pytest.raises(ValueError, match="closed-loop batch"):
+        cluster.commands("measure", "python", Path("/o"), batch="gpu_pilot_cl")
+    assert cluster.resolve_cpus("gpu_pilot_cl", None) == 3

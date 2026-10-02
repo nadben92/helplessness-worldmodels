@@ -249,3 +249,24 @@ def test_training_diagnostics_use_the_reduced_kernel_size(tmp_path):
     assert run_mini.kernel_draws(cfg, final=True) == (cfg["measure"]["real_context"]["kernel_draws"], cfg["measure"]["kernel_k_s"])
     del cfg["measure"]["kernel_k_s_training"]
     assert run_mini.kernel_draws(cfg, final=False)[1] == cfg["measure"]["kernel_k_s"]
+
+
+def test_kernel_of_selected_pairs_agrees_with_the_full_kernel(trained):
+    """probe.real_context_kernel_pairs (closed-loop checkpoint diagnostics, 2026-10-02 (19)) draws as
+    real_context_kernel does, for a subset of pairs: same contexts and prior, so the same kernel up to Monte Carlo."""
+    _, run_dir = trained
+    cfg = tiny_config()
+    world, replay, _, _ = run_mini.load_run_data(run_dir, cfg, 0, "experimental")
+    rssm = run_mini.build_rssm(cfg)
+    rssm.load_state_dict(torch.load(run_dir / "checkpoints" / "weights_final.pt", weights_only=False)["rssm"])
+    ctx = e3_probe.real_context_probe(rssm, replay, 16, 8, 3, 144, np.random.default_rng(0), torch.Generator().manual_seed(0))
+    states = np.unique(ctx["states"])[:3]
+    pairs = [(int(s), a) for s in states for a in (0, 3)]
+    margin = cfg["measure"]["kernel_margin_threshold"]
+    full = e3_probe.real_context_kernel(rssm, ctx, world.templates_t, draws=600, margin_threshold=margin, generator=torch.Generator().manual_seed(1))
+    sub = e3_probe.real_context_kernel_pairs(rssm, ctx, world.templates_t, pairs + [(999, 0)], draws=600, margin_threshold=margin,
+                                             generator=torch.Generator().manual_seed(2))
+    assert set(sub) == set(pairs)  # a state without a context is left out
+    for s, a in pairs:
+        assert np.abs(sub[(s, a)]["p_hat"] - full["p_hat"][s, a]).sum() < 0.25
+        assert abs(sub[(s, a)]["ghost_fraction"] - full["ghost_fraction"][s, a]) < 0.1

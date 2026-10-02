@@ -116,3 +116,31 @@ def test_handoff_of_a_measurement_batch(tmp_path):
     assert f"| win64_seed0_reference | 1 | {name_failed} | none | no | - | - | - |" in text
     with pytest.raises(SystemExit):
         handoff.main(["--measure-dir", str(measure), "--train-dir", str(measure), "--out", str(tmp_path / "x")])
+
+
+def test_handoff_of_a_closed_loop_batch(tmp_path):
+    """docs/e3/DECISIONS.md, 2026-10-02 (19): run_agent.py jobs map to their worldmodel-agent-<config> directories; the
+    weights at the checkpoints stay out of the archive; the preflight's speed bench is copied to the handoff."""
+    results = tmp_path / "r"
+    name = "grid12x12__4zones__pair-experimental__worldmodel-agent-gpu_pilot_closed_loop__seed00__20261002T150006Z"
+    d = _run(results, name, {"status": "done", "env_steps": 300000, "switch_step": 4100}, True)
+    (d / "checkpoints" / "agent_env001000.pt").write_bytes(b"w")
+    (d / "checkpoints.jsonl").write_text("{}\n", encoding="utf-8")
+    train = tmp_path / "t"
+    train.mkdir()
+    job = {"command": ["python", "-u", "experiments/E3_worldmodel_4zones/run_agent.py", "--config", "configs/e3/gpu_pilot_closed_loop.yaml",
+                       "--device", "cuda", "--seeds", "0", "--conditions", "experimental"], "exit_code": 0,
+           "started_at": "2026-10-02T15:00:05+00:00", "finished_at": "2026-10-05T15:00:00+00:00"}
+    (train / "status.json").write_text(json.dumps({"seed0_experimental": job}), encoding="utf-8")
+    pre = tmp_path / "p"
+    (pre / "runs").mkdir(parents=True)
+    (pre / "runs" / "preflight_verdict.json").write_text(json.dumps(
+        {"decision": "launch-max-parallel-4", "parallel": 4, "projected_batch_hours": 60.0, "problems": [], "warnings": []}), encoding="utf-8")
+    (pre / "runs" / "bench_agent.json").write_text(json.dumps({"variants": {}}), encoding="utf-8")
+    out = tmp_path / "h"
+    assert handoff.main(["--train-dir", str(train), "--preflight-dir", str(pre), "--out", str(out), "--results-root", str(results)]) == 0
+    assert (out / f"{name}.tgz").exists() and (out / "bench_agent.json").exists()
+    with tarfile.open(out / f"{name}.tgz") as tar:
+        names = tar.getnames()
+    assert any(n.endswith("checkpoints.jsonl") for n in names) and not any(n.endswith(".pt") for n in names)
+    assert "| seed0_experimental | 0 | done | 300000 | 4100 | yes | - |" in (out / "handoff.md").read_text(encoding="utf-8")

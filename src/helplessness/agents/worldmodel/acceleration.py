@@ -128,10 +128,25 @@ class StackedRSSM:
 
     def vcall(self, method: str, *args, in_dims: tuple):
         """rssm.<method>(*args) for every seed at once; in_dims: 0 for an
-        argument stacked over the seeds, None for one shared by all."""
-        def one(p, b, *a):
-            return torch.func.functional_call(self._call, {**p, **b}, (method, *a))
-        return torch.func.vmap(one, in_dims=(0, 0, *in_dims))(self.params, self.buffers, *args)
+        argument stacked over the seeds, None for one shared by all. With
+        compile() called, the vectorised function of each (method, in_dims)
+        is torch.compile'd once and reused."""
+        key = (method, in_dims)
+        fn = getattr(self, "_fns", {}).get(key)
+        if fn is None:
+            def one(p, b, *a):
+                return torch.func.functional_call(self._call, {**p, **b}, (method, *a))
+            fn = torch.func.vmap(one, in_dims=(0, 0, *in_dims))
+            if getattr(self, "_compile_kwargs", None) is not None:
+                fn = torch.compile(fn, **self._compile_kwargs)
+            self._fns = {**getattr(self, "_fns", {}), key: fn}
+        return fn(self.params, self.buffers, *args)
+
+    def compile(self, backend: str = "inductor", mode: str | None = None) -> "StackedRSSM":
+        """Compile the vectorised calls (the bench's "stacked + compile" variant; off by default)."""
+        self._compile_kwargs = {"backend": backend, **({"mode": mode} if mode is not None else {})}
+        self._fns = {}
+        return self
 
     @torch.no_grad()
     def write_back(self, models: list[RSSM]) -> None:

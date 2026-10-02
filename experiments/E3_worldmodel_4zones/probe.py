@@ -870,3 +870,46 @@ def canonical_latents(rssm: RSSM, templates: torch.Tensor) -> tuple[torch.Tensor
     x = templates.to(device)
     h0, _ = rssm.initial_state(x.shape[0], device)
     return h0, categorical_mode(rssm.posterior_probs(h0, rssm.encoder(x)))
+
+
+def real_context_kernel_pairs(
+    rssm: RSSM, contexts: dict, templates: torch.Tensor, pairs: list[tuple[int, int]], draws: int, margin_threshold: float,
+    generator: torch.Generator | None = None, chunk: int = 1024,
+) -> dict[tuple[int, int], dict]:
+    """real_context_kernel for a SUBSET of (s, a) pairs only (the closed-loop checkpoint diagnostics, docs/e3/DECISIONS.md
+    2026-10-02 (19)): for each pair, `draws` prior draws from its state's real contexts (the i-th draw from the
+    (i mod n_s)-th context), decoded and matched to the templates exactly as real_context_kernel does. Returns
+    {(s, a): {"p_hat": (n_states,), "ghost_fraction": float}}; a pair whose state has no context is left out."""
+    device = next(rssm.parameters()).device
+    n_states = contexts["n_states"]
+    templates_np = templates.detach().cpu().numpy()
+    rows_ctx, rows_a, rows_owner, owners = [], [], [], []
+    for k, (s, a) in enumerate(pairs):
+        ctx_s = np.flatnonzero(contexts["states"] == s)
+        if ctx_s.size == 0:
+            continue
+        rows_ctx.append(ctx_s[np.arange(draws) % ctx_s.size])
+        rows_a.append(np.full(draws, a))
+        rows_owner.append(np.full(draws, k))
+        owners.append(k)
+    if not rows_ctx:
+        return {}
+    rows_ctx, rows_a, rows_owner = np.concatenate(rows_ctx), np.concatenate(rows_a), np.concatenate(rows_owner)
+    nearest = np.empty(rows_ctx.size, dtype=np.int64)
+    is_ghost = np.empty(rows_ctx.size, dtype=bool)
+    with torch.no_grad():
+        for first in range(0, rows_ctx.size, chunk):
+            sl = slice(first, min(first + chunk, rows_ctx.size))
+            c = torch.as_tensor(rows_ctx[sl], device=device)
+            a = torch.as_tensor(rows_a[sl], device=device)
+            probs = contexts["prior_probs_t"][c, a]
+            z = F.one_hot(sample_categorical_index(probs, generator), num_classes=probs.shape[-1]).to(probs.dtype)
+            decoded = rssm.decode(contexts["h_next"][c, a], z).cpu().numpy()
+            matched = match_from_distances(template_distances(decoded, templates_np), margin_threshold)
+            nearest[sl], is_ghost[sl] = matched["nearest_state"], matched["is_ghost"]
+    out = {}
+    for k in owners:
+        idx = rows_owner == k
+        result = kernel_from_matches(nearest[idx], is_ghost[idx], n_states)
+        out[tuple(int(x) for x in pairs[k])] = {"p_hat": result["p_hat"], "ghost_fraction": float(result["ghost_fraction"])}
+    return out

@@ -3212,3 +3212,49 @@ configuration, parallelism (4), deterministic GPU settings, source-hash check, o
 `BATCH_CPUS`, the runbook, and their tests now prescribe 3 requested and 3 usable CPUs; the preflight still
 rejects any other allocation and any projected duration over 4 hours. The existing dirty cluster checkout
 must be preserved separately before installing a clean copy of this version at the canonical path.
+
+## 2026-10-02 (19) -- conclusion of the gradients-vs-data diagnostic; the closed-loop GPU pilot (recorded before its launch)
+
+### Conclusion of (17) (user decision)
+
+The verdict "mixed" is accepted. The extra gradient steps raise the rarely visited pairs in general, without
+memorisation, but not the goal, whose limiting factor is the frequency of the target state (13 frames). Only a longer
+closed-loop run produces more goal frames: **the pilot becomes the test of this hypothesis.**
+
+### The pilot (batch gpu_pilot_cl; config configs/e3/gpu_pilot_closed_loop.yaml)
+
+- Runs: seeds 0 and 5, environment and reference; the final configuration (absolute tie-break of (12), weights at
+  every checkpoint, resume, final measures), **no acceleration** (no runtime.compile, no stacked seeds). agent_mini's
+  network, procedure and agent; only the budget, runtime, seeds / conditions, resume interval (10,000) and the
+  checkpoint goal diagnostics differ (tested).
+- **Ratio 2 gradient steps per environment step.** Reason: the diagnostic of (17) shows that gradient steps matter;
+  ratio 4 doubles the cost with no guarantee.
+- Target length **300,000 environment steps** (E2's checkpoints up to 251,189, and 300,000); the runs can be read at
+  their checkpoints before the end. With 3 CPUs, if 4 runs side by side are slower in total than 2, the preflight
+  chooses 2 and the experimental runs go first, then the references.
+- At every checkpoint, besides the twin, the agent's Delta under P and the success: the goal arrivals in the replay,
+  the prior's mass on the goal for the four pairs into it, the median mass on the right successor of the pairs visited
+  2 to 8 times (those pairs only, 256 draws each from real contexts; own measurement slot 15).
+- Speed bench at the start of the batch, in the preflight, **informative only** (never in the verdict), ~30 minutes:
+  world-model, heads and environment steps of run_agent.py in the pilot's configuration; the world-model step with
+  1, 2, 4 and 8 stacked seeds, with and without torch.compile (the compiled variants only if the inductor equivalence
+  gate passes on the node; otherwise its failure is reported and the bench continues without); per variant seed-steps
+  per second, warm-up (compilation) time, loss difference from the plain step. For the decision on a multi-seed runner
+  and the campaign budgets.
+- **The pilot's runs will not be reused as campaign seeds if the campaign enables an acceleration** (the modes are not
+  bit-equivalent, (9) C).
+
+### Expected shapes (fixed before the launch)
+
+1. The separation switch happens, with no collapse after it.
+2. Before any value information: ties ~100 % and the actions played uniform.
+3. **Goal criterion**, at the first checkpoint whose replay holds at least 100 goal arrivals, then at the end of the
+   run: median prior mass on the goal over the four pairs into it
+   - >= 0.5: **the data suffice**;
+   - < 0.1: **a structural problem specific to the goal**;
+   - in between: **undetermined**.
+4. Pooled success indistinguishable from 0.0459 while the mass on the goal stays low, above it afterwards; an
+   improvement without a rise of that mass must be explained.
+5. The twin's L1 falls in all four zones; Delta >= 0.
+6. Final measures: aberration control against configs/e3/e30_aberration_control.yaml; the campaign rule for the bias
+   descriptive only (two seeds).

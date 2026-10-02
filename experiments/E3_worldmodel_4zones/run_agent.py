@@ -100,6 +100,7 @@ AGENT_KEYS = ("epsilon", "k_act", "k_imag", "horizon", "lam", "slow_tau", "tie_t
 OPTIONAL_AGENT_KEYS = ("tie_fraction", "tie_tol_rel")
 TWIN_KEYS = ("I_hat", "I_ref", "b", "delta")
 SLOT_AGENT_DELTA = 14  # measurement slot of the agent's Delta (run_mini 1-4, 6-9, 11, 12; action_in_latent 10; hybrid codes 13)
+SLOT_GOAL_KERNEL = 15  # measurement slot of the checkpoint goal diagnostics (2026-10-02 (19))
 NUMPY_STREAMS = ("explore", "tiebreak", "start_state", "replay_sample", "switch_pairs")
 
 
@@ -175,6 +176,44 @@ def agent_delta_at_checkpoint(rssm, goal_head, critic, world, replay, cfg: dict,
                      "n_states_read": int(greedy["measured"].sum())}
     rssm.train(was_training)
     return out
+
+
+def goal_kernel_at_checkpoint(rssm, world, replay, N: np.ndarray, cfg: dict, seed: int, condition: str, env_step: int,
+                              device: torch.device) -> dict:
+    """The checkpoint goal diagnostics (docs/e3/DECISIONS.md, 2026-10-02 (19)), cheap: goal arrivals in the replay; the
+    prior's mass on the goal for the pairs that lead into it; the median mass on the right successor over the
+    deterministic pairs off the goal visited 2 to 8 times (N at this checkpoint). The kernel of those pairs only
+    (probe.real_context_kernel_pairs), measure.checkpoint_goal_kernel.draws draws each, from real contexts (the run's
+    real_context settings); own measurement slot, a child stream keyed by the checkpoint."""
+    seq = e3_rng.spawn_sequences(seed, condition)["measure"].spawn(e3_rng.N_MEASURE_SLOTS)[SLOT_GOAL_KERNEL]
+    child = np.random.SeedSequence(entropy=seq.entropy, spawn_key=(*seq.spawn_key, int(env_step)))
+    rng, gen = np.random.default_rng(child), e3_rng.torch_generator(child, device)
+    P, goal = world.env.transition_tensor(), run_mini.e3_env.goal_state()
+    det_s, det_a = np.nonzero(P.max(-1) >= 1.0 - 1e-12)
+    succ = P[det_s, det_a].argmax(-1)
+    n = N[det_s, det_a].sum(-1)
+    band = (det_s != goal) & (succ != goal) & (n >= 2) & (n <= 8)
+    goal_s, goal_a = np.nonzero(P[:, :, goal] > 0)
+    keep = goal_s != goal
+    goal_pairs = list(zip(goal_s[keep].tolist(), goal_a[keep].tolist()))
+    band_pairs = list(zip(det_s[band].tolist(), det_a[band].tolist()))
+    was_training = rssm.training
+    rssm.eval()
+    rc = run_mini.real_context_settings(cfg)
+    ctx = e3_probe.real_context_probe(rssm, replay, window_len=rc["window_len"], burn_in=rc["burn_in"], max_per_state=rc["max_per_state"],
+                                      n_states=run_mini.N_STATES, rng=rng, generator=gen, max_images=run_mini.max_images_per_forward(cfg))
+    kernel = e3_probe.real_context_kernel_pairs(rssm, ctx, world.templates_t, goal_pairs + band_pairs,
+                                                draws=cfg["measure"]["checkpoint_goal_kernel"]["draws"],
+                                                margin_threshold=cfg["measure"]["kernel_margin_threshold"], generator=gen)
+    rssm.train(was_training)
+    band_mass = [kernel[p]["p_hat"][int(P[p].argmax())] for p in band_pairs if p in kernel]
+    return {"goal_arrivals_in_replay": int(np.count_nonzero(replay.export_compact()["terminal"])),
+            "goal_pairs": [{"s": s, "a": a, "n": int(N[s, a].sum()), "mass_on_goal": float(kernel[(s, a)]["p_hat"][goal]) if (s, a) in kernel else None}
+                           for s, a in goal_pairs],
+            "median_mass_on_goal_pairs": float(np.median([kernel[p]["p_hat"][goal] for p in goal_pairs if p in kernel]))
+            if any(p in kernel for p in goal_pairs) else float("nan"),
+            "median_mass_right_successor_n2_8": float(np.median(band_mass)) if band_mass else float("nan"), "pairs_n2_8": len(band_mass),
+            "draws": cfg["measure"]["checkpoint_goal_kernel"]["draws"]}
 
 
 def _stream_states(streams: dict, gens: dict) -> dict:
@@ -361,6 +400,8 @@ def run_one(cfg: dict, seed: int, condition: str, run_dir: Path, device: torch.d
                       "twin_by_zone": twin_at_checkpoint(collector.N, world, P_ref, cfg, acfg, seed, condition, env_step),
                       "agent_delta": agent_delta_at_checkpoint(rssm, goal_head, critic, world, replay, cfg, acfg, seed, condition, env_step,
                                                                device)}
+            if cfg["measure"].get("checkpoint_goal_kernel"):
+                record["goal_diagnostics"] = goal_kernel_at_checkpoint(rssm, world, replay, collector.N, cfg, seed, condition, env_step, device)
             progress["records"].append(record)
             progress["counts"][f"N_{env_step}"] = collector.N.copy()
             # the weights at every checkpoint (docs/e3/DECISIONS.md, 2026-10-01 (12)): written, nothing drawn

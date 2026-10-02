@@ -226,3 +226,24 @@ def test_a_run_without_separation_stops_on_the_guard(tmp_path):
     with pytest.raises(run_agent.SeparationNotReachedError):
         run_agent.run_one(cfg, 0, "experimental", run_dir, run_mini.configure_runtime(cfg))
     assert yaml.safe_load((run_dir / "meta.yaml").read_text(encoding="utf-8"))["status"] == "failed"
+
+
+def test_checkpoint_goal_diagnostics(tmp_path):
+    """docs/e3/DECISIONS.md, 2026-10-02 (19): with measure.checkpoint_goal_kernel, every checkpoint records the goal
+    arrivals in the replay, the prior's mass on the goal for the four pairs into it and the median mass on the right
+    successor of the pairs visited 2-8 times; without it (agent_mini.yaml), nothing changes."""
+    cfg = tiny_config()
+    cfg["measure"]["checkpoint_goal_kernel"] = {"draws": 8}
+    cfg["checkpoints"] = {"grid": [150], "resume_every": None}
+    run_dir, report = _run(cfg, tmp_path, "goal", max_env_steps=200)
+    for rec in report["checkpoints"]:
+        g = rec["goal_diagnostics"]
+        assert g["goal_arrivals_in_replay"] == rec["successes"]  # every success stores the goal's observation
+        assert len(g["goal_pairs"]) == 4 and all(p["s"] != run_mini.e3_env.goal_state() for p in g["goal_pairs"])
+        assert all(p["mass_on_goal"] is None or 0.0 <= p["mass_on_goal"] <= 1.0 for p in g["goal_pairs"])
+        assert g["draws"] == 8 and (g["pairs_n2_8"] == 0 or 0.0 <= g["median_mass_right_successor_n2_8"] <= 1.0)
+    plain = tiny_config()
+    plain["checkpoints"] = {"grid": [150], "resume_every": None}
+    _, rep2 = _run(plain, tmp_path, "plain", max_env_steps=200)
+    assert all("goal_diagnostics" not in r for r in rep2["checkpoints"])
+    assert [r["twin_by_zone"] for r in rep2["checkpoints"]] == [r["twin_by_zone"] for r in report["checkpoints"]]  # own stream

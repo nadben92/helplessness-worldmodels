@@ -57,6 +57,8 @@ def run_of_job(command: list[str], started_at: str | None, results_root: Path) -
     -> results_root/*__pair-<role>__worldmodel-<config stem>__seed<nn>__<UTC>, the latest one created at or
     after the job's start (to the minute)."""
     config = Path(command[command.index("--config") + 1]).stem
+    if any(c.endswith("run_agent.py") for c in command):  # closed-loop runs are named worldmodel-agent-<config stem>
+        config = f"agent-{config}"
     seed = int(command[command.index("--seeds") + 1])
     role = PAIR_ROLE[command[command.index("--conditions") + 1]]
     candidates = sorted(results_root.glob(f"*__pair-{role}__worldmodel-{config}__seed{seed:02d}__*"))
@@ -73,7 +75,7 @@ def run_row(name: str, job: dict, run_dir: Path | None) -> dict:
     if run_dir is not None and (run_dir / "meta.yaml").exists():
         meta = yaml.safe_load((run_dir / "meta.yaml").read_text(encoding="utf-8")) or {}
         error = str(meta.get("error") or "")
-        row.update(status=meta.get("status"), steps_done=meta.get("steps_done"), switch_step=meta.get("switch_step"),
+        row.update(status=meta.get("status"), steps_done=meta.get("steps_done") or meta.get("env_steps"), switch_step=meta.get("switch_step"),
                    error=error.splitlines()[0][:300] if error else "", finished=(run_dir / "results.json").exists())
     return row
 
@@ -146,6 +148,9 @@ def main(argv: list[str] | None = None) -> int:
             if submission.exists():
                 tar.add(submission, arcname=f"logs/kubeflow/{submission.name}")
     archives.append(logs)
+    for d in args.preflight_dir:  # the closed-loop preflight's speed bench, also at the top of the handoff (informative)
+        for bench in sorted(d.rglob("bench_agent.json")):
+            (args.out / "bench_agent.json").write_bytes(bench.read_bytes())
     too_big = [(a.name, a.stat().st_size / 2**20) for a in archives if a.stat().st_size / 2**20 > MAX_ARCHIVE_MB]
 
     decisions = []
