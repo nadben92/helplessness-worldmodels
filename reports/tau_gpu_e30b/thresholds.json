@@ -1,0 +1,87 @@
+{
+ "tau_b": {
+  "controllable_noisy": 0.01998888610924782,
+  "controllable_deterministic": 0.028457671376167434
+ },
+ "tau_off": {
+  "controllable_noisy": 0.015397341641596935,
+  "controllable_deterministic": 0.0034697581666622186
+ },
+ "floor": {
+  "n_pairs": 2,
+  "tau_off_floor": {
+   "uncontrollable_deterministic": 0.017473500152550416,
+   "uncontrollable_noisy": 0.021439641027166702
+  },
+  "zones": {
+   "uncontrollable_deterministic": {
+    "b_I_s": -2.25378599014601,
+    "b_I_s_values": [
+     -2.2394260355271087,
+     -2.268145944764912
+    ],
+    "off_support_min": 0.04719520525876395,
+    "off_support_max": 0.05955083570769652
+   },
+   "uncontrollable_noisy": {
+    "b_I_s": -1.7712678577717096,
+    "b_I_s_values": [
+     -1.792090195470061,
+     -1.7504455200733584
+    ],
+    "off_support_min": 0.14214860093145187,
+    "off_support_max": 0.15730871648796677
+   }
+  }
+ },
+ "derivation": {
+  "tau_b": {
+   "controllable_noisy": 0.01998888610924782,
+   "controllable_deterministic": 0.028457671376167434
+  },
+  "tau_off": {
+   "controllable_noisy": 0.015397341641596935,
+   "controllable_deterministic": 0.0034697581666622186
+  },
+  "tau_off_floor": {
+   "uncontrollable_deterministic": 0.017473500152550416,
+   "uncontrollable_noisy": 0.021439641027166702
+  },
+  "values": {
+   "uncontrollable_deterministic": {
+    "off_support_experimental": [
+     0.04719520525876395,
+     0.05955083570769652
+    ]
+   },
+   "controllable_noisy": {
+    "b_difference": [
+     0.01596840375955555,
+     0.001834126843340833
+    ],
+    "off_support_difference": [
+     0.012408700932283898,
+     0.0015211362452646968
+    ]
+   },
+   "uncontrollable_noisy": {
+    "off_support_experimental": [
+     0.15730871648796677,
+     0.14214860093145187
+    ]
+   },
+   "controllable_deterministic": {
+    "b_difference": [
+     -0.012091876536073798,
+     0.008030735870792505
+    ],
+    "off_support_difference": [
+     -0.001505811925246227,
+     0.0009476776034780306
+    ]
+   }
+  },
+  "n_pairs": 2
+ },
+ "source": "gpu_e30b_measures: gpu_e30b win64 pairs, seeds 0 and 5, re-measured"
+}

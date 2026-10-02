@@ -3028,3 +3028,64 @@ Rule: the group's median mass on the right successor
 - in between: undetermined.
 Reported alongside: the mass as a function of the successor's occurrences (classes 1-5, 6-20, 21-50, > 50), at fixed
 pair visits n.
+
+## 2026-10-02 (15) -- gpu_e30b_measures received: code version, CPUs, consistency, TAU, verdict, floor intervals
+
+### Code and CPUs (user decisions)
+
+- The archive (handoff/gpu_e30b_measures/, imported alone from origin/main; no merge of origin/main yet) was measured
+  with source_sha256 **dae7ff2e...** (261 files), the tree of b887419 on main, not 99efffaf... (e0889bd). Accepted:
+  b887419 changes only submit_kubeflow.py among the code (plus RUN_GPU.md, DECISIONS and two tests); no file read by
+  recompute_measures.py differs from this branch. The merge of origin/main comes after the gradients-vs-data
+  diagnostic; the supervisor's entry on main will then take the next free number here, marked "numbered (11) on main on
+  2026-10-01"; our entries (11) to (13) are not renumbered.
+- **Protocol deviation: 3 CPUs requested and usable instead of 5** (the notebook reserves 2 of the namespace's 5).
+  No effect expected on the measures: made on the GPU, and the re-measured arrays are bit-identical to the originals
+  (below). Consequence for planning: if the notebook keeps 2 CPUs, the cost estimates of the closed loop must assume 3
+  usable CPUs, not 4.
+
+### Consistency with the original gpu_e30b measurements (same GPU)
+
+`tau_gpu_e30b.py` (report: reports/tau_gpu_e30b/TAU.md): the four runs measured from the expected weights, one code
+hash, one device (A100-SXM4-80GB), TF32 off, K = 1,358. I_s, I_z (real contexts) and off-support mass, by run and
+zone: **0 of 16 rows differ; the per-state arrays real_I_s, real_I_z and real_p_hat are bit-identical** (largest
+difference 0). The re-measurement reproduces the stored values exactly.
+
+### TAU (definitions of (9), B, unchanged; two seeds of different block classes A and B, an sd over n = 2 with one
+### degree of freedom: a fragile estimate)
+
+| zone | values over the pairs (seed 0, seed 5) | threshold |
+|---|---|---|
+| CN | b(I_s) - b(I_s projected): +0.0160, +0.0018 | **TAU_B = 0.0200** |
+| CN | off-support env - ref: +0.0124, +0.0015 | **TAU_OFF = 0.0154** |
+| CD | b(I_s) - b(I_s projected): -0.0121, +0.0080 | **TAU_B = 0.0285** |
+| CD | off-support env - ref: -0.0015, +0.0009 | **TAU_OFF = 0.0035** |
+
+No value is zero or aberrant; one value per pair and zone, so each threshold is sqrt(2) times the absolute difference
+of two numbers. The limits raised in (10) apply as stated there (one degree of freedom; the verdict on these two pairs
+is set by the relative position of the two values, so it is a description of gpu_e30b, not a test).
+
+### Verdict of the rule on gpu_e30b (CN, CD) and the b table
+
+| seed | zone | b (I_s) | b (I_s projected) | off-support env / ref | verdict |
+|---|---|---|---|---|---|
+| 0 | UD | -2.2394 | -2.2432 | 0.0472 / 0.0085 | read against the floor (floor run) |
+| 0 | CN | +0.0084 | -0.0075 | 0.0498 / 0.0374 | interpretable |
+| 0 | UN | -1.7921 | -1.7777 | 0.1573 / 0.0457 | read against the floor (floor run) |
+| 0 | CD | -0.0028 | +0.0093 | 0.0048 / 0.0063 | interpretable |
+| 5 | UD | -2.2681 | -2.2689 | 0.0596 / 0.0051 | read against the floor (floor run) |
+| 5 | CN | -0.0040 | -0.0058 | 0.0431 / 0.0416 | interpretable |
+| 5 | UN | -1.7504 | -1.7375 | 0.1421 / 0.0527 | read against the floor (floor run) |
+| 5 | CD | -0.0090 | -0.0170 | 0.0079 / 0.0070 | interpretable |
+
+CN and CD: the two versions of b agree within TAU_B and the off-support masses within TAU_OFF in both pairs
+(descriptive on these pairs, see above).
+
+### UN, UD: calibration interval of the environment-side off-support mass (condition of the E3-0 floor in closed loop)
+
+| zone | E3-0 floor b(I_s) (seeds 0, 5; mean) | observed off-support (env) | tau_off_floor (implementer's reading, to be confirmed) | interval |
+|---|---|---|---|---|
+| UD | -2.2394, -2.2681; **-2.2538** | 0.0472 - 0.0596 | 0.0175 | **[0.0297, 0.0771]** |
+| UN | -1.7921, -1.7504; **-1.7713** | 0.1421 - 0.1573 | 0.0214 | **[0.1207, 0.1787]** |
+
+Saved as reports/tau_gpu_e30b/thresholds.json (aggregate_b.py's --thresholds format); not copied into configs/.
