@@ -2997,3 +2997,34 @@ agents/worldmodel/{rssm, loop, replay, losses, agent, acceleration}, envs/*, run
 heads.py, policy.py, run_agent.py, agent_mini.yaml, the diagnostic scripts, docs and tests. The batch launched from
 origin/main measures with the same code as this branch. The branch's RUN_GPU.md carries the branch's own hash (it
 changes with every code commit); whichever tree main holds at launch, the preflight checks its RUN_GPU.md against it.
+
+## 2026-10-02 (14) -- recorded BEFORE computing: gradients-vs-data launch settings; target-state frequency rule
+
+The user accepts the correction of (12): the four goal pairs are at percentile rank 0 of their visit class, so the goal
+carries a penalty on top of the general insufficiency; the verdict of (12) is unchanged.
+
+### Gradients against data: approved and launched with these settings (protocol and criterion of (13) unchanged)
+
+- Start: the resume point at environment step 18,000 (weights, Adam state, separation switch, schedule, replay of
+  18,510 observations); the world model alone, trained N = 20,000 more gradient steps on that frozen replay, with the
+  run's loss, learning rate and schedule (phase_learning_rate, rep_beta), the separation switch's collapse guard
+  evaluated as in the run; minibatches and latent draws from the diagnostic's own streams. The run directory is only
+  read; everything is written under reports/.
+- Kernel measured (K = 1,358, the run's settings, the same measurement seeds as the baseline kernel_18000.npz) at
+  N = 5,000, 10,000 and 20,000. **Only N = 20,000 decides the criterion of (13); N = 5,000 and 10,000 are descriptive.**
+- Reported at each point: the median mass on the right successor over the deterministic pairs off the goal with
+  2 <= n <= 8 (n = the visits at 18,000) and their number; by zone, the L1 to P of the noisy pairs and their mass on
+  the four minor successors (0.1 under P); the four goal pairs' mass on the goal.
+
+### Target-state frequency (read-only on kernel_18000.npz; reading rule fixed here, before computing)
+
+Question: does the rarity of the goal as an observed state (13 occurrences in the replay at 18,000) explain the goal
+pairs' penalty?
+Group: the deterministic pairs off the goal with 2 <= n <= 8 whose successor state appears at most 20 times in the
+replay (as an observation, at 18,000). If the group has fewer than 10 pairs, say so and do not apply the rule.
+Rule: the group's median mass on the right successor
+- <= 0.05: the frequency of the target state explains the goal's penalty;
+- >= 0.2: there is another factor specific to the goal;
+- in between: undetermined.
+Reported alongside: the mass as a function of the successor's occurrences (classes 1-5, 6-20, 21-50, > 50), at fixed
+pair visits n.
