@@ -65,21 +65,22 @@ python -c "import sys; sys.path.insert(0, 'src'); from helplessness.runs import 
 The last command must print exactly:
 
 ```
-{'source_sha256': 'd265062b0e034ee0a73db33d7a22e3875f4d92eef0932d4710a1ea501088a3de', 'source_n_files': 265}
+{'source_sha256': 'dae7ff2e302b16dc6744833e04f040098f5076082ef3414eeec8a3b291fddb2d', 'source_n_files': 261}
 ```
 
 If `git pull` fails or the hash differs, stop: do not launch anything, go to step 5 (without measurement).
 The preflight checks the same hash again on the GPU node and fails if it differs.
 
-Use the commands of steps 2 and 3 exactly as written, `--cpu 5` included: the batch is prescribed **5
-CPUs in total**. `submit_kubeflow.py` refuses another `--cpu`, and the preflight fails unless 5 CPUs are
-both requested and usable in the container. If the submission is refused, or if the namespace cannot
-grant 5 CPUs (pod `Pending`), stop (rule 4): do not lower the number yourself.
+Use the commands of steps 2 and 3 exactly as written, `--cpu 3` included: the batch is prescribed **3
+CPUs in total** (user-approved capacity adjustment; see `docs/e3/DECISIONS.md`). `submit_kubeflow.py`
+refuses another `--cpu`, and the preflight fails unless 3 CPUs are both requested and usable in the
+container. If the submission is refused, or if the namespace cannot grant 3 CPUs (pod `Pending`), stop
+(rule 4): do not lower the number yourself.
 
 ## Step 2 -- preflight (about 30 minutes)
 
 ```bash
-python experiments/E3_worldmodel_4zones/submit_kubeflow.py --phase preflight --batch gpu_e30b_measures --max-parallel 4 --cpu 5
+python experiments/E3_worldmodel_4zones/submit_kubeflow.py --phase preflight --batch gpu_e30b_measures --max-parallel 4 --cpu 3
 ```
 
 It prints a JSON record and "Submitted, not yet confirmed running". Copy the value of `"output"` from
@@ -89,8 +90,8 @@ that record (a path ending in `logs/kubeflow/preflight-<date>`) into the variabl
 PRE=<the "output" path printed above>
 ```
 
-The preflight checks: CUDA, TF32 off and deterministic algorithms on as in the measured runs; **5 CPUs
-requested and 5 usable**; the code hash above; for each of the four runs, that its directory exists with
+The preflight checks: CUDA, TF32 off and deterministic algorithms on as in the measured runs; **3 CPUs
+requested and 3 usable**; the code hash above; for each of the four runs, that its directory exists with
 its files, that its name, `meta.yaml` and window are the job's, and that `weights_final.pt` has the
 expected SHA-256; then it measures the first run once in full on the GPU (into `$PRE/runs/smoke/`) and
 projects the batch's duration from it. Follow the pod until it has finished:
@@ -113,16 +114,16 @@ cat "$PRE/runs/preflight_verdict.json"
 Read `$PRE/runs/preflight_verdict.json`:
 
 - **Launch** if `passed` is `true`, `problems` is empty, `projected_batch_hours` is a number <= 4, and
-  `cpus.requested` and `cpus.usable` are both 5 (the last lines of `preflight.log` say `CPUs: 5
-  requested, 5 usable` and `PREFLIGHT DECISION: launch`). Launch the measurement with exactly these
+  `cpus.requested` and `cpus.usable` are both 3 (the last lines of `preflight.log` say `CPUs: 3
+  requested, 3 usable` and `PREFLIGHT DECISION: launch`). Launch the measurement with exactly these
   options:
 
   ```bash
-  python experiments/E3_worldmodel_4zones/submit_kubeflow.py --phase measure --batch gpu_e30b_measures --max-parallel 4 --cpu 5
+  python experiments/E3_worldmodel_4zones/submit_kubeflow.py --phase measure --batch gpu_e30b_measures --max-parallel 4 --cpu 3
   ```
 
 - **Stop** in every other case (any problem, a projection above 4 hours or missing, no verdict file, a
-  number of CPUs other than 5). Do not launch; go to step 5 (without measurement) with the preflight's
+  number of CPUs other than 3). Do not launch; go to step 5 (without measurement) with the preflight's
   output. There is no retry branch for this batch.
 
 The last line of `preflight.log` is `PREFLIGHT DECISION: launch` or `PREFLIGHT DECISION: stop`. If that

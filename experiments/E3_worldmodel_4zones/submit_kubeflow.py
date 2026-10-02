@@ -57,7 +57,7 @@ DEFAULT_BATCH = "gpu_e30"
 # The job's CPU request, PER BATCH (docs/e3/DECISIONS.md, 2026-09-30 (5)): gpu_e30b was prescribed 5 CPUs and ran on 3,
 # because --cpu defaulted to 3 and a command without it (or with another value) was accepted silently. The
 # request now defaults to the batch's own value, and a different --cpu is refused unless --allow-cpu-override.
-BATCH_CPUS = {"gpu_e30": 3, "gpu_e30b": 5, "gpu_e30b_measures": 5}
+BATCH_CPUS = {"gpu_e30": 3, "gpu_e30b": 5, "gpu_e30b_measures": 3}
 DEFAULT_CPUS = BATCH_CPUS[DEFAULT_BATCH]
 
 

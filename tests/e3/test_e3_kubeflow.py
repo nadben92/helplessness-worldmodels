@@ -217,9 +217,9 @@ def test_measurement_batch_reads_the_runs_in_place_and_never_trains(tmp_path):
     with pytest.raises(ValueError, match="phase measure"):
         cluster.commands("measure", "python", tmp_path, batch="gpu_e30b")
     pre = cluster.commands("preflight", "python", tmp_path, batch="gpu_e30b_measures", max_parallel=4)[0][1]
-    assert pre[2].endswith("preflight_measures.py") and pre[pre.index("--cpus") + 1] == "5" and pre[pre.index("--parallel") + 1] == "4"
-    assert cluster.resolve_cpus("gpu_e30b_measures", None) == 5
+    assert pre[2].endswith("preflight_measures.py") and pre[pre.index("--cpus") + 1] == "3" and pre[pre.index("--parallel") + 1] == "4"
+    assert cluster.resolve_cpus("gpu_e30b_measures", None) == 3
     with pytest.raises(ValueError):
-        cluster.resolve_cpus("gpu_e30b_measures", 3)
+        cluster.resolve_cpus("gpu_e30b_measures", 5)
     with pytest.raises(SystemExit):
         cluster.main(["--phase", "train", "--batch", "gpu_e30b_measures"])

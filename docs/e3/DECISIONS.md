@@ -3202,3 +3202,13 @@ environment step); at another ratio the curve, hence the forecast, shifts -- and
 still rising) says more gradient steps per visit raise the mass. **For the goal it is a lower bound** on the number of
 environment steps: the goal pairs are at percentile rank 0 of their visit class, their successor is among the
 rarest states, and the extra gradient steps of this diagnostic barely moved them.
+
+## 2026-10-01 (18) -- CPU capacity adjustment for gpu_e30b_measures (numbered (11) on main on 2026-10-01; renumbered at the merge of main into e3/worldmodel, 2026-10-02)
+
+The user authorized running the measurement-only batch with 3 CPUs rather than the originally prescribed 5:
+the notebook reserves 2 of the namespace's 5 CPUs, so the 5-CPU GPU job cannot be admitted alongside it.
+This supersedes only the batch's CPU prescription in (10), not its four source runs, weights, measurement
+configuration, parallelism (4), deterministic GPU settings, source-hash check, or preflight decision rule.
+`BATCH_CPUS`, the runbook, and their tests now prescribe 3 requested and 3 usable CPUs; the preflight still
+rejects any other allocation and any projected duration over 4 hours. The existing dirty cluster checkout
+must be preserved separately before installing a clean copy of this version at the canonical path.
