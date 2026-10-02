@@ -21,7 +21,8 @@ What it does, in this order, without changing any definition:
    win64 pairs (seeds 0 and 5): for CN and CD, tau_b = 2 x sd of b(I_s) - b(I_s projected), tau_off =
    2 x sd of off-support(env) - off-support(ref); for UN and UD, tau_off_floor (the implementer's
    reading of "+- TAU_OFF of the zone", to be confirmed) and the E3-0 floor (aggregate_b.floor_from_pairs).
-5. The rule's verdict on every pair and zone (aggregate_b.aggregate with those thresholds and floor).
+5. The rule's verdict on every pair and zone (the rule of (9), e30_rule_verdict; since 2026-10-02 (16) E3-0's
+   values are an aberration control only, and this verdict is the record of (15)).
 
 Outputs, in --out (default reports/tau_gpu_e30b/, refused if it already holds files):
 TAU.md (batch check, consistency, thresholds with the values they come from, verdict),
@@ -138,7 +139,22 @@ def compute(paths: dict[str, dict[str, Path]]) -> dict:
     floor = agg.floor_from_pairs(base["pairs"], th["tau_off_floor"])
     rules = {"tau_b": th["tau_b"], "tau_off": th["tau_off"], "floor": floor, "derivation": th,
              "source": f"{BATCH}: gpu_e30b win64 pairs, seeds 0 and 5, re-measured"}
-    return {"rules": rules, "aggregate": agg.aggregate(runs, th["tau_b"], th["tau_off"], floor)}
+    result = agg.aggregate(runs)
+    for p in result["pairs"]:
+        for cat, v in p["bias_control"].items():
+            v["verdict"] = e30_rule_verdict(v, cat, th["tau_b"], th["tau_off"], floor)
+    return {"rules": rules, "aggregate": result}
+
+
+def e30_rule_verdict(v: dict, cat: str, tau_b: dict, tau_off: dict, floor: dict) -> str:
+    """The reading rule of DECISIONS 2026-09-30 (9) as applied to gpu_e30b in (15) -- kept here for that record only:
+    since 2026-10-02 (16) E3-0's thresholds are an aberration control, not a rule (aggregate_b.py)."""
+    if agg.is_controllable(cat):
+        ok = abs(v["off_support_difference"]) <= tau_off[cat] and np.isfinite(v["b_difference"]) and abs(v["b_difference"]) <= tau_b[cat]
+        return "interpretable" if ok else "NOT interpretable"
+    fz, tol = floor["zones"][cat], floor["tau_off_floor"][cat]
+    within = fz["off_support_min"] - tol <= v["off_support_experimental"] <= fz["off_support_max"] + tol
+    return "read against the floor" if within else "diagnostic only (off-support outside the floor's interval)"
 
 
 def report(check: tuple[list[str], dict], rows: list[dict], result: dict) -> str:

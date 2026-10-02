@@ -71,11 +71,11 @@ def test_a_duplicate_run_is_refused(tmp_path):
         agg.aggregate([agg.load_run(a), agg.load_run(b)])
 
 
-def _pair(tmp_path, name, i_s_env, i_s_ref, proj_env=None, proj_ref=None, off_env=None):
+def _pair(tmp_path, name, i_s_env, i_s_ref, proj_env=None, proj_ref=None, off_env=None, seed=0):
     """One environment / reference pair; off_env: {zone index: extra off-support mass of the environment run}."""
     (tmp_path / name).mkdir()
-    e = agg.load_run(_write_run(tmp_path / name, "cfg", 0, "experimental", i_s_env, i_s_env, l1_wm=0.02))
-    r = agg.load_run(_write_run(tmp_path / name, "cfg", 0, "reference", i_s_ref, i_s_ref, l1_wm=0.02))
+    e = agg.load_run(_write_run(tmp_path / name, "cfg", seed, "experimental", i_s_env, i_s_env, l1_wm=0.02))
+    r = agg.load_run(_write_run(tmp_path / name, "cfg", seed, "reference", i_s_ref, i_s_ref, l1_wm=0.02))
     for run, proj in ((e, proj_env), (r, proj_ref)):
         if proj is not None:
             run["I_s_projected"] = {c: {"mean": proj[k], "se": 0.01} for k, c in enumerate(CATS)}
@@ -84,43 +84,77 @@ def _pair(tmp_path, name, i_s_env, i_s_ref, proj_env=None, proj_ref=None, off_en
     return [e, r]
 
 
-def test_bias_control_reading_rule_by_zone_type(tmp_path):
-    """docs/e3/DECISIONS.md, 2026-09-30 (9): controllable zones (CN, CD) need the two versions of b to agree and the
-    off-support mass to be the same in both environments; uncontrollable zones (UN, UD) are read against the E3-0
-    floor, provided the environment-side off-support mass stays within the floor's interval."""
+ENV, REF = [0.1, 1.7, 0.1, 2.3], [2.3, 1.7, 1.7, 2.3]
+PROJ_ENV, PROJ_REF = [0.05, 1.6, 0.05, 2.3], [2.3, 1.6, 1.6, 2.3]
+
+
+def test_e30_ranges_only_flag_aberrations(tmp_path):
+    """docs/e3/DECISIONS.md, 2026-10-02 (16), 2: E3-0's ranges flag a closed-loop value outside them; nothing is
+    excluded and no verdict is given from them."""
     assert [agg.is_controllable(c) for c in CATS] == [False, True, False, True]
-    env, ref = [0.1, 1.7, 0.1, 2.3], [2.3, 1.7, 1.7, 2.3]
-    proj_env, proj_ref = [0.05, 1.6, 0.05, 2.3], [2.3, 1.6, 1.6, 2.3]
-    runs = _pair(tmp_path, "a", env, ref, proj_env, proj_ref)
-    partial = agg.aggregate(_pair(tmp_path, "p", env, ref), 0.1, 0.02)["pairs"][0]["bias_control"]
-    assert partial[CATS[1]]["verdict"].startswith("partial: off-support ok") and partial[CATS[0]]["verdict"] == "floor unavailable"
-    full = agg.aggregate(runs, 0.1, 0.02)["pairs"][0]["bias_control"]
-    assert full[CATS[1]]["b_I_s"] == pytest.approx(0.0) and full[CATS[1]]["verdict"] == "interpretable"
-    assert full[CATS[0]]["b_I_s"] == pytest.approx(-2.2) and full[CATS[0]]["verdict"] == "floor unavailable"
-    # thresholds: twice the sd of the tested quantity, over the E3-0 pairs, controllable zones only
-    floor_pairs = agg.aggregate(runs, 0.1, 0.02)["pairs"]
+    control = agg.load_e30_control()  # the versioned file of (16), values of (15)
+    assert set(control["tau_b"]) == set(control["tau_off"]) == {CATS[1], CATS[3]} and set(control["off_support_interval"]) == {CATS[0], CATS[2]}
+    assert control["tau_b"][CATS[1]] == pytest.approx(0.0200, abs=1e-4) and control["off_support_interval"][CATS[2]][0] == pytest.approx(0.1207, abs=1e-4)
+    toy = {"tau_b": {CATS[1]: 0.05, CATS[3]: 0.05}, "tau_off": {CATS[1]: 0.02, CATS[3]: 0.02},
+           "off_support_interval": {CATS[0]: [0.0, 0.1], CATS[2]: [0.0, 0.1]}}
+    clean = agg.aggregate(_pair(tmp_path, "a", ENV, REF, [0.1, 1.68, 0.1, 2.3], [2.3, 1.7, 1.7, 2.3]), toy)["pairs"][0]["bias_control"]
+    assert all(v["aberrations"] == [] for v in clean.values()) and not any("verdict" in v for v in clean.values())
+    out = agg.aggregate(_pair(tmp_path, "b", ENV, REF, PROJ_ENV, [2.3, 1.7, 1.7, 2.3], off_env={1: 0.1, 2: 0.2}), toy)["pairs"][0]["bias_control"]
+    assert len(out[CATS[1]]["aberrations"]) == 2  # b(I_s) - b(projected) = 0.1 > 0.05, and the off-support difference
+    assert out[CATS[2]]["aberrations"][0].startswith("off-support (env)") and out[CATS[0]]["aberrations"] == []
+    assert out[CATS[3]]["aberrations"] == []
+    text = agg.markdown(agg.aggregate(_pair(tmp_path, "c", ENV, REF, PROJ_ENV, PROJ_REF), toy))
+    assert "aberration flags" in text and "## Campaign rule" not in text
+    bare = agg.aggregate(_pair(tmp_path, "d", ENV, REF))["pairs"][0]["bias_control"]
+    assert "aberrations" not in bare[CATS[1]]
+
+
+def _campaign(tmp_path, diffs_cn, off_cn, seeds, prefix="s"):
+    runs = []
+    for k, (seed, d, o) in enumerate(zip(seeds, diffs_cn, off_cn)):
+        proj_env = [0.05, 1.7 - d, 0.05, 2.3]  # b(I_s) - b(projected) in CN = d
+        runs += _pair(tmp_path, f"{prefix}{k}", ENV, REF, proj_env, [2.3, 1.7, 1.6, 2.3], off_env={1: o}, seed=seed)
+    return runs
+
+
+def test_campaign_rule_with_unset_parameters_is_descriptive(tmp_path):
+    """(16), 3: N, FRACTION and REFERENCE EFFECT are fixed by the user before the campaign; unset -> not applied."""
+    runs = _campaign(tmp_path, [0.01, -0.01, 0.005, -0.005], [0.0, 0.001, -0.001, 0.0], [0, 1, 5, 6])
+    cr = agg.aggregate(runs, None, {"n_seeds": None, "fraction": None, "reference_effect": None})["campaign_rule"]
+    assert cr["status"].startswith("not applied: n_seeds, fraction, reference_effect not fixed")
+    assert set(cr["zones"]) == {CATS[1], CATS[3]} and "verdict" not in cr["zones"][CATS[1]]
+    assert cr["zones"][CATS[1]]["b_difference"]["mean"] == pytest.approx(0.0, abs=1e-12)
+    pilot = agg.aggregate(runs[:4], None, {"n_seeds": 2, "fraction": 0.5, "reference_effect": 0.02})["campaign_rule"]
+    assert pilot["status"] == "not applied: two seeds (pilot); descriptive only"
+
+
+def test_campaign_rule_confidence_intervals(tmp_path):
+    from scipy.stats import t
+
+    diffs = [0.004, -0.002, 0.003, -0.001]
+    runs = _campaign(tmp_path, diffs, [0.001, -0.001, 0.0, 0.0005], [0, 1, 5, 6])
+    cr = agg.aggregate(runs, None, {"n_seeds": 4, "fraction": 0.5, "reference_effect": -0.02})["campaign_rule"]
+    z = cr["zones"][CATS[1]]["b_difference"]
+    half = t.ppf(0.975, 3) * np.std(diffs, ddof=1) / 2
+    assert z["mean"] == pytest.approx(np.mean(diffs)) and z["ci95"] == pytest.approx([np.mean(diffs) - half, np.mean(diffs) + half])
+    assert cr["status"] == "applied" and cr["bound"] == pytest.approx(0.01)
+    assert cr["zones"][CATS[1]]["verdict"] == "interpretable"  # both intervals within +- 0.01
+    wide = _campaign(tmp_path, [0.03, -0.02, 0.025, -0.01], [0.001, -0.001, 0.0, 0.0005], [0, 1, 5, 6], prefix="w")
+    assert agg.aggregate(wide, None, {"n_seeds": 4, "fraction": 0.5, "reference_effect": -0.02})["campaign_rule"]["zones"][CATS[1]]["verdict"] == "NOT interpretable"
+    with pytest.raises(ValueError, match="classes A and B in equal numbers"):
+        agg.aggregate(_campaign(tmp_path, diffs, [0, 0, 0, 0], [0, 1, 2, 5], prefix="u"), None,
+                      {"n_seeds": 4, "fraction": 0.5, "reference_effect": 0.02})
+    with pytest.raises(ValueError, match="expected N = 6"):
+        agg.aggregate(runs, None, {"n_seeds": 6, "fraction": 0.5, "reference_effect": 0.02})
+
+
+def test_thresholds_and_floor_of_e30_pairs(tmp_path):
+    """The functions that produced E3-0's ranges in (15) (tau_gpu_e30b.py), unchanged."""
+    floor_pairs = agg.aggregate(_pair(tmp_path, "a", ENV, REF, PROJ_ENV, PROJ_REF))["pairs"]
     th = agg.thresholds_from_pairs(floor_pairs * 2)  # two identical pairs: sd 0
     assert th["tau_b"][CATS[1]] == 0.0 and th["tau_off_floor"][CATS[0]] == 0.0 and CATS[0] not in th["tau_b"]
-    other = agg.aggregate(_pair(tmp_path, "o", [0.1, 1.9, 0.1, 2.3], ref, [0.05, 1.6, 0.05, 2.3], proj_ref), 0.1, 0.02)["pairs"]
-    th2 = agg.thresholds_from_pairs(floor_pairs + other)  # b(I_s) - b(projected) in CN: -0.1 + 0.1 = 0 and 0.1 + 0.3... see below
+    other = agg.aggregate(_pair(tmp_path, "o", [0.1, 1.9, 0.1, 2.3], REF, PROJ_ENV, PROJ_REF))["pairs"]
     diffs = [p["bias_control"][CATS[1]]["b_difference"] for p in floor_pairs + other]
-    assert th2["tau_b"][CATS[1]] == pytest.approx(2 * np.std(diffs, ddof=1))
+    assert agg.thresholds_from_pairs(floor_pairs + other)["tau_b"][CATS[1]] == pytest.approx(2 * np.std(diffs, ddof=1))
     floor = agg.floor_from_pairs(floor_pairs, {CATS[0]: 0.01, CATS[2]: 0.01})
     assert floor["zones"][CATS[0]]["b_I_s"] == pytest.approx(-2.2)
-    # a closed-loop pair whose conveyor b matches the floor, off-support mass inside the interval
-    ok = agg.aggregate(_pair(tmp_path, "c", [0.2, 1.7, 0.2, 2.3], ref, [0.1, 1.6, 0.1, 2.3], proj_ref), 0.1, 0.02, floor)["pairs"][0]["bias_control"]
-    assert ok[CATS[0]]["verdict"] == "read against the floor" and ok[CATS[0]]["b_minus_floor"] == pytest.approx(0.1)
-    # environment-side off-support mass outside the interval: that zone is diagnostic only, the others unaffected
-    out = agg.aggregate(_pair(tmp_path, "d", [0.2, 1.7, 0.2, 2.3], ref, [0.1, 1.6, 0.1, 2.3], proj_ref, off_env={2: 0.2}),
-                        0.1, 0.02, floor)["pairs"][0]["bias_control"]
-    assert out[CATS[2]]["verdict"].startswith("diagnostic only") and out[CATS[0]]["verdict"] == "read against the floor"
-    # a controllable zone whose off-support mass differs between the environments
-    leak = agg.aggregate(_pair(tmp_path, "e", env, ref, proj_env, proj_ref, off_env={1: 0.1}), 0.1, 0.02, floor)["pairs"][0]["bias_control"]
-    assert leak[CATS[1]]["verdict"] == "NOT interpretable" and leak[CATS[3]]["verdict"] == "interpretable"
-    # thresholds are per zone
-    runs = _pair(tmp_path, "f", env, ref, [0.05, 1.5, 0.05, 2.3], proj_ref)  # in CN the projected b is -0.1 while b(I_s) is 0
-    per_zone = agg.aggregate(runs, {CATS[1]: 0.01, CATS[3]: 0.5}, {CATS[1]: 0.5, CATS[3]: 0.5}, floor)["pairs"][0]["bias_control"]
-    assert per_zone[CATS[1]]["verdict"] == "NOT interpretable"  # |b(I_s) - b(projected)| = 0.1 > 0.01 in that zone
-    assert per_zone[CATS[3]]["verdict"] == "interpretable"
-    text = agg.markdown(agg.aggregate(runs, th["tau_b"], th["tau_off"], floor))
-    assert "## Bias control" in text and "read against the floor" in text

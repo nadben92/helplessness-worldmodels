@@ -1,0 +1,25 @@
+[gradients-vs-data] start: gradient step 35488 (switch 4251, rep warm-up 7047), replay 18510 observations; baseline median n=2-8 0.284 (170 pairs)
+[gradients-vs-data] +  1000 | recon 0.8207 | kl_dyn 2.789 | 291s
+[gradients-vs-data] +  2000 | recon 0.9292 | kl_dyn 2.689 | 579s
+[gradients-vs-data] +  3000 | recon 0.7491 | kl_dyn 2.091 | 857s
+[gradients-vs-data] +  4000 | recon 0.4888 | kl_dyn 1.822 | 1132s
+[gradients-vs-data] +  5000 | recon 0.6362 | kl_dyn 2.415 | 1407s
+[gradients-vs-data] measured at +5000: median n=2-8 0.359
+[gradients-vs-data] +  6000 | recon 0.4177 | kl_dyn 2.077 | 2057s
+[gradients-vs-data] +  7000 | recon 0.5211 | kl_dyn 2.172 | 2324s
+[gradients-vs-data] +  8000 | recon 0.5069 | kl_dyn 1.837 | 2611s
+[gradients-vs-data] +  9000 | recon 0.3850 | kl_dyn 2.530 | 2875s
+[gradients-vs-data] + 10000 | recon 0.4918 | kl_dyn 1.677 | 3135s
+[gradients-vs-data] measured at +10000: median n=2-8 0.435
+[gradients-vs-data] + 11000 | recon 0.8830 | kl_dyn 2.641 | 3779s
+[gradients-vs-data] + 12000 | recon 0.6321 | kl_dyn 2.821 | 4037s
+[gradients-vs-data] + 13000 | recon 0.4515 | kl_dyn 2.375 | 4334s
+[gradients-vs-data] + 14000 | recon 0.4066 | kl_dyn 2.290 | 4628s
+[gradients-vs-data] + 15000 | recon 0.3151 | kl_dyn 1.829 | 4917s
+[gradients-vs-data] + 16000 | recon 0.3941 | kl_dyn 2.905 | 5218s
+[gradients-vs-data] + 17000 | recon 0.6276 | kl_dyn 2.428 | 5472s
+[gradients-vs-data] + 18000 | recon 0.6925 | kl_dyn 2.760 | 5727s
+[gradients-vs-data] + 19000 | recon 0.2883 | kl_dyn 1.916 | 5981s
+[gradients-vs-data] + 20000 | recon 0.6188 | kl_dyn 2.076 | 6267s
+[gradients-vs-data] measured at +20000: median n=2-8 0.494
+[gradients-vs-data] {"start": 0.2836081371908031, "end": 0.4940762073742587, "verdict": "mixed"}

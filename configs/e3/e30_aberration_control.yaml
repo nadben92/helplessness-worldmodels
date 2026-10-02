@@ -1,0 +1,16 @@
+# E3-0's ranges, used ONLY as an aberration control for the closed loop (docs/e3/DECISIONS.md, 2026-10-02 (16)):
+# a closed-loop value outside them is flagged by aggregate_b.py and must be explained before interpretation; it is
+# neither a threshold nor a floor and is never excluded automatically. Values of DECISIONS 2026-10-02 (15), from the
+# gpu_e30b win64 pairs (seeds 0 and 5) re-measured by gpu_e30b_measures (generated from reports/tau_gpu_e30b/thresholds.json).
+source: "gpu_e30b win64, seeds 0 and 5, re-measured (gpu_e30b_measures); DECISIONS 2026-10-02 (15)"
+# controllable zones: |b(I_s) - b(I_s projected)| and |off-support(env) - off-support(ref)|
+tau_b:
+  controllable_noisy: 0.01998888610924782
+  controllable_deterministic: 0.028457671376167434
+tau_off:
+  controllable_noisy: 0.015397341641596935
+  controllable_deterministic: 0.0034697581666622186
+# uncontrollable zones: environment-side off-support mass, observed range widened by tau_off_floor on each side
+off_support_interval:
+  uncontrollable_deterministic: [0.029721705106213536, 0.07702433586024694]
+  uncontrollable_noisy: [0.12070895990428518, 0.17874835751513346]

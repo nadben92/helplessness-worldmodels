@@ -212,9 +212,10 @@ def test_final_measures_in_closed_loop_pair_in_aggregate_b(tmp_path):
     assert len(agg["pairs"]) == 1 and not agg["unpaired"]
     control = agg["pairs"][0]["bias_control"]
     assert set(control) == set(run_mini.e3_env.ZONE_CATEGORIES)
-    for cat, v in control.items():  # both versions of b present; no floor given: the uncontrollable zones say so
-        expected = ("interpretable", "NOT interpretable") if aggregate_b.is_controllable(cat) else ("floor unavailable",)
-        assert v["verdict"] in expected, (cat, v["verdict"])
+    for cat, v in control.items():  # both versions of b present (2026-10-02 (16): reported as measured, no verdict)
+        assert np.isfinite(v["b_I_s"]) and np.isfinite(v["b_I_s_projected"]) and "verdict" not in v, cat
+    flagged = aggregate_b.aggregate([aggregate_b.load_run(d) for d in dirs.values()], aggregate_b.load_e30_control())
+    assert all("aberrations" in v for v in flagged["pairs"][0]["bias_control"].values())
 
 
 def test_a_run_without_separation_stops_on_the_guard(tmp_path):

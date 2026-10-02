@@ -11,25 +11,24 @@ and I_z (secondary, an upper bound). The off-support mass of each run's
 kernel (its share on states that are not reachable successors) is listed by
 zone next to its calibration.
 
-BIAS CONTROL (docs/e3/DECISIONS.md, 2026-09-30 (7), corrected in (9)). For
-every pair and zone: b on I_s and b on I_s projected, and the difference of
-off-support mass between the two environments (experimental - reference).
-The rule depends on the zone's type:
-  * controllable zones (CN, CD): the local dynamics are the same in the
-    environment and its reference, so b is interpretable only if the two
-    versions of b agree (|b(I_s) - b(I_s projected)| <= tau_b[zone]) AND the
-    off-support mass does not differ (|difference| <= tau_off[zone]).
-    Without the projected I_s the verdict is "partial" (off-support only).
-  * uncontrollable zones (UN, UD): the reference of such a zone is a
-    controllable zone, so the off-support condition fails by construction
-    and is not applied. b is read against the zone's E3-0 floor
-    (floor_from_pairs: the same b on the E3-0 pairs), provided the
-    environment-side off-support mass of the zone stays within the interval
-    observed on the E3-0 environment runs, widened by tau_off_floor[zone] on
-    each side; otherwise the zone is reported as "diagnostic only". Without
-    a floor: "floor unavailable".
-Thresholds are per zone (thresholds_from_pairs: twice the standard deviation
-of the tested quantity over the E3-0 pairs, fixed in DECISIONS (9)). The standard error of a
+BIAS CONTROL (docs/e3/DECISIONS.md, 2026-10-02 (16); replaces the rules of
+2026-09-30 (7) and (9)). For every pair and zone: b on I_s and on I_s
+projected, their difference, and the difference of off-support mass between
+the two environments (experimental - reference), reported as they are.
+  * Aberration control (E3-0's ranges, configs/e3/e30_aberration_control.yaml,
+    --e30-control): a value outside them -- in CN / CD
+    |b(I_s) - b(I_s projected)| > tau_b or |off-support difference| > tau_off,
+    in UN / UD the environment-side off-support mass outside its interval -- is
+    FLAGGED, to be explained before interpretation; never excluded.
+  * Campaign rule (campaign_rule; N, FRACTION and REFERENCE EFFECT fixed by the
+    user before the campaign, --n-seeds --fraction --reference-effect): per
+    controllable zone, over the N seeds (N even, classes A and B in equal
+    numbers), the mean of b(I_s) - b(I_s projected) and of the off-support
+    difference with their 95 % Student-t intervals; b is interpretable in the
+    zone if both intervals lie within +- FRACTION x REFERENCE EFFECT. Unset
+    parameters, or two seeds (the pilot): not applied, the differences are
+    reported as a description.
+The standard error of a
 pair's b combines the two runs' zone se's; a class mean (block class A or B,
 e3_env.block_class_for_seed) averages its seeds' b with se
 sqrt(sum se^2) / n (the seeds are the replicates; their spread is also
@@ -113,7 +112,74 @@ def floor_from_pairs(pairs: list[dict], tau_off_floor: dict) -> dict:
     return floor
 LABEL = {"I_s": "I_s (MAIN)", "I_s_projected": "I_s projected on the support (secondary)", "I_z": "I_z (secondary)"}
 GRID_SHAPE = (12, 12)
-DEFAULT_THRESHOLDS = Path(__file__).resolve().parents[2] / "configs" / "e3" / "bias_control_thresholds.json"
+E30_CONTROL = Path(__file__).resolve().parents[2] / "configs" / "e3" / "e30_aberration_control.yaml"
+
+
+def load_e30_control(path: Path = E30_CONTROL) -> dict:
+    """E3-0's ranges for the aberration control (DECISIONS 2026-10-02 (16)): tau_b, tau_off (CN, CD),
+    off_support_interval (UN, UD)."""
+    import yaml
+
+    return yaml.safe_load(Path(path).read_text(encoding="utf-8"))
+
+
+def aberrations(v: dict, cat: str, control: dict) -> list[str]:
+    """The aberration flags of one pair and zone against E3-0's ranges (empty: within them)."""
+    flags = []
+    if is_controllable(cat):
+        if np.isfinite(v["b_difference"]) and abs(v["b_difference"]) > control["tau_b"][cat]:
+            flags.append(f"|b(I_s) - b(I_s projected)| = {abs(v['b_difference']):.4f} > {control['tau_b'][cat]:.4f}")
+        if abs(v["off_support_difference"]) > control["tau_off"][cat]:
+            flags.append(f"|off-support env - ref| = {abs(v['off_support_difference']):.4f} > {control['tau_off'][cat]:.4f}")
+    else:
+        lo, hi = control["off_support_interval"][cat]
+        if not lo <= v["off_support_experimental"] <= hi:
+            flags.append(f"off-support (env) {v['off_support_experimental']:.4f} outside [{lo:.4f}, {hi:.4f}]")
+    return flags
+
+
+def mean_ci95(x: np.ndarray) -> dict:
+    """Mean and 95 % Student-t interval over the seeds (n - 1 degrees of freedom)."""
+    from scipy.stats import t
+
+    x = np.asarray(x, dtype=float)
+    n = len(x)
+    m = float(x.mean())
+    if n < 2:
+        return {"n": n, "mean": m, "ci95": [float("nan"), float("nan")]}
+    half = float(t.ppf(0.975, n - 1) * x.std(ddof=1) / np.sqrt(n))
+    return {"n": n, "mean": m, "ci95": [m - half, m + half]}
+
+
+def campaign_rule(pairs: list[dict], n_seeds: int | None, fraction: float | None, reference_effect: float | None) -> dict:
+    """DECISIONS 2026-10-02 (16), 3. Per controllable zone, over the campaign's pairs: the mean and 95 % interval of
+    b(I_s) - b(I_s projected) and of off-support(env) - off-support(ref); interpretable if both intervals lie within
+    +- fraction x |reference_effect|. Not applied (descriptive) when a parameter is unset or with two seeds (the
+    pilot). The campaign must have exactly n_seeds pairs, n_seeds even, block classes A and B in equal numbers."""
+    unset = [k for k, v in (("n_seeds", n_seeds), ("fraction", fraction), ("reference_effect", reference_effect)) if v is None]
+    classes = [p["zone_class"] for p in pairs]
+    out = {"n_pairs": len(pairs), "classes": {c: classes.count(c) for c in sorted(set(classes))}, "zones": {}}
+    if unset:
+        out["status"] = f"not applied: {', '.join(unset)} not fixed (set by the user before the campaign); descriptive only"
+    elif len(pairs) <= 2:
+        out["status"] = "not applied: two seeds (pilot); descriptive only"
+    else:
+        if len(pairs) != n_seeds or n_seeds % 2 or len(set(out["classes"].values())) != 1 or len(out["classes"]) != 2:
+            raise ValueError(f"campaign rule: {len(pairs)} pairs with classes {out['classes']}, expected N = {n_seeds} (even), "
+                             "classes A and B in equal numbers")
+        out["status"] = "applied"
+        out["bound"] = fraction * abs(reference_effect)
+    for cat in CATEGORIES:
+        if not is_controllable(cat):
+            continue
+        b = mean_ci95([p["bias_control"][cat]["b_difference"] for p in pairs])
+        off = mean_ci95([p["bias_control"][cat]["off_support_difference"] for p in pairs])
+        z = {"b_difference": b, "off_support_difference": off}
+        if out["status"] == "applied":
+            inside = [bool(-out["bound"] <= q["ci95"][0] and q["ci95"][1] <= out["bound"]) for q in (b, off)]
+            z["verdict"] = "interpretable" if all(inside) else "NOT interpretable"
+        out["zones"][cat] = z
+    return out
 
 
 def config_of(run_dir: str) -> str:
@@ -174,11 +240,10 @@ def pair_b(exp: dict, ref: dict, measure: str) -> dict[str, dict]:
     return out
 
 
-def aggregate(runs: list[dict], tau_b: float | dict = float("inf"), tau_off: float | dict = float("inf"),
-              floor: dict | None = None) -> dict:
-    """Pairs (config, seed) -> b per zone for each measure; class means per config. tau_b, tau_off: the reading
-    rule's thresholds, one number or {zone: number} (inf: the condition always holds -- pass the thresholds).
-    floor: floor_from_pairs' dict, for the uncontrollable zones (None: their verdict is "floor unavailable")."""
+def aggregate(runs: list[dict], e30_control: dict | None = None, campaign: dict | None = None) -> dict:
+    """Pairs (config, seed) -> b per zone for each measure; class means per config; for every pair and zone the
+    bias-control quantities, with E3-0's aberration flags when e30_control is given (load_e30_control); the
+    campaign rule when campaign = {n_seeds, fraction, reference_effect} is given (values may be None: descriptive)."""
     by_key: dict[tuple, dict] = {}
     for run in runs:
         slot = by_key.setdefault((run["config"], run["seed"]), {})
@@ -188,31 +253,18 @@ def aggregate(runs: list[dict], tau_b: float | dict = float("inf"), tau_off: flo
         slot[run["condition"]] = run
     pairs, unpaired = [], []
 
-    def bias_control(exp: dict, ref: dict, tau_b, tau_off) -> dict:
+    def bias_control(exp: dict, ref: dict) -> dict:
         out = {}
         for cat in CATEGORIES:
             off_e, off_r = exp["calibration"]["off_support_mass"][cat], ref["calibration"]["off_support_mass"][cat]
             b_s = _nan(exp["I_s"][cat]["mean"]) - _nan(ref["I_s"][cat]["mean"]) if "I_s" in exp and "I_s" in ref else float("nan")
             has_proj = "I_s_projected" in exp and "I_s_projected" in ref
             b_p = _nan(exp["I_s_projected"][cat]["mean"]) - _nan(ref["I_s_projected"][cat]["mean"]) if has_proj else float("nan")
-            extra = {}
-            if is_controllable(cat):
-                off_ok = bool(abs(off_e - off_r) <= zone_value(tau_off, cat))
-                if has_proj:
-                    verdict = "interpretable" if (abs(b_s - b_p) <= zone_value(tau_b, cat) and off_ok) else "NOT interpretable"
-                else:
-                    verdict = "partial: off-support " + ("ok" if off_ok else "NOT ok") + "; projected b unavailable"
-            elif floor is None:
-                verdict = "floor unavailable"
-            else:
-                fz, tol = floor["zones"][cat], zone_value(floor["tau_off_floor"], cat)
-                within = bool(fz["off_support_min"] - tol <= off_e <= fz["off_support_max"] + tol)
-                extra = {"floor_b_I_s": fz["b_I_s"], "b_minus_floor": b_s - fz["b_I_s"], "off_support_in_floor_interval": within,
-                         "floor_off_support_interval": [fz["off_support_min"] - tol, fz["off_support_max"] + tol]}
-                verdict = "read against the floor" if within else "diagnostic only (off-support outside the floor's interval)"
-            out[cat] = {**extra, "b_I_s": b_s, "b_I_s_projected": b_p, "b_difference": b_s - b_p if has_proj else float("nan"),
-                        "off_support_experimental": off_e, "off_support_reference": off_r, "off_support_difference": off_e - off_r,
-                        "verdict": verdict}
+            v = {"b_I_s": b_s, "b_I_s_projected": b_p, "b_difference": b_s - b_p if has_proj else float("nan"),
+                 "off_support_experimental": off_e, "off_support_reference": off_r, "off_support_difference": off_e - off_r}
+            if e30_control is not None:
+                v["aberrations"] = aberrations(v, cat, e30_control)
+            out[cat] = v
         return out
 
     for (config, seed), slot in sorted(by_key.items()):
@@ -222,7 +274,7 @@ def aggregate(runs: list[dict], tau_b: float | dict = float("inf"), tau_off: flo
         exp, ref = slot["experimental"], slot["reference"]
         pairs.append({"config": config, "seed": seed, "zone_class": exp["zone_class"],
                       "calibration": {"experimental": exp["calibration"], "reference": ref["calibration"]},
-                      "bias_control": bias_control(exp, ref, tau_b, tau_off),
+                      "bias_control": bias_control(exp, ref),
                       **{m: pair_b(exp, ref, m) for m in MEASURES if m in exp and m in ref}})
     classes = {}
     for pair in pairs:
@@ -241,9 +293,10 @@ def aggregate(runs: list[dict], tau_b: float | dict = float("inf"), tau_off: flo
                                  "sd_over_seeds": float(b.std(ddof=1)) if len(b) > 1 else float("nan"), "n_seeds": len(b)}
         entry["all_calibrated"] = all(p["calibration"][c]["all_ok"] for p in members for c in ("experimental", "reference"))
         class_means[f"{config}/{cls}"] = entry
-    return {"pairs": pairs, "class_means": class_means, "unpaired": unpaired,
-            "thresholds": {"tau_b": tau_b, "tau_off": tau_off, "tau_off_floor": floor["tau_off_floor"] if floor else None},
-            "floor": floor}
+    result = {"pairs": pairs, "class_means": class_means, "unpaired": unpaired, "e30_control": e30_control}
+    if campaign is not None:
+        result["campaign_rule"] = campaign_rule(pairs, campaign.get("n_seeds"), campaign.get("fraction"), campaign.get("reference_effect"))
+    return result
 
 
 def _f(x: float) -> str:
@@ -274,28 +327,27 @@ def markdown(agg: dict) -> str:
                                    for c in CATEGORIES)
                 lines.append(f"| {p['config']} | {p['zone_class']} | {p['seed']} | {cells} |")
         lines.append("")
-    th = agg["thresholds"]
-
-    def _th(key: str, cat: str) -> str:
-        value = th.get(key)
-        return f"{zone_value(value, cat):.3f}" if value is not None and (not isinstance(value, dict) or cat in value) else "-"
-
-    lines += ["## Bias control (reading rule, DECISIONS 2026-09-30 (9))", "",
-              "Controllable zones: b is interpretable only if |b(I_s) - b(I_s projected)| <= tau_b and |off-support(env) - off-support(ref)| "
-              "<= tau_off (per zone). Uncontrollable zones: the off-support condition fails by construction (the reference is a controllable "
-              "zone) and is not applied; b is read against the E3-0 floor provided the environment-side off-support mass stays in the "
-              "interval observed on the E3-0 environment runs +- tau_off_floor, else diagnostic only.", "",
-              "| zone | tau_b | tau_off | tau_off_floor |", "|---|---|---|---|"]
-    lines += [f"| {c} | {_th('tau_b', c)} | {_th('tau_off', c)} | {_th('tau_off_floor', c)} |" for c in CATEGORIES]
-    lines += ["", "| config | seed | zone | b (I_s) | b (I_s projected) | off-support env / ref (difference) | vs E3-0 floor | verdict |",
+    lines += ["## Bias control (DECISIONS 2026-10-02 (16))", "",
+              "Per pair and zone, as measured. Aberration flags: values outside E3-0's ranges (configs/e3/e30_aberration_control.yaml) "
+              "-- to be explained before interpretation, never excluded." if agg.get("e30_control") else
+              "Per pair and zone, as measured (no E3-0 aberration control given).", "",
+              "| config | seed | zone | b (I_s) | b (I_s projected) | difference | off-support env / ref (difference) | aberration flags |",
               "|---|---|---|---|---|---|---|---|"]
     for p in agg["pairs"]:
         for c, v in p["bias_control"].items():
-            floor_cell = (f"floor {_f(v['floor_b_I_s'])}, b - floor {_f(v['b_minus_floor'])}, interval "
-                          f"[{v['floor_off_support_interval'][0]:.3f}, {v['floor_off_support_interval'][1]:.3f}]") if "floor_b_I_s" in v else "-"
-            lines.append(f"| {p['config']} | {p['seed']} | {c} | {_f(v['b_I_s'])} | {_f(v['b_I_s_projected'])} | {v['off_support_experimental']:.3f} / "
-                         f"{v['off_support_reference']:.3f} ({v['off_support_difference']:+.3f}) | {floor_cell} | {v['verdict']} |")
+            flags = "; ".join(v["aberrations"]) if v.get("aberrations") else ("none" if "aberrations" in v else "-")
+            lines.append(f"| {p['config']} | {p['seed']} | {c} | {_f(v['b_I_s'])} | {_f(v['b_I_s_projected'])} | {_f(v['b_difference'])} | "
+                         f"{v['off_support_experimental']:.3f} / {v['off_support_reference']:.3f} ({v['off_support_difference']:+.3f}) | {flags} |")
     lines.append("")
+    if "campaign_rule" in agg:
+        cr = agg["campaign_rule"]
+        lines += ["## Campaign rule (DECISIONS 2026-10-02 (16), 3)", "", f"Status: {cr['status']}. Pairs: {cr['n_pairs']}, classes {cr['classes']}"
+                  + (f"; bound +- {cr['bound']:.4f}" if "bound" in cr else "") + ".", "",
+                  "| zone | b(I_s) - b(I_s projected): mean [95 % CI] | off-support env - ref: mean [95 % CI] | verdict |", "|---|---|---|---|"]
+        for c, z in cr["zones"].items():
+            cells = [f"{q['mean']:+.4f} [{q['ci95'][0]:+.4f}, {q['ci95'][1]:+.4f}]" for q in (z["b_difference"], z["off_support_difference"])]
+            lines.append(f"| {c} | {cells[0]} | {cells[1]} | {z.get('verdict', 'descriptive')} |")
+        lines.append("")
     lines += ["## Calibration and off-support mass of each run", "",
               "| config | seed | condition | C-a | C-c | C-b by zone (L1_WM vs L1_B + 0.05; floor) | off-support mass by zone |",
               "|---|---|---|---|---|---|---|"]
@@ -315,28 +367,18 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("runs", type=Path, nargs="+", help="run (or recomputation) directories with results.json and arrays.npz")
     parser.add_argument("--out", type=Path, default=None)
-    parser.add_argument("--e30", type=Path, nargs="*", default=None, metavar="RUN",
-                        help="the E3-0 runs (environment and reference, paired by config and seed): the thresholds and the floor are "
-                             "derived from them (thresholds_from_pairs, floor_from_pairs). Default: the thresholds file, if any")
-    parser.add_argument("--thresholds", type=Path, default=DEFAULT_THRESHOLDS,
-                        help="JSON {tau_b, tau_off, tau_off_floor, floor}: what --e30 writes with --write-thresholds (DECISIONS (9))")
-    parser.add_argument("--write-thresholds", type=Path, default=None, help="with --e30: save the derived thresholds and floor here")
+    parser.add_argument("--e30-control", type=Path, default=E30_CONTROL,
+                        help="E3-0's ranges for the aberration control (default configs/e3/e30_aberration_control.yaml)")
+    parser.add_argument("--no-e30-control", action="store_true", help="report without E3-0's aberration flags")
+    parser.add_argument("--n-seeds", type=int, default=None, help="campaign rule: N (set by the user before the campaign)")
+    parser.add_argument("--fraction", type=float, default=None, help="campaign rule: FRACTION (set by the user before the campaign)")
+    parser.add_argument("--reference-effect", type=float, default=None, help="campaign rule: REFERENCE EFFECT, bits (set by the user)")
     args = parser.parse_args(argv)
     paths = [p for p in args.runs if (p / "results.json").exists() and (p / "arrays.npz").exists()]
     skipped = [p for p in args.runs if p not in paths]
-    if args.e30:
-        base = aggregate([load_run(p) for p in args.e30 if (p / "results.json").exists()], floor=None)
-        th = thresholds_from_pairs(base["pairs"])
-        rules = {"tau_b": th["tau_b"], "tau_off": th["tau_off"], "floor": floor_from_pairs(base["pairs"], th["tau_off_floor"]),
-                 "derivation": th}
-        if args.write_thresholds:
-            args.write_thresholds.parent.mkdir(parents=True, exist_ok=True)
-            args.write_thresholds.write_text(json.dumps(rules, indent=1, default=float), encoding="utf-8")
-    elif args.thresholds.exists():
-        rules = json.loads(args.thresholds.read_text(encoding="utf-8"))
-    else:
-        raise SystemExit(f"no thresholds: give --e30 <E3-0 runs> or a --thresholds file ({args.thresholds} does not exist)")
-    agg = aggregate([load_run(p) for p in paths], rules["tau_b"], rules["tau_off"], rules["floor"])
+    control = None if args.no_e30_control else load_e30_control(args.e30_control)
+    agg = aggregate([load_run(p) for p in paths], control,
+                    {"n_seeds": args.n_seeds, "fraction": args.fraction, "reference_effect": args.reference_effect})
     agg["skipped_without_results"] = [str(p) for p in skipped]
     text = markdown(agg) + ("".join(f"\nNo results.json / arrays.npz (not finished?): `{p.name}`" for p in skipped) + "\n"
                             if skipped else "")

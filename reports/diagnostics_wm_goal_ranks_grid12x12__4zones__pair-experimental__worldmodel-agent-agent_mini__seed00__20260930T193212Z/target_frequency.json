@@ -1,0 +1,510 @@
+{
+ "goal_occurrences": 13,
+ "group_size": 49,
+ "group_median_mass": 0.09703703703703703,
+ "verdict": "undetermined",
+ "group_pairs": [
+  {
+   "s": 1,
+   "a": 1,
+   "n": 6,
+   "successor": 2,
+   "successor_occurrences": 17,
+   "mass": 0.01728024042073629
+  },
+  {
+   "s": 1,
+   "a": 2,
+   "n": 3,
+   "successor": 13,
+   "successor_occurrences": 14,
+   "mass": 0.03003003003003003
+  },
+  {
+   "s": 1,
+   "a": 4,
+   "n": 3,
+   "successor": 1,
+   "successor_occurrences": 15,
+   "mass": 0.08547655068078669
+  },
+  {
+   "s": 2,
+   "a": 2,
+   "n": 8,
+   "successor": 14,
+   "successor_occurrences": 14,
+   "mass": 0.1033457249070632
+  },
+  {
+   "s": 2,
+   "a": 3,
+   "n": 6,
+   "successor": 1,
+   "successor_occurrences": 15,
+   "mass": 0.04122938530734633
+  },
+  {
+   "s": 2,
+   "a": 4,
+   "n": 2,
+   "successor": 2,
+   "successor_occurrences": 17,
+   "mass": 0.03325942350332594
+  },
+  {
+   "s": 3,
+   "a": 2,
+   "n": 3,
+   "successor": 15,
+   "successor_occurrences": 7,
+   "mass": 0.0614359733530718
+  },
+  {
+   "s": 3,
+   "a": 3,
+   "n": 2,
+   "successor": 2,
+   "successor_occurrences": 17,
+   "mass": 0.020059435364041606
+  },
+  {
+   "s": 4,
+   "a": 1,
+   "n": 2,
+   "successor": 5,
+   "successor_occurrences": 17,
+   "mass": 0.09118086696562033
+  },
+  {
+   "s": 4,
+   "a": 2,
+   "n": 7,
+   "successor": 16,
+   "successor_occurrences": 11,
+   "mass": 0.2753515914137676
+  },
+  {
+   "s": 5,
+   "a": 2,
+   "n": 5,
+   "successor": 17,
+   "successor_occurrences": 7,
+   "mass": 0.25389755011135856
+  },
+  {
+   "s": 5,
+   "a": 3,
+   "n": 4,
+   "successor": 4,
+   "successor_occurrences": 10,
+   "mass": 0.011111111111111112
+  },
+  {
+   "s": 5,
+   "a": 4,
+   "n": 2,
+   "successor": 5,
+   "successor_occurrences": 17,
+   "mass": 0.3098068350668648
+  },
+  {
+   "s": 6,
+   "a": 0,
+   "n": 2,
+   "successor": 138,
+   "successor_occurrences": 17,
+   "mass": 0.08614232209737828
+  },
+  {
+   "s": 6,
+   "a": 3,
+   "n": 4,
+   "successor": 5,
+   "successor_occurrences": 17,
+   "mass": 0.05621301775147929
+  },
+  {
+   "s": 10,
+   "a": 0,
+   "n": 2,
+   "successor": 142,
+   "successor_occurrences": 4,
+   "mass": 0.006711409395973154
+  },
+  {
+   "s": 12,
+   "a": 2,
+   "n": 2,
+   "successor": 24,
+   "successor_occurrences": 14,
+   "mass": 0.005917159763313609
+  },
+  {
+   "s": 14,
+   "a": 1,
+   "n": 2,
+   "successor": 26,
+   "successor_occurrences": 16,
+   "mass": 0.15652818991097922
+  },
+  {
+   "s": 15,
+   "a": 2,
+   "n": 6,
+   "successor": 27,
+   "successor_occurrences": 9,
+   "mass": 0.0465288035450517
+  },
+  {
+   "s": 16,
+   "a": 2,
+   "n": 7,
+   "successor": 28,
+   "successor_occurrences": 13,
+   "mass": 0.09703703703703703
+  },
+  {
+   "s": 17,
+   "a": 1,
+   "n": 4,
+   "successor": 29,
+   "successor_occurrences": 15,
+   "mass": 0.19335793357933578
+  },
+  {
+   "s": 17,
+   "a": 4,
+   "n": 2,
+   "successor": 29,
+   "successor_occurrences": 15,
+   "mass": 0.19583023082650783
+  },
+  {
+   "s": 26,
+   "a": 1,
+   "n": 2,
+   "successor": 38,
+   "successor_occurrences": 19,
+   "mass": 0.26691449814126395
+  },
+  {
+   "s": 26,
+   "a": 3,
+   "n": 3,
+   "successor": 38,
+   "successor_occurrences": 19,
+   "mass": 0.17172464840858623
+  },
+  {
+   "s": 27,
+   "a": 1,
+   "n": 2,
+   "successor": 39,
+   "successor_occurrences": 16,
+   "mass": 0.08296296296296296
+  },
+  {
+   "s": 27,
+   "a": 2,
+   "n": 5,
+   "successor": 39,
+   "successor_occurrences": 16,
+   "mass": 0.08875739644970414
+  },
+  {
+   "s": 28,
+   "a": 4,
+   "n": 2,
+   "successor": 40,
+   "successor_occurrences": 16,
+   "mass": 0.3492999263080324
+  },
+  {
+   "s": 30,
+   "a": 3,
+   "n": 5,
+   "successor": 29,
+   "successor_occurrences": 15,
+   "mass": 0.08463251670378619
+  },
+  {
+   "s": 36,
+   "a": 0,
+   "n": 4,
+   "successor": 24,
+   "successor_occurrences": 14,
+   "mass": 0.0051928783382789315
+  },
+  {
+   "s": 39,
+   "a": 1,
+   "n": 5,
+   "successor": 51,
+   "successor_occurrences": 20,
+   "mass": 0.11834319526627218
+  },
+  {
+   "s": 39,
+   "a": 3,
+   "n": 2,
+   "successor": 51,
+   "successor_occurrences": 20,
+   "mass": 0.13757396449704143
+  },
+  {
+   "s": 40,
+   "a": 0,
+   "n": 2,
+   "successor": 52,
+   "successor_occurrences": 18,
+   "mass": 0.4148148148148148
+  },
+  {
+   "s": 40,
+   "a": 1,
+   "n": 2,
+   "successor": 52,
+   "successor_occurrences": 18,
+   "mass": 0.5199115044247787
+  },
+  {
+   "s": 108,
+   "a": 2,
+   "n": 5,
+   "successor": 120,
+   "successor_occurrences": 17,
+   "mass": 0.10446631339894019
+  },
+  {
+   "s": 120,
+   "a": 4,
+   "n": 3,
+   "successor": 120,
+   "successor_occurrences": 17,
+   "mass": 0.061755952380952384
+  },
+  {
+   "s": 121,
+   "a": 2,
+   "n": 3,
+   "successor": 133,
+   "successor_occurrences": 18,
+   "mass": 0.2741812642802742
+  },
+  {
+   "s": 132,
+   "a": 0,
+   "n": 3,
+   "successor": 120,
+   "successor_occurrences": 17,
+   "mass": 0.0518018018018018
+  },
+  {
+   "s": 132,
+   "a": 1,
+   "n": 3,
+   "successor": 133,
+   "successor_occurrences": 18,
+   "mass": 0.1537290715372907
+  },
+  {
+   "s": 132,
+   "a": 3,
+   "n": 4,
+   "successor": 143,
+   "successor_occurrences": 6,
+   "mass": 0.18735543562066306
+  },
+  {
+   "s": 132,
+   "a": 4,
+   "n": 4,
+   "successor": 132,
+   "successor_occurrences": 16,
+   "mass": 0.2202247191011236
+  },
+  {
+   "s": 133,
+   "a": 2,
+   "n": 2,
+   "successor": 1,
+   "successor_occurrences": 15,
+   "mass": 0.00913937547600914
+  },
+  {
+   "s": 133,
+   "a": 3,
+   "n": 3,
+   "successor": 132,
+   "successor_occurrences": 16,
+   "mass": 0.17056603773584905
+  },
+  {
+   "s": 133,
+   "a": 4,
+   "n": 5,
+   "successor": 133,
+   "successor_occurrences": 18,
+   "mass": 0.3368421052631579
+  },
+  {
+   "s": 134,
+   "a": 2,
+   "n": 5,
+   "successor": 2,
+   "successor_occurrences": 17,
+   "mass": 0.0
+  },
+  {
+   "s": 134,
+   "a": 3,
+   "n": 5,
+   "successor": 133,
+   "successor_occurrences": 18,
+   "mass": 0.10160427807486631
+  },
+  {
+   "s": 135,
+   "a": 2,
+   "n": 4,
+   "successor": 3,
+   "successor_occurrences": 6,
+   "mass": 0.0
+  },
+  {
+   "s": 136,
+   "a": 2,
+   "n": 3,
+   "successor": 4,
+   "successor_occurrences": 10,
+   "mass": 0.006125574272588055
+  },
+  {
+   "s": 137,
+   "a": 2,
+   "n": 4,
+   "successor": 5,
+   "successor_occurrences": 17,
+   "mass": 0.3237518910741301
+  },
+  {
+   "s": 138,
+   "a": 4,
+   "n": 2,
+   "successor": 138,
+   "successor_occurrences": 17,
+   "mass": 0.3207126948775056
+  }
+ ],
+ "mass_by_pair_visits_and_successor_occurrences": {
+  "n 0-1": {
+   "1-5": {
+    "pairs": 0,
+    "median": null
+   },
+   "6-20": {
+    "pairs": 42,
+    "median": 0.09239764146520389
+   },
+   "21-50": {
+    "pairs": 21,
+    "median": 0.16383763837638377
+   },
+   "51-inf": {
+    "pairs": 0,
+    "median": null
+   }
+  },
+  "n 2-3": {
+   "1-5": {
+    "pairs": 1,
+    "median": 0.006711409395973154
+   },
+   "6-20": {
+    "pairs": 26,
+    "median": 0.11437741573133088
+   },
+   "21-50": {
+    "pairs": 30,
+    "median": 0.1802229864352193
+   },
+   "51-inf": {
+    "pairs": 12,
+    "median": 0.540136892271734
+   }
+  },
+  "n 4-5": {
+   "1-5": {
+    "pairs": 0,
+    "median": null
+   },
+   "6-20": {
+    "pairs": 16,
+    "median": 0.10303529573690326
+   },
+   "21-50": {
+    "pairs": 24,
+    "median": 0.3262974203338391
+   },
+   "51-inf": {
+    "pairs": 6,
+    "median": 0.6221384582944766
+   }
+  },
+  "n 6-8": {
+   "1-5": {
+    "pairs": 0,
+    "median": null
+   },
+   "6-20": {
+    "pairs": 6,
+    "median": 0.07178292029104437
+   },
+   "21-50": {
+    "pairs": 29,
+    "median": 0.4803030303030303
+   },
+   "51-inf": {
+    "pairs": 20,
+    "median": 0.8489889874463183
+   }
+  },
+  "n 9-20": {
+   "1-5": {
+    "pairs": 0,
+    "median": null
+   },
+   "6-20": {
+    "pairs": 9,
+    "median": 0.1415929203539823
+   },
+   "21-50": {
+    "pairs": 30,
+    "median": 0.4887747338445402
+   },
+   "51-inf": {
+    "pairs": 61,
+    "median": 0.8658806190125277
+   }
+  },
+  "n 21-inf": {
+   "1-5": {
+    "pairs": 0,
+    "median": null
+   },
+   "6-20": {
+    "pairs": 0,
+    "median": null
+   },
+   "21-50": {
+    "pairs": 2,
+    "median": 0.19147640990731526
+   },
+   "51-inf": {
+    "pairs": 126,
+    "median": 0.9797205687605881
+   }
+  }
+ }
+}

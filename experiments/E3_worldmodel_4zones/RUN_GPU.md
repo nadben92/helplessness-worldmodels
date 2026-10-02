@@ -65,7 +65,7 @@ python -c "import sys; sys.path.insert(0, 'src'); from helplessness.runs import 
 The last command must print exactly:
 
 ```
-{'source_sha256': '6955c3ca44d7f523c8d0d94e8b8314f324ae5566896e5851176e441db5885b89', 'source_n_files': 263}
+{'source_sha256': 'd265062b0e034ee0a73db33d7a22e3875f4d92eef0932d4710a1ea501088a3de', 'source_n_files': 265}
 ```
 
 If `git pull` fails or the hash differs, stop: do not launch anything, go to step 5 (without measurement).

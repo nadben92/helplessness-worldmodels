@@ -233,12 +233,55 @@ def ranks_main(run_dir: Path, out: Path) -> dict:
             "check_rule_median_18000": rule(kernel["p_hat"], kernel["ghost_fraction"], resume["collector"]["N"], P, goal)["median_mass_right_successor_n2_8"]}
 
 
+def target_frequency(p_hat: np.ndarray, N: np.ndarray, occurrences: np.ndarray, P: np.ndarray, goal: int) -> dict:
+    """docs/e3/DECISIONS.md, 2026-10-02 (14): does the rarity of the target state explain the goal pairs' penalty?
+    occurrences[s]: how many times state s appears as an observation in the replay. Group: deterministic pairs off the
+    goal with 2 <= n <= 8 whose successor appears <= 20 times; rule applied only with >= 10 pairs."""
+    s, a, succ = deterministic_pairs(P, goal)
+    n, mass, occ = N[s, a].sum(-1), p_hat[s, a, succ], occurrences[succ]
+    group = (n >= 2) & (n <= 8) & (occ <= 20) & np.isfinite(mass)
+    size = int(group.sum())
+    med = float(np.median(mass[group])) if size else float("nan")
+    if size < 10:
+        verdict = f"group of {size} pairs (< 10): rule not applied"
+    elif med <= 0.05:
+        verdict = "the frequency of the target state explains the goal's penalty"
+    elif med >= 0.2:
+        verdict = "another factor specific to the goal"
+    else:
+        verdict = "undetermined"
+    classes = ((1, 5), (6, 20), (21, 50), (51, 10**9))
+    n_bins = ((0, 1), (2, 3), (4, 5), (6, 8), (9, 20), (21, 10**9))
+    table = {}
+    for nlo, nhi in n_bins:
+        row = {}
+        for lo, hi in classes:
+            sel = (n >= nlo) & (n <= nhi) & (occ >= lo) & (occ <= hi) & np.isfinite(mass)
+            row[f"{lo}-{hi if hi < 10**9 else 'inf'}"] = {"pairs": int(sel.sum()), "median": float(np.median(mass[sel])) if sel.any() else float("nan")}
+        table[f"n {nlo}-{nhi if nhi < 10**9 else 'inf'}"] = row
+    return {"goal_occurrences": int(occurrences[goal]), "group_size": size, "group_median_mass": med, "verdict": verdict,
+            "group_pairs": [{"s": int(x), "a": int(y), "n": int(k), "successor": int(z), "successor_occurrences": int(o), "mass": float(m)}
+                            for x, y, k, z, o, m in zip(s[group], a[group], n[group], succ[group], occ[group], mass[group])],
+            "mass_by_pair_visits_and_successor_occurrences": table}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("run_dir", type=Path)
     parser.add_argument("--out", type=Path, default=None)
     parser.add_argument("--ranks", action="store_true", help="only the goal pairs' percentile ranks (and the 18,000 kernel saved)")
+    parser.add_argument("--target-frequency", type=Path, default=None, metavar="KERNEL_NPZ",
+                        help="only the target-state frequency diagnostic, on a saved kernel (kernel_18000.npz); read-only")
     args = parser.parse_args(argv)
+    if args.target_frequency is not None:
+        d = diag.load(args.run_dir)
+        k = np.load(args.target_frequency)
+        occ = np.bincount(d["replay"]["s"].astype(int), minlength=run_mini.N_STATES)
+        res = target_frequency(k["p_hat"], k["N"], occ, d["world"].env.transition_tensor(), e3_env.goal_state())
+        out = args.out or args.target_frequency.parent
+        (out / "target_frequency.json").write_text(json.dumps(run_mini._jsonable(res), indent=1), encoding="utf-8")
+        print(json.dumps(run_mini._jsonable({k2: v for k2, v in res.items() if k2 != "group_pairs"}), indent=1))
+        return 0
     if args.ranks:
         out = args.out or run_mini.REPO_ROOT / "reports" / f"diagnostics_wm_goal_ranks_{args.run_dir.name}"
         if out.exists() and any(out.iterdir()):

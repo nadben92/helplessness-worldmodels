@@ -3128,3 +3128,77 @@ Recorded before any closed-loop result (user decisions).
    - E4 serves to estimate the between-seed variance that sets the number of seeds of E5. For that: the smallest
      effect size aimed at in E5 is fixed before E4; the variance estimated is that of the paired quantity that will be
      E5's main measure; E4 includes the E5 condition expected to be the most variable, or a margin recorded in advance.
+
+## 2026-10-02 (17) -- results: gradients against data, target-state frequency; GPU budget
+
+### Gradients against data (protocol and criterion of (13), settings of (14); `gradients_vs_data.py`)
+
+From the resume point at 18,000 (gradient step 35,488), the world model alone trained 20,000 more steps on the frozen
+replay (6,646 s on this CPU, 4 threads; the collapse guard never fired). Kernel K = 1,358 with the baseline's
+measurement seeds; outputs in reports/gradients_vs_data_<run>/ (result.json, kernels; the weights there are not
+versioned).
+
+| point | median mass, right successor, n = 2-8 (170 pairs) | CN noisy: L1 median / minor-successor mass median | UN noisy: L1 median / minor-successor mass median | goal pairs' mass on the goal |
+|---|---|---|---|---|
+| +0 (start) | 0.284 | 0.612 / 0.147 | 0.965 / 0.135 | 0, 0, 0, 0 |
+| +5,000 | 0.359 | 0.415 / 0.124 | 0.774 / 0.114 | 0, 0, 0, 0 |
+| +10,000 | 0.435 | 0.391 / 0.125 | 0.709 / 0.104 | 0, 0.001, 0, 0 |
+| **+20,000** | **0.494** | 0.341 / 0.106 | 0.554 / 0.087 | 0.001, 0.022, 0, 0 |
+
+(noisy pairs: 125 per zone, visits median 16 in CN, 5 in UN; true minor-successor mass 0.10.)
+
+**Criterion (N = 20,000 only): rise 0.21 >= 0.1 and end 0.494 < 0.5 -> MIXED.** Descriptive: the median was still
+rising at the last point (+0.076, +0.059 per 5,000-10,000 steps), not saturated. The noisy pairs' L1 falls toward P
+while their mass on the four minor successors stays near the true 0.10 (CN 0.106; UN 0.087, mean 0.099): no collapse
+onto the main successor, so the gain is not the memorisation signature defined in (13). The goal pairs stay at ~0
+(largest 0.022): the extra gradient steps raise the rarely visited pairs in general but barely touch the goal.
+
+### Target-state frequency (rule of (14); read-only on kernel_18000.npz)
+
+The goal appears 13 times in the replay at 18,000. Group: deterministic pairs off the goal, 2 <= n <= 8, successor
+seen <= 20 times: **49 pairs** (rule applicable). Median mass on the right successor **0.097 -> undetermined**
+(between 0.05 and 0.2).
+Mass by pair visits n and successor occurrences (median; pairs):
+
+| pair visits n | successor seen 1-5 | 6-20 | 21-50 | > 50 |
+|---|---|---|---|---|
+| 0-1 | - | 0.092 (42) | 0.164 (21) | - |
+| 2-3 | 0.007 (1) | 0.114 (26) | 0.180 (30) | 0.540 (12) |
+| 4-5 | - | 0.103 (16) | 0.326 (24) | 0.622 (6) |
+| 6-8 | - | 0.072 (6) | 0.480 (29) | 0.849 (20) |
+| 9-20 | - | 0.142 (9) | 0.489 (30) | 0.866 (61) |
+| > 20 | - | - | 0.191 (2) | 0.980 (126) |
+
+At fixed pair visits, the successor's frequency has a large effect (n = 6-8: 0.07 / 0.48 / 0.85); pairs into rarely
+seen states (6-20 occurrences) stay near 0.1 whatever their own visits. The goal pairs (0 to 0.001) sit below even
+that group.
+
+### Budget (user request; nothing launched)
+
+GPU throughput for agent_mini's configuration is **not measured**: there is no preflight for run_agent.py, and the
+acceleration bench (stacked seeds) never ran on a GPU. What exists (A100, gpu_e30b preflight, bridge network = the
+bench network): world-model step 0.289 s single process for 16 x 64 windows (T = 64), 0.47 s per process with 8
+processes for 64 x 16 (T = 16); final measures 511 s (recompute, 100,000-step replay). agent_mini's windows are 8 x 16
+(T = 16); the step is launch-bound, so a single-process T = 16 step is estimated at ~0.07 s (scaled by T, not
+measured). Not measured at all on the GPU: the agent heads' step (imagination, H = 15), the environment step, stacked
+seeds. Missing to close the budget: a preflight bench of run_agent.py's three steps on the A100, alone and with
+stacked seeds.
+
+Run time = E x (environment step + ratio x (world-model step + heads step)). CPU: measured, 4 threads (0.24 + 0.25 s
+per gradient step, 0.006 s per environment step); with the 3 usable CPUs of (15), expect up to ~4/3 longer. GPU: a
+range, assuming heads step = world-model step, between ~0.07 s (estimated) and 0.289 s (measured at T = 64) each;
+environment step taken as on the CPU.
+
+| environment steps | ratio 1 | ratio 2 | ratio 4 |
+|---|---|---|---|
+| 200,000 | CPU 28 h; GPU 8-32 h | CPU 55 h; GPU 16-65 h | CPU 109 h; GPU 32-129 h |
+| 300,000 | CPU 41 h; GPU 12-49 h | CPU 82 h; GPU 24-97 h | CPU 164 h; GPU 48-193 h |
+| 1,000,000 | CPU 138 h; GPU 42-162 h | CPU 274 h; GPU 82-323 h | CPU 546 h; GPU 162-644 h |
+
+With stacked seeds: no number (no runner, no GPU bench). Plus one final measurement per run (~8.5 min on the GPU,
+~15 min or more on the CPU, growing with the replay).
+**The forecast of (13) assumes ratio 2** (the mass-versus-visits curve was measured at ~2 gradient steps per
+environment step); at another ratio the curve, hence the forecast, shifts -- and the gradients-vs-data result (mixed,
+still rising) says more gradient steps per visit raise the mass. **For the goal it is a lower bound** on the number of
+environment steps: the goal pairs are at percentile rank 0 of their visit class, their successor is among the
+rarest states, and the extra gradient steps of this diagnostic barely moved them.
