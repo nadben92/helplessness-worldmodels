@@ -2468,6 +2468,8 @@ never-produced codes (63 to 85 % of the off-support draws against 26 to 37 % of 
 criterion (posterior codes after (s, a) against factorised draws) was almost met by construction: the posterior
 codes decode their own image correctly (C-a). The bias is structural for a factorised prior in a multimodal zone;
 more training budget would not remove it.
+**Corrected 2026-10-05 (22):** the pilot (180,000 gradient steps) shows that the bias falls clearly with training
+but does not disappear (C-b still fails in the noisy zones); "would not remove it" stands, "would not reduce it" does not.
 
 ### Latent and calibration floor (user decision)
 
@@ -3327,3 +3329,41 @@ negligible -> 0.6 x (0.289 + 0.289) = 0.35 s per environment step; lower bound w
 
 The sharing factor is gpu_e30b's at 8 processes, pessimistic for the pilot's 2 or 4; the preflight measures the
 pilot's own.
+
+## 2026-10-05 (22) -- the pilot (gpu_pilot_cl) reviewed against (19); rules recorded before the next diagnostics
+
+The four runs finished (300,000 environment steps, no resume, code 3a71c745...). The closed loop works; **b is not read
+at this stage.** The expected shapes of (19) are not modified; recorded about them (user decisions):
+- **The shape "success ~ 0.0459" was wrong for the reference**: its uniform rate is 0.1173 ((7)); both reference runs
+  are compatible with it (seed 0: 0.135 [0.101, 0.178]; seed 5: 0.089 [0.062, 0.128]). The experimental runs matched
+  0.0459 (0.046, 0.045).
+- **The goal criterion was badly specified**: the checkpoints are too far apart to catch the passage of 100 arrivals
+  (the first checkpoint past 100 already lies inside the transition), and the median over 4 pairs is not the statistic
+  relevant to behaviour. **The verdict retained is the end-of-run one: the data suffice, in all four runs** (median
+  mass on the goal 1.000).
+- The measures that go through decoding are not readable before the switch (REF 0's mass 0.14-0.26 between 1,585 and
+  3,981 steps, with the decoder still trained on probabilities).
+- The n = 2-8 population empties because the data cover everything: **the reservation on the ratio 0.6 ((21)) is
+  lifted.**
+- **The off-support mass in UD and UN is well below E3-0's intervals** (UD 0.008-0.009 against [0.030, 0.077]; UN
+  0.050-0.053 against [0.121, 0.179]): an aberration signal in the right direction, attributed to the much longer
+  training (180,000 gradient steps against E3-0's 60,000), without exclusion. This corrects (7): the hybrid-codes
+  bias falls clearly with training but does not disappear (C-b still fails in the noisy zones). The excess over
+  TAU_OFF in CD (seed 5, 0.0048 > 0.0035) is the fragility anticipated in (16) (two seeds, one degree of freedom).
+- **torch.compile is abandoned** (its equivalence gate failed on the A100: loss difference 9.2e-2).
+
+### Rule for the per-pair goal masses (recorded before reading them)
+
+For each run, at every checkpoint, the prior's mass on the goal for each of the 4 pairs into it (checkpoints.jsonl
+keeps them per pair), with their maximum and median, against the success over the interval the checkpoint ends. At the
+checkpoints that end an interval where the success clearly exceeds the uniform rate (0.0459 environment, 0.1173
+reference; "clearly": the interval's 95 % Wilson interval lies above it):
+- maximum >= 0.5: the maximum explains why success led the median;
+- maximum < 0.1: unexplained -- where the information goes through (critic, imagination) must be looked for;
+- in between: undetermined.
+
+### Stability criterion for the campaign's budget (recorded before any re-measurement; [SEUIL] to be set by the user)
+
+On the re-measurement of the pilot's checkpoint weights (63,096; 100,000; 158,489; 251,189; 300,000): **the first
+checkpoint from which I_s by zone changes by less than [SEUIL] bit from one checkpoint to the next, in every run**
+(4 runs, 4 zones). This criterion bears on the stability of the measures, never on the value of b.
