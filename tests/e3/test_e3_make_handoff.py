@@ -161,3 +161,17 @@ def test_handoff_of_a_checkpoint_remeasurement(tmp_path):
     assert (out / f"{name}.recomputed.tgz").exists()
     j = json.loads((out / "handoff.json").read_text(encoding="utf-8"))["runs"][0]
     assert j["checkpoints_done"] == "2/3" and not j["finished"]
+
+
+def test_handoff_of_the_value_diagnostic(tmp_path):
+    measure = tmp_path / "m"
+    out_dir = measure / "runs" / "value_diagnostics"
+    out_dir.mkdir(parents=True)
+    (out_dir / "value_diagnostics.json").write_text("[]", encoding="utf-8")
+    job = {"command": ["python", "-u", "experiments/E3_worldmodel_4zones/diagnose_value_generalisation.py", "--points", "/r/a:10000",
+                       "--device", "cuda", "--out-dir", str(out_dir)], "exit_code": 0}
+    (measure / "status.json").write_text(json.dumps({"value_diagnostics": job}), encoding="utf-8")
+    out = tmp_path / "h"
+    assert handoff.main(["--measure-dir", str(measure), "--out", str(out), "--results-root", str(tmp_path / "x")]) == 0
+    assert (out / "value_diagnostics.recomputed.tgz").exists()
+    assert json.loads((out / "handoff.json").read_text(encoding="utf-8"))["runs"][0]["finished"] is True

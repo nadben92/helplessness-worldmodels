@@ -6,7 +6,9 @@ skipping nothing.**
 What it is: the four runs of the closed-loop pilot (gpu_pilot_cl) are **measured again** at five of their checkpoints
 -- environment steps 63,096, 100,000, 158,489, 251,189 and 300,000 -- from the weights each run saved there
 (`remeasure_checkpoints.py`: I_s, I_s projected, off-support mass, I_z and the other final measures). **Nothing is
-trained.** Its purpose is written in `docs/e3/DECISIONS.md` (2026-10-05 (23)). Earlier batches are in
+trained.** A fifth job, after the four, runs a read-only diagnostic of the critic and the policy at three of these runs'
+checkpoints (`diagnose_value_generalisation.py`: REF seed 0 at 10,000 and 15,849, EXP seed 5 at 39,811). Its purpose is
+written in `docs/e3/DECISIONS.md` (2026-10-05 (23), (24)). Earlier batches are in
 `RUN_GPU_HISTORY.md`: **do not use it for this batch.**
 
 The four runs are read **in place, where the pilot wrote them** -- the weights do not move:
@@ -64,7 +66,7 @@ python -c "import sys; sys.path.insert(0, 'src'); from helplessness.runs import 
 The last command must print exactly:
 
 ```
-{'source_sha256': '7059a564f145c59cdf3947d01aa8f6b63d3fddb9cd97b08d234a49378d33f9eb', 'source_n_files': 269}
+{'source_sha256': '84d41d62e18c7801a9213b0521a126933f9754930bd792fd50836104add54001', 'source_n_files': 270}
 ```
 
 If `git pull` fails or the hash differs, stop: do not launch anything, go to step 5 (without measurement). The
@@ -134,7 +136,8 @@ python -c "import json, sys; s = json.load(open(sys.argv[1])); print({k: v.get('
 tail -n 2 "$MEAS"/*.log
 ```
 
-The four jobs run at once; each measures its five checkpoints one after the other (`written to .../env<NNNNNN> in ...
+The four measurement jobs run at once, the fifth (`value_diagnostics`) starts when one of them finishes; each
+measurement job measures its five checkpoints one after the other (`written to .../env<NNNNNN> in ...
 s` after each). `exit_code` is `null` while a job runs, `0` when it finished, `1` when it failed (a failure is a
 result: rule 2). The batch is finished when every `exit_code` is a number and the pod is `Completed` or `Error`. If the
 pod disappears while an `exit_code` is still `null`, stop (rule 4): go to step 5.
@@ -154,7 +157,8 @@ python experiments/E3_worldmodel_4zones/make_handoff.py --preflight-dir "$PRE" -
 ```
 
 The script writes `handoff/gpu_pilot_remeasure/handoff.md` (each job: exit code, checkpoints measured, code hash), one
-light archive per run (`<run>.recomputed.tgz`: the measures of its checkpoints, no weights) and `logs.tgz`. If it ends
+light archive per run (`<run>.recomputed.tgz`: the measures of its checkpoints, no weights),
+`value_diagnostics.recomputed.tgz` and `logs.tgz`. If it ends
 with `STOP: archive(s) above 90 MB`, do not commit: stop (rule 4). After a stop under rule 4, add at the end of
 `handoff/gpu_pilot_remeasure/handoff.md` a section `## Stop` with the command that failed and its complete output.
 Then commit this directory alone and push:

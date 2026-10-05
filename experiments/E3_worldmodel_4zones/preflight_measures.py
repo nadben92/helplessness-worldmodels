@@ -147,6 +147,10 @@ def main(argv: list[str] | None = None) -> int:
     for job in jobs:
         run_name, sha = batch["runs"][job]
         problems += check_run(job, Path(batch["source_root"]) / run_name, sha, batch.get("kind", "final"), batch.get("env_steps"))
+    for job, c in batch.get("value_diagnostics", []):  # the value diagnostic's checkpoints (2026-10-05 (24))
+        w = Path(batch["source_root"]) / batch["runs"][job][0] / "checkpoints" / f"agent_env{c:06d}.pt"
+        if not w.is_file():
+            problems.append(f"value diagnostic: {w} is missing")
     print(f"[preflight-measures] {json.dumps(run_mini._jsonable(summary))}", flush=True)
     for p in problems:
         print(f"[preflight-measures] PROBLEM: {p}", flush=True)

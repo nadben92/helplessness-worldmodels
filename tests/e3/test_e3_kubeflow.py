@@ -249,8 +249,13 @@ def test_pilot_remeasure_batch():
     from pathlib import Path
 
     jobs = cluster.commands("measure", "python", Path("/o"), batch="gpu_pilot_remeasure")
-    assert len(jobs) == 4
-    for name, cmd in jobs:
+    assert [n for n, _ in jobs][-1] == "value_diagnostics" and len(jobs) == 5  # 2026-10-05 (24): the diagnostic last
+    diag = jobs[-1][1]
+    assert diag[2].endswith("diagnose_value_generalisation.py")
+    points = diag[diag.index("--points") + 1:diag.index("--device")]
+    assert [p.rsplit(":", 1)[1] for p in points] == ["10000", "15849", "39811"]
+    assert "pair-control" in points[0] and "seed00" in points[0] and "pair-experimental" in points[2] and "seed05" in points[2]
+    for name, cmd in jobs[:4]:
         assert cmd[2].endswith("remeasure_checkpoints.py") and cmd[3].startswith(cluster.PILOT_RESULTS + "/")
         assert cmd[cmd.index("--env-steps") + 1:cmd.index("--device")] == ["63096", "100000", "158489", "251189", "300000"]
         assert cmd[cmd.index("--out-dir") + 1] == str(Path("/o") / "runs")

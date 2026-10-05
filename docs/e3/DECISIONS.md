@@ -3409,3 +3409,36 @@ make_handoff.py --measure-dir; RUN_GPU.md).
   Archives about 40 MB per run (arrays of 5 checkpoints).
 - The stability criterion of (22) ([SEUIL] to be set by the user) is applied to its output; it bears on the stability
   of the measures, never on the value of b.
+
+## 2026-10-05 (24) -- stability threshold and budget rule; value diagnostic (rule fixed before computing); stacked seeds abandoned
+
+### Stability criterion of (22): [SEUIL] set (user decision, before the re-measurement is launched)
+
+Per zone, **one third of the between-seed spread observed in calibration (gpu_e30b): 0.005 bit in CN and CD, 0.01 bit in
+UD, 0.013 bit in UN.** **The campaign's budget is the first checkpoint from which I_s changes by less than this threshold
+from one checkpoint to the next, in every zone and in all 4 runs** (on gpu_pilot_remeasure's checkpoints 63,096,
+100,000, 158,489, 251,189, 300,000). **If no checkpoint satisfies it, the budget stays at 300,000 environment steps.**
+The criterion bears on the stability of the measures, never on the value of b.
+
+### Value diagnostic (added to gpu_pilot_remeasure as a fifth, read-only job; rule fixed before computing)
+
+At REF 0's checkpoint 15,849 (the unexplained interval of (23)), and for comparison REF 0 at 10,000 and EXP 5 at 39,811
+(`diagnose_value_generalisation.py`, weights and replay as of the checkpoint): Spearman correlation between V (the
+critic on the posterior latents of the real contexts, by state) and the distance to the goal under P (expected steps
+under the optimal policy), with its 95 % bootstrap interval over states; the share of greedy actions optimal under P
+against a uniform choice's; the distribution of the actions played over the interval and the rate of repeating the
+previous action.
+Rule of reading (user decision; the operational thresholds in brackets are the implementer's, set here before any
+value):
+- Spearman clearly negative (V higher near the goal) [rho <= -0.3 with its 95 % interval below 0] together with null
+  goal masses: **generalisation of V in the latent space**;
+- Spearman ~ 0 [|rho| < 0.1 with its 95 % interval containing 0] together with directed or repeated actions [actions
+  played not uniform, chi-square p < 0.001, or a repeat rate > 0.3; under the epsilon-greedy uniform policy it is ~0.2]:
+  **wider coverage without information on the goal**;
+- otherwise: undetermined.
+
+### Stacked seeds abandoned for the campaign (user decision)
+
+Estimated gain x1.0 to 1.5 over the present 4 processes (2026-10-05 (23)) for a large piece of work. **Planning base:
+the measured total throughput of 4 processes on the A100, ~8.9 environment steps per second** (2.23 per process, the
+pilot's configuration, ratio 0.6).

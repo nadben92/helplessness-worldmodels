@@ -39,9 +39,10 @@ def test_every_submission_command_parses(tmp_path, monkeypatch):
             cluster.main([*argv, "--repo-dir", str(repo), "--mount", str(mount)])
         phase = argv[argv.index("--phase") + 1]
         jobs = cluster.commands(phase, "python", tmp_path, batch="gpu_pilot_remeasure", max_parallel=4, cpus=3)
-        assert len(jobs) == (1 if phase == "preflight" else 4)
+        assert len(jobs) == (1 if phase == "preflight" else 5)
         if phase == "measure":
-            assert all(cmd[2].endswith("remeasure_checkpoints.py") for _, cmd in jobs)
+            assert all(cmd[2].endswith("remeasure_checkpoints.py") for _, cmd in jobs[:4])
+            assert jobs[4][1][2].endswith("diagnose_value_generalisation.py")
     for run_dir, _ in cluster.MEASURE_BATCHES["gpu_pilot_remeasure"]["runs"].values():
         assert run_dir in DOC  # the doc names every run it reads
     assert cluster.PILOT_RESULTS in DOC

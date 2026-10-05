@@ -84,6 +84,12 @@ def measure_row(name: str, job: dict, measure_dir: Path) -> tuple[dict, Path | N
     """A measurement job (recompute_measures.py <source run> ... --out-dir <measure dir>/runs): its row and the
     directory to archive (<measure dir>/runs/<run name>), None when the job wrote nothing."""
     command = job["command"]
+    if any(c.endswith("diagnose_value_generalisation.py") for c in command):  # the read-only value diagnostic (2026-10-05 (24))
+        out = Path(command[command.index("--out-dir") + 1])
+        done = (out / "value_diagnostics.json").exists()
+        row = {"job": name, "exit_code": job.get("exit_code"), "not_started": bool(job.get("not_started")), "run_dir": "value_diagnostics",
+               "output": "value_diagnostics/value_diagnostics.json" if done else "none", "finished": done}
+        return row, (out if done else None)
     script = next(i for i, c in enumerate(command) if c.endswith(("recompute_measures.py", "remeasure_checkpoints.py")))
     run_name = Path(command[script + 1]).name
     out = measure_dir / "runs" / run_name

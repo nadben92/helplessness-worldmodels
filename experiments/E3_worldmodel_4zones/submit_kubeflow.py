@@ -70,6 +70,8 @@ MEASURE_BATCHES["gpu_pilot_remeasure"] = {
     "kind": "checkpoints",
     "source_root": PILOT_RESULTS,
     "env_steps": [63096, 100000, 158489, 251189, 300000],
+    # a fifth job, after the four (DECISIONS 2026-10-05 (24)): the read-only value diagnostic at these (run, checkpoint)
+    "value_diagnostics": [("win64_seed0_reference", 10000), ("win64_seed0_reference", 15849), ("win64_seed5_experimental", 39811)],
     "runs": {
             "win64_seed0_experimental": ("grid12x12__4zones__pair-experimental__worldmodel-agent-gpu_pilot_closed_loop__seed00__20261003T144527Z", None),
             "win64_seed5_experimental": ("grid12x12__4zones__pair-experimental__worldmodel-agent-gpu_pilot_closed_loop__seed05__20261003T144527Z", None),
@@ -189,8 +191,14 @@ def commands(phase: str, python: str, output: Path, resume: str = "", runs: list
         root, known = MEASURE_BATCHES[batch]["source_root"], MEASURE_BATCHES[batch]["runs"]
         if MEASURE_BATCHES[batch].get("kind") == "checkpoints":
             steps = [str(c) for c in MEASURE_BATCHES[batch]["env_steps"]]
-            return [(name, [python, "-u", f"{SCRIPT}/remeasure_checkpoints.py", f"{root}/{known[name][0]}", "--env-steps", *steps,
+            jobs = [(name, [python, "-u", f"{SCRIPT}/remeasure_checkpoints.py", f"{root}/{known[name][0]}", "--env-steps", *steps,
                             "--device", "cuda", "--out-dir", str(output / "runs")]) for name in select_runs(runs, batch)]
+            points = MEASURE_BATCHES[batch].get("value_diagnostics")
+            if points and not runs:  # with the whole batch only
+                jobs.append(("value_diagnostics", [python, "-u", f"{SCRIPT}/diagnose_value_generalisation.py", "--points",
+                                                   *[f"{root}/{known[job][0]}:{c}" for job, c in points], "--device", "cuda",
+                                                   "--out-dir", str(output / "runs" / "value_diagnostics")]))
+            return jobs
         return [(name, [python, "-u", f"{SCRIPT}/recompute_measures.py", f"{root}/{known[name][0]}", "--checkpoint", "final",
                         "--device", "cuda", "--out-dir", str(output / "runs"), "--weights-sha256", known[name][1]])
                 for name in select_runs(runs, batch)]
