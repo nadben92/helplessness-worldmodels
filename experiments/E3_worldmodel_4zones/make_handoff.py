@@ -84,11 +84,19 @@ def measure_row(name: str, job: dict, measure_dir: Path) -> tuple[dict, Path | N
     """A measurement job (recompute_measures.py <source run> ... --out-dir <measure dir>/runs): its row and the
     directory to archive (<measure dir>/runs/<run name>), None when the job wrote nothing."""
     command = job["command"]
-    script = next(i for i, c in enumerate(command) if c.endswith("recompute_measures.py"))
+    script = next(i for i, c in enumerate(command) if c.endswith(("recompute_measures.py", "remeasure_checkpoints.py")))
     run_name = Path(command[script + 1]).name
     out = measure_dir / "runs" / run_name
     row = {"job": name, "exit_code": job.get("exit_code"), "started_at": job.get("started_at"), "finished_at": job.get("finished_at"),
            "not_started": bool(job.get("not_started")), "run_dir": run_name, "finished": False}
+    if command[script].endswith("remeasure_checkpoints.py"):  # one directory per checkpoint (2026-10-05 (23))
+        asked = command[command.index("--env-steps") + 1:command.index("--device")]
+        done = [c for c in asked if (out / f"env{int(c):06d}" / "results.json").exists()]
+        row.update(output=f"{run_name}/env*" if done else "none", finished=len(done) == len(asked), checkpoints_done=f"{len(done)}/{len(asked)}")
+        if done:
+            res = json.loads((out / f"env{int(done[0]):06d}" / "results.json").read_text(encoding="utf-8"))
+            row["source_sha256"] = (res.get("reproducibility") or {}).get("source_sha256")
+        return row, (out if done else None)
     outputs = sorted((out / "recomputed").glob("final__*")) if out.exists() else []
     if outputs:
         last = outputs[-1]

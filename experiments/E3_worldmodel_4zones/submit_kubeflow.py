@@ -63,11 +63,25 @@ AGENT_BATCHES = {
                  "seed0_reference": (0, "reference"), "seed5_reference": (5, "reference")},
     },
 }
+# The pilot's checkpoint weights re-measured (docs/e3/DECISIONS.md, 2026-10-05 (23)): remeasure_checkpoints.py on each
+# run, read in place where the pilot wrote it; the weights' checksums are not known off the cluster (never handed off).
+PILOT_RESULTS = "/scratch/helplessness-worldmodels/results/E3_worldmodel_4zones"
+MEASURE_BATCHES["gpu_pilot_remeasure"] = {
+    "kind": "checkpoints",
+    "source_root": PILOT_RESULTS,
+    "env_steps": [63096, 100000, 158489, 251189, 300000],
+    "runs": {
+            "win64_seed0_experimental": ("grid12x12__4zones__pair-experimental__worldmodel-agent-gpu_pilot_closed_loop__seed00__20261003T144527Z", None),
+            "win64_seed5_experimental": ("grid12x12__4zones__pair-experimental__worldmodel-agent-gpu_pilot_closed_loop__seed05__20261003T144527Z", None),
+            "win64_seed0_reference": ("grid12x12__4zones__pair-control__worldmodel-agent-gpu_pilot_closed_loop__seed00__20261003T144527Z", None),
+            "win64_seed5_reference": ("grid12x12__4zones__pair-control__worldmodel-agent-gpu_pilot_closed_loop__seed05__20261003T144527Z", None),
+    },
+}
 DEFAULT_BATCH = "gpu_e30"
 # The job's CPU request, PER BATCH (docs/e3/DECISIONS.md, 2026-09-30 (5)): gpu_e30b was prescribed 5 CPUs and ran on 3,
 # because --cpu defaulted to 3 and a command without it (or with another value) was accepted silently. The
 # request now defaults to the batch's own value, and a different --cpu is refused unless --allow-cpu-override.
-BATCH_CPUS = {"gpu_e30": 3, "gpu_e30b": 5, "gpu_e30b_measures": 3, "gpu_pilot_cl": 3}
+BATCH_CPUS = {"gpu_e30": 3, "gpu_e30b": 5, "gpu_e30b_measures": 3, "gpu_pilot_cl": 3, "gpu_pilot_remeasure": 3}
 DEFAULT_CPUS = BATCH_CPUS[DEFAULT_BATCH]
 
 
@@ -173,6 +187,10 @@ def commands(phase: str, python: str, output: Path, resume: str = "", runs: list
         if phase != "measure":
             raise ValueError(f"{batch} is a measurement batch: phases preflight and measure only, never {phase}")
         root, known = MEASURE_BATCHES[batch]["source_root"], MEASURE_BATCHES[batch]["runs"]
+        if MEASURE_BATCHES[batch].get("kind") == "checkpoints":
+            steps = [str(c) for c in MEASURE_BATCHES[batch]["env_steps"]]
+            return [(name, [python, "-u", f"{SCRIPT}/remeasure_checkpoints.py", f"{root}/{known[name][0]}", "--env-steps", *steps,
+                            "--device", "cuda", "--out-dir", str(output / "runs")]) for name in select_runs(runs, batch)]
         return [(name, [python, "-u", f"{SCRIPT}/recompute_measures.py", f"{root}/{known[name][0]}", "--checkpoint", "final",
                         "--device", "cuda", "--out-dir", str(output / "runs"), "--weights-sha256", known[name][1]])
                 for name in select_runs(runs, batch)]

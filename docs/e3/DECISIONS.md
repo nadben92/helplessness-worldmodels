@@ -3367,3 +3367,45 @@ reference; "clearly": the interval's 95 % Wilson interval lies above it):
 On the re-measurement of the pilot's checkpoint weights (63,096; 100,000; 158,489; 251,189; 300,000): **the first
 checkpoint from which I_s by zone changes by less than [SEUIL] bit from one checkpoint to the next, in every run**
 (4 runs, 4 zones). This criterion bears on the stability of the measures, never on the value of b.
+
+## 2026-10-05 (23) -- per-pair goal masses (read with the rule of (22)); the checkpoint re-measurement batch (prepared, not launched)
+
+### Per-pair goal masses against the success per interval (rule of (22))
+
+checkpoints.jsonl keeps the mass of each of the four pairs (not only the median). Intervals whose success clearly
+exceeds the uniform rate (Wilson 95 % above 0.0459 / 0.1173), their end checkpoint's maximum:
+
+| run | interval (env steps) | success [95 %] | 4 pair masses at its end | max | rule |
+|---|---|---|---|---|---|
+| REF 0 | (10,000; 15,849] | 0.263 [0.205, 0.331] | 0, 0, 0, 0 | 0.000 | **< 0.1: unexplained** |
+| REF 0 | (15,849; 25,119] | 0.472 [0.420, 0.524] | 0, 0.104, 0.063, 0 | 0.104 | undetermined |
+| REF 0 | from (25,119; 39,811] on | 0.99-1.00 | >= 0.91 | 1.000 | explained |
+| REF 5 | from (25,119; 39,811] on | 0.78-1.00 | >= 0.82 | >= 0.93 | explained |
+| EXP 0 | (15,849; 25,119] | 0.703 [0.656, 0.746] | 0.361, 0, 0, 0.307 | 0.361 | undetermined |
+| EXP 0 | from (25,119; 39,811] on | 0.99-1.00 | max >= 0.996 | 1.000 | explained |
+| EXP 5 | (25,119; 39,811] | 0.070 [0.050, 0.098] | 0.020, 0, 0.008, 0 | 0.020 | **< 0.1: unexplained** |
+| EXP 5 | from (39,811; 63,096] on | 0.85-1.00 | max >= 0.99 | 1.000 | explained |
+
+Two intervals are unexplained (REF 0 up to 15,849; EXP 5 up to 39,811), two undetermined: there, the information
+reached the behaviour without the prior putting mass on the goal at the interval's end; where it goes through (critic,
+imagination) remains to be looked for. Limits: the mass is read at the interval's end only, from 256 draws per pair.
+
+### The checkpoint re-measurement batch gpu_pilot_remeasure (prepared; not launched)
+
+The complete final measures of the weights saved at 63,096, 100,000, 158,489, 251,189 and 300,000, for the four runs
+(`remeasure_checkpoints.py`; batch in submit_kubeflow.MEASURE_BATCHES, kind "checkpoints"; preflight_measures.py;
+make_handoff.py --measure-dir; RUN_GPU.md).
+- **Real contexts when only the final replay is kept.** run_agent.py keeps no replay file; the only replay stored is
+  the one pickled in each run's resume.pt, at the last resume point (290,000: resume_every 10,000, none at the end).
+  The closed-loop replay is strict and chronological, so the replay at checkpoint c is exactly the prefix of its first
+  c + episodes(c) observations (tested against a resume point's own replay). Each checkpoint's weights are measured on
+  that prefix -- the contexts the run itself would have drawn at c, with the run's measurement streams -- and the
+  counts N at c (counts.npz). **Acceptable for the stability question**: same estimator, same draws' streams, the
+  data as of the checkpoint (contexts from a later replay would mix states the policy did not yet visit). The one
+  exception is 300,000, after the last resume point: measured on the replay at 290,000 (flagged in its outputs); the
+  run's own final measures (arrays.npz in the pilot's handoff) are the exact value there, and the pair gives a check.
+- **Cost**: the pilot's final measures took about 11 minutes per run with 4 processes on the A100 (from the logs); 5
+  checkpoints x 4 runs in 4 parallel jobs: about 1 hour, plus a preflight of about 30 minutes (one smoke measurement).
+  Archives about 40 MB per run (arrays of 5 checkpoints).
+- The stability criterion of (22) ([SEUIL] to be set by the user) is applied to its output; it bears on the stability
+  of the measures, never on the value of b.

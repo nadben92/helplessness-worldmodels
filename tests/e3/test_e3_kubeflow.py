@@ -242,3 +242,18 @@ def test_closed_loop_pilot_batch():
     with pytest.raises(ValueError, match="closed-loop batch"):
         cluster.commands("measure", "python", Path("/o"), batch="gpu_pilot_cl")
     assert cluster.resolve_cpus("gpu_pilot_cl", None) == 3
+
+
+def test_pilot_remeasure_batch():
+    """docs/e3/DECISIONS.md, 2026-10-05 (23): the pilot's 4 runs re-measured at 5 checkpoints, read in place."""
+    from pathlib import Path
+
+    jobs = cluster.commands("measure", "python", Path("/o"), batch="gpu_pilot_remeasure")
+    assert len(jobs) == 4
+    for name, cmd in jobs:
+        assert cmd[2].endswith("remeasure_checkpoints.py") and cmd[3].startswith(cluster.PILOT_RESULTS + "/")
+        assert cmd[cmd.index("--env-steps") + 1:cmd.index("--device")] == ["63096", "100000", "158489", "251189", "300000"]
+        assert cmd[cmd.index("--out-dir") + 1] == str(Path("/o") / "runs")
+    with pytest.raises(ValueError, match="measurement batch"):
+        cluster.commands("train", "python", Path("/o"), batch="gpu_pilot_remeasure")
+    assert cluster.resolve_cpus("gpu_pilot_remeasure", None) == 3

@@ -66,3 +66,17 @@ def test_decision(tmp_path, monkeypatch):
     assert pm.main(["--batch", "gpu_e30b_measures", "--cpus", "5", "--device", "cpu", "--out-dir", str(out), "--skip-smoke"]) == 1
     verdict = yaml.safe_load((out / "preflight_verdict.json").read_text(encoding="utf-8"))
     assert verdict["decision"] == "stop" and any("CPUs requested 5" in p for p in verdict["problems"])
+
+
+def test_check_run_of_a_closed_loop_run(tmp_path):
+    """Kind "checkpoints" (2026-10-05 (23)): resume point, counts, records and every requested checkpoint's weights."""
+    name = "grid12x12__4zones__pair-control__worldmodel-agent-gpu_pilot_closed_loop__seed05__20261003T144527Z"
+    d = tmp_path / name
+    (d / "checkpoints").mkdir(parents=True)
+    for f in ("checkpoints.jsonl", "counts.npz", "checkpoints/resume.pt", "checkpoints/agent_env063096.pt", "checkpoints/agent_final.pt"):
+        (d / f).write_bytes(b"x")
+    (d / "meta.yaml").write_text(yaml.safe_dump({"seed": 5, "condition": "reference", "status": "done", "env_steps": 300000}), encoding="utf-8")
+    (d / "config.yaml").write_text(yaml.safe_dump({"train": {"seq_len": 64}}), encoding="utf-8")
+    assert pm.check_run("win64_seed5_reference", d, None, "checkpoints", [63096, 300000]) == []  # 300,000: agent_final.pt
+    assert "agent_env100000.pt" in pm.check_run("win64_seed5_reference", d, None, "checkpoints", [63096, 100000])[0]
+    assert "directory name" in pm.check_run("win64_seed0_reference", d, None, "checkpoints", [63096])[0]

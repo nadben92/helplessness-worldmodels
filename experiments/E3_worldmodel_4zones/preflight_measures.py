@@ -45,6 +45,8 @@ recompute = load_experiment_module("E3_worldmodel_4zones", "recompute_measures.p
 HERE = Path(__file__).resolve().parent
 RUN_GPU = HERE / "RUN_GPU.md"
 REQUIRED_FILES = ("config.yaml", "meta.yaml", "world.json", "replay.npz", "checkpoints/weights_final.pt")
+# a closed-loop run re-measured at its checkpoints (kind "checkpoints", remeasure_checkpoints.py)
+REQUIRED_FILES_CHECKPOINTS = ("config.yaml", "meta.yaml", "checkpoints.jsonl", "counts.npz", "checkpoints/resume.pt")
 CONTENTION = 1.25
 ROLE = {"experimental": "experimental", "reference": "control"}
 
@@ -65,17 +67,26 @@ def parse_job(job: str) -> tuple[int, int, str]:
     return int(m.group(1)), int(m.group(2)), m.group(3)
 
 
-def check_run(job: str, run_dir: Path, expected_sha256: str) -> list[str]:
-    """Check 4 for one run (no measurement): presence, identity (name, meta.yaml, config), weights checksum."""
+def check_run(job: str, run_dir: Path, expected_sha256: str | None, kind: str = "final", env_steps: list[int] | None = None) -> list[str]:
+    """Check 4 for one run (no measurement): presence, identity (name, meta.yaml, config), weights checksum (when known).
+    kind "checkpoints": a closed-loop run, its resume point, counts and the weights of every requested checkpoint."""
     problems = []
     if not run_dir.is_dir():
         return [f"{job}: {run_dir} does not exist"]
-    missing = [f for f in REQUIRED_FILES if not (run_dir / f).is_file()]
+    required = REQUIRED_FILES if kind == "final" else REQUIRED_FILES_CHECKPOINTS
+    missing = [f for f in required if not (run_dir / f).is_file()]
+    if kind == "checkpoints":
+        meta0 = yaml.safe_load((run_dir / "meta.yaml").read_text(encoding="utf-8")) if (run_dir / "meta.yaml").is_file() else {}
+        for c in env_steps or []:
+            if not (run_dir / "checkpoints" / f"agent_env{c:06d}.pt").is_file() and not (
+                    c == int((meta0 or {}).get("env_steps", -1)) and (run_dir / "checkpoints" / "agent_final.pt").is_file()):
+                missing.append(f"checkpoints/agent_env{c:06d}.pt")
     if missing:
         return [f"{job}: {run_dir.name} lacks {missing}"]
     window, seed, condition = parse_job(job)
     name = run_dir.name
-    if f"__pair-{ROLE[condition]}__" not in name or f"_win{window}__seed{seed:02d}__" not in name:
+    name_ok = f"__pair-{ROLE[condition]}__" in name and (f"_win{window}__seed{seed:02d}__" in name if kind == "final" else f"__seed{seed:02d}__" in name)
+    if not name_ok:
         problems.append(f"{job}: directory name {name} is not window {window}, seed {seed}, {condition}")
     meta = yaml.safe_load((run_dir / "meta.yaml").read_text(encoding="utf-8")) or {}
     if int(meta.get("seed", -1)) != seed or meta.get("condition", "experimental") != condition:
@@ -85,9 +96,10 @@ def check_run(job: str, run_dir: Path, expected_sha256: str) -> list[str]:
     cfg = yaml.safe_load((run_dir / "config.yaml").read_text(encoding="utf-8"))
     if int(cfg["train"]["seq_len"]) != window:
         problems.append(f"{job}: config.yaml seq_len {cfg['train']['seq_len']}, not {window}")
-    found = recompute.file_sha256(run_dir / "checkpoints" / "weights_final.pt")
-    if found != expected_sha256:
-        problems.append(f"{job}: weights_final.pt SHA-256 {found}, expected {expected_sha256}")
+    if expected_sha256 is not None:
+        found = recompute.file_sha256(run_dir / "checkpoints" / "weights_final.pt")
+        if found != expected_sha256:
+            problems.append(f"{job}: weights_final.pt SHA-256 {found}, expected {expected_sha256}")
     return problems
 
 
@@ -134,7 +146,7 @@ def main(argv: list[str] | None = None) -> int:
         problems.append(f"source hash {found['source_sha256']} is not the one RUN_GPU.md states ({summary['code']['stated_in_RUN_GPU']})")
     for job in jobs:
         run_name, sha = batch["runs"][job]
-        problems += check_run(job, Path(batch["source_root"]) / run_name, sha)
+        problems += check_run(job, Path(batch["source_root"]) / run_name, sha, batch.get("kind", "final"), batch.get("env_steps"))
     print(f"[preflight-measures] {json.dumps(run_mini._jsonable(summary))}", flush=True)
     for p in problems:
         print(f"[preflight-measures] PROBLEM: {p}", flush=True)
@@ -152,9 +164,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[preflight-measures] smoke: full recomputation of {jobs[0]} on {device} ...", flush=True)
         t0 = time.perf_counter()
         try:
-            out = recompute.recompute(first, ["final"], args.device, out_dir=args.out_dir / "smoke",
-                                      weights_sha256=batch["runs"][jobs[0]][1])[0]
-            seconds = time.perf_counter() - t0
+            if batch.get("kind") == "checkpoints":  # one checkpoint of the first run; the job measures len(env_steps)
+                remeasure = load_experiment_module("E3_worldmodel_4zones", "remeasure_checkpoints.py", "preflight_measures_remeasure")
+                out = remeasure.remeasure(first, batch["env_steps"][:1], args.device, args.out_dir / "smoke")[0]
+                seconds = (time.perf_counter() - t0) * len(batch["env_steps"])
+            else:
+                out = recompute.recompute(first, ["final"], args.device, out_dir=args.out_dir / "smoke",
+                                          weights_sha256=batch["runs"][jobs[0]][1])[0]
+                seconds = time.perf_counter() - t0
             missing = [f for f in ("results.json", "arrays.npz", "SUMMARY.md") if not (out / f).is_file()]
             if missing:
                 problems.append(f"smoke recomputation wrote no {missing}")

@@ -144,3 +144,20 @@ def test_handoff_of_a_closed_loop_batch(tmp_path):
         names = tar.getnames()
     assert any(n.endswith("checkpoints.jsonl") for n in names) and not any(n.endswith(".pt") for n in names)
     assert "| seed0_experimental | 0 | done | 300000 | 4100 | yes | - |" in (out / "handoff.md").read_text(encoding="utf-8")
+
+
+def test_handoff_of_a_checkpoint_remeasurement(tmp_path):
+    measure = tmp_path / "m"
+    name = "grid12x12__4zones__pair-control__worldmodel-agent-gpu_pilot_closed_loop__seed05__20261003T144527Z"
+    for c in (63096, 100000):
+        e = measure / "runs" / name / f"env{c:06d}"
+        e.mkdir(parents=True)
+        (e / "results.json").write_text(json.dumps({"reproducibility": {"source_sha256": "c" * 64}}), encoding="utf-8")
+    job = {"command": ["python", "-u", "experiments/E3_worldmodel_4zones/remeasure_checkpoints.py", f"/scratch/r/{name}", "--env-steps",
+                       "63096", "100000", "158489", "--device", "cuda", "--out-dir", str(measure / "runs")], "exit_code": 1}
+    (measure / "status.json").write_text(json.dumps({"win64_seed5_reference": job}), encoding="utf-8")
+    out = tmp_path / "h"
+    assert handoff.main(["--measure-dir", str(measure), "--out", str(out), "--results-root", str(tmp_path / "x")]) == 0
+    assert (out / f"{name}.recomputed.tgz").exists()
+    j = json.loads((out / "handoff.json").read_text(encoding="utf-8"))["runs"][0]
+    assert j["checkpoints_done"] == "2/3" and not j["finished"]
