@@ -22,6 +22,40 @@ def test_distance_to_goal_on_a_chain():
     assert vd.distance_to_goal(P, 0).tolist() == [0.0, 1.0, 2.0]
 
 
+def test_spearman_constant_critic_is_explicitly_undefined():
+    result = vd.spearman_with_ci(np.ones(4), np.arange(4), np.random.default_rng(0))
+    assert result["undefined_reason"] == "constant critic values"
+    assert result["n_states"] == 4
+    assert np.isnan(result["rho"]) and all(np.isnan(bound) for bound in result["ci95"])
+    assert vd.run_mini._jsonable(result)["ci95"] == [None, None]
+
+
+def test_spearman_constant_goal_distances_are_undefined():
+    result = vd.spearman_with_ci(np.arange(4), np.ones(4), np.random.default_rng(0))
+    assert result["undefined_reason"] == "constant goal distances"
+    assert np.isnan(result["rho"]) and all(np.isnan(bound) for bound in result["ci95"])
+
+
+def test_spearman_without_valid_bootstrap_correlations(monkeypatch):
+    class ConstantResamples:
+        def integers(self, low, high, size):
+            return np.zeros(size, dtype=int)
+
+    monkeypatch.setattr(vd, "N_BOOT", 3)
+    result = vd.spearman_with_ci(np.arange(4), -np.arange(4), ConstantResamples())
+    assert result["rho"] == -1.0
+    assert result["undefined_reason"] == "no valid bootstrap correlations"
+    assert all(np.isnan(bound) for bound in result["ci95"])
+
+
+def test_spearman_nonconstant_inputs_keep_finite_interval(monkeypatch):
+    monkeypatch.setattr(vd, "N_BOOT", 40)
+    result = vd.spearman_with_ci(np.arange(6), -np.arange(6), np.random.default_rng(0))
+    assert result["rho"] == -1.0
+    assert np.allclose(result["ci95"], [-1.0, -1.0])
+    assert "undefined_reason" not in result
+
+
 def test_actions_played_and_repeat():
     arr = {"a": np.array([1, 1, 2, 0, 3, 3, 3, 0]), "is_first": np.array([1, 0, 0, 0, 1, 0, 0, 0], bool),
            "terminal": np.array([0, 0, 0, 1, 0, 0, 0, 0], bool), "truncated": np.zeros(8, bool)}

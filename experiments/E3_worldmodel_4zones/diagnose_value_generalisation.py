@@ -50,15 +50,32 @@ def distance_to_goal(P: np.ndarray, goal: int, tol: float = 1e-9) -> np.ndarray:
 
 
 def spearman_with_ci(x: np.ndarray, y: np.ndarray, rng: np.random.Generator) -> dict:
+    """Report undefined correlations or intervals as NaN with an explicit reason."""
     from scipy.stats import spearmanr
+
+    if len(x) < 2:
+        raise ValueError("Spearman correlation requires at least two states")
+    if not np.isfinite(x).all() or not np.isfinite(y).all():
+        raise ValueError("Spearman correlation requires finite values")
+    constant_critic = np.all(x == x[0])
+    constant_distance = np.all(y == y[0])
+    if constant_critic or constant_distance:
+        reason = "constant critic values" if constant_critic else "constant goal distances"
+        return {"rho": float("nan"), "ci95": [float("nan"), float("nan")],
+                "n_states": int(len(x)), "undefined_reason": reason}
 
     rho = float(spearmanr(x, y).correlation)
     boots = []
     for _ in range(N_BOOT):
         i = rng.integers(0, len(x), len(x))
+        if np.all(x[i] == x[i][0]) or np.all(y[i] == y[i][0]):
+            continue
         r = spearmanr(x[i], y[i]).correlation
         if np.isfinite(r):
             boots.append(r)
+    if not boots:
+        return {"rho": rho, "ci95": [float("nan"), float("nan")],
+                "n_states": int(len(x)), "undefined_reason": "no valid bootstrap correlations"}
     lo, hi = np.quantile(boots, [0.025, 0.975])
     return {"rho": rho, "ci95": [float(lo), float(hi)], "n_states": int(len(x))}
 
