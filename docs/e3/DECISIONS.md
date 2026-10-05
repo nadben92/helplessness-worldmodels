@@ -3442,3 +3442,84 @@ value):
 Estimated gain x1.0 to 1.5 over the present 4 processes (2026-10-05 (23)) for a large piece of work. **Planning base:
 the measured total throughput of 4 processes on the A100, ~8.9 environment steps per second** (2.23 per process, the
 pilot's configuration, ratio 0.6).
+
+## 2026-10-06 (25) -- gpu_pilot_remeasure: the value diagnostic's failure and fix; results (stability, 300,000 control, value diagnostic)
+
+Archive: `handoff/gpu_pilot_remeasure/` (commit 1142454 on main: the four re-measurement archives, handoff.md with its
+`## Stop` and `## Delivery adjustment` sections, delivery_provenance.json, logs_summary.tgz, value_diagnostics_retry.tgz;
+the full 186 MB logs.tgz stays on the cluster, SHA-256 eca2b610...).
+
+### What happened, and the correction (made after a failure, by the supervisor, on the cluster)
+
+- The four re-measurement jobs ran with the code of ff01253 (source_sha256 84d41d62..., recorded in each of their 20
+  outputs), 17:04 to 18:11 UTC on 2026-10-05, exit code 0.
+- The fifth job (value diagnostic) started at 18:02:29 and failed 8 s later, on its **first point, REF seed 0 at
+  10,000 environment steps**: `np.quantile` of an empty list in `spearman_with_ci`. Cause: **the critic is constant**
+  there (V = 0 for every state) -- **expected**: REF 0 switched at environment step 10,758 (gradient step 6,301), the
+  agent's heads train only from the switch, and their output layers start at zero (heads.py), so before the switch V is
+  exactly 0; the correlation is undefined and every bootstrap resample gave NaN. The point was chosen as a pre-switch
+  comparison without anticipating this; the script had no test for a constant critic.
+- The job was not retried within the batch (RUN_GPU.md rule 2). The handoff's logs.tgz (186 MB) exceeded the 90 MB
+  limit (make_handoff.py archived the measurement directory with its run outputs -- fixed below).
+- **Correction by the supervisor (Veith Weilnhammer, with Copilot), on the cluster, after the failure: commit 90c5465
+  (2026-10-05 18:41 UTC, after the four re-measurements had finished)**, then a separate run of the value diagnostic
+  alone with that code (`logs/kubeflow/value-diagnostics-retry-20261005-b`, exit 0). The diff touches only
+  `diagnose_value_generalisation.py` (+17 lines) and its test file (+34 lines; checked: no other file changed between
+  ff01253 and 1142454 outside handoff/):
+  - `spearman_with_ci` raises on fewer than 2 states or non-finite values; returns rho and its interval as NaN with
+    `undefined_reason` ("constant critic values" / "constant goal distances") when an input is constant; skips the
+    bootstrap resamples where an input is constant (the original computed them and dropped the NaN); returns NaN
+    bounds with "no valid bootstrap correlations" when no resample is usable.
+  - **Effect on the results: none wherever the original did not fail** -- same random draws (rng.integers is called
+    before the skip), same retained resamples (a constant resample gave NaN, dropped by the original), same values;
+    checked against a copy of the original on non-constant inputs, including small tied samples where resamples are
+    often constant (tests/e3/test_e3_value_diagnostics.py). The constant case now reports "undefined", which under the
+    rule of (24) is "undetermined" and, before the switch, means "no value information". The three results of the
+    retry are the ones read below; the two later points never ran with the original code but would have given the
+    same values.
+- Integrated as is in e3/worldmodel (fast-forwarded from main), with additions (2026-10-06): a test with a real
+  pre-switch checkpoint (constant critic, every greedy choice tied); the diagnostic's output now records its code
+  version (`reproducibility`) -- the retry's output has none, its provenance is in provenance.txt (commit 90c5465);
+  make_handoff.py leaves the measurement directory's run outputs and the preflight's smoke measurement out of logs.tgz.
+
+### Stability criterion (24): no checkpoint satisfies it -> **the campaign's budget stays at 300,000 environment steps**
+
+|I_s(next) - I_s(this)| by zone, the largest over the 4 runs (threshold: CN, CD 0.005; UD 0.010; UN 0.013):
+
+| from -> to | UD | CN | UN | CD |
+|---|---|---|---|---|
+| 63,096 -> 100,000 | 0.136 | 0.242 | 0.289 | 0.063 |
+| 100,000 -> 158,489 | 0.030 | 0.110 | 0.065 | 0.037 |
+| 158,489 -> 251,189 | 0.039 | 0.084 | 0.028 | 0.019 |
+| 251,189 -> 300,000 | **0.012** | **0.019** | **0.021** | 0.002 |
+
+Even the last step exceeds the threshold in CN (3 runs: 0.007-0.019), UN (REF 0 0.015, REF 5 0.021), UD (REF 0 0.012)
+while CD is under it in every run (at most 0.002). I_s is still rising in the reference runs' noisy zones and in CN.
+
+### Control at 300,000: re-measurement (replay of 290,000) against the pilot's own final measures (replay of 300,000)
+
+Differences re-measured - final, by zone (the final measure's bootstrap se in brackets):
+
+| run | UD | CN | UN | CD |
+|---|---|---|---|---|
+| EXP 0 | -0.0004 (0.0003) | +0.0206 (0.0030) | -0.0006 (0.0007) | +0.0009 (0.0008) |
+| EXP 5 | -0.0005 (0.0003) | -0.0132 (0.0029) | -0.0008 (0.0006) | +0.0048 (0.0006) |
+| REF 0 | +0.0052 (0.0014) | +0.0263 (0.0030) | -0.0073 (0.0030) | -0.0014 (0.0008) |
+| REF 5 | -0.0052 (0.0010) | -0.0031 (0.0028) | +0.0001 (0.0033) | -0.0039 (0.0009) |
+
+Same weights, same estimator and streams; only the replay differs by its last 10,000 steps (hence different real
+contexts). The differences reach 4 to 9 bootstrap se in CN (up to 0.026 bit): **the choice of real contexts moves I_s by
+about 0.01-0.03 bit in CN, more than the bootstrap se and more than the stability threshold (0.005).** Recorded as a
+fact; it bears on how the stability criterion can be read (the threshold is below this measurement variation).
+
+### Value diagnostic (rule of (24))
+
+| point | goal masses | Spearman V vs distance [95 %] | greedy optimal / uniform | actions played (chi2 p; repeat) | rule |
+|---|---|---|---|---|---|
+| REF 0 at 10,000 (before the switch) | 0.004-0.012 | undefined: constant critic (V = 0) | 0.319 / 0.319 (all tied) | uniform (p 0.29; 0.196) | undetermined (no value information, as expected) |
+| **REF 0 at 15,849** | 0, 0, 0, 0 | **-0.563 [-0.669, -0.440]** | 0.450 / 0.319 | not uniform (p 2e-17; 0.209) | **generalisation of V in the latent space** |
+| EXP 5 at 39,811 | 0.020, 0, 0.008, 0 | -0.132 [-0.288, +0.042] | 0.598 / 0.543 | not uniform (p 8e-4; 0.202) | undetermined (|rho| >= 0.1: not "~ 0"; not <= -0.3) |
+
+At REF 0's unexplained interval of (23), the critic already ranks states by their distance to the goal (V higher near
+the goal) while the prior puts no mass on the goal: the information reached the policy through V's generalisation
+in the latent space. EXP 5's unexplained interval stays undetermined under the rule.

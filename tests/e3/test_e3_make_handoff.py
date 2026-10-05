@@ -175,3 +175,24 @@ def test_handoff_of_the_value_diagnostic(tmp_path):
     assert handoff.main(["--measure-dir", str(measure), "--out", str(out), "--results-root", str(tmp_path / "x")]) == 0
     assert (out / "value_diagnostics.recomputed.tgz").exists()
     assert json.loads((out / "handoff.json").read_text(encoding="utf-8"))["runs"][0]["finished"] is True
+
+
+def test_measurement_logs_leave_out_the_run_outputs(tmp_path):
+    """2026-10-06 (25): a measurement batch's logs.tgz holds the logs, not the per-run outputs (archived separately)
+    nor the preflight's smoke measurement."""
+    measure = tmp_path / "logs" / "measure-20261005T170355Z"
+    (measure / "runs" / "somerun" / "env063096").mkdir(parents=True)
+    (measure / "runs" / "somerun" / "env063096" / "arrays.npz").write_bytes(b"a" * 1000)
+    (measure / "w.log").write_text("log", encoding="utf-8")
+    (measure / "status.json").write_text(json.dumps({}), encoding="utf-8")
+    pre = tmp_path / "logs" / "preflight-20261005T165021Z"
+    (pre / "runs" / "smoke" / "x").mkdir(parents=True)
+    (pre / "runs" / "smoke" / "x" / "arrays.npz").write_bytes(b"a")
+    (pre / "runs" / "preflight_verdict.json").write_text(json.dumps({"decision": "launch", "parallel": 4, "problems": [], "warnings": []}),
+                                                         encoding="utf-8")
+    out = tmp_path / "h"
+    assert handoff.main(["--measure-dir", str(measure), "--preflight-dir", str(pre), "--out", str(out), "--results-root", str(tmp_path)]) == 0
+    with tarfile.open(out / "logs.tgz") as tar:
+        names = tar.getnames()
+    assert any(n.endswith("w.log") for n in names) and any(n.endswith("preflight_verdict.json") for n in names)
+    assert not any("/runs/somerun" in n or "/smoke" in n for n in names)

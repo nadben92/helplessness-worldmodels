@@ -159,7 +159,8 @@ def diagnose_point(run_dir: Path, c: int, device_arg: str | None) -> dict:
             "greedy_optimal_share": share, "uniform_optimal_share": chance, "greedy_tie_fraction_by_state": float((probs[keep].max(-1) < 1.0).mean()),
             "actions_played_interval": {"from": previous, "to": c, **actions_played(arr, previous, c)},
             "success_interval": {"successes": records[c]["successes"] - (records[previous]["successes"] if previous else 0),
-                                 "episodes": records[c]["episodes"] - (records[previous]["episodes"] if previous else 0)}}
+                                 "episodes": records[c]["episodes"] - (records[previous]["episodes"] if previous else 0)},
+            "reproducibility": run_mini.environment_metadata(device)}  # code version (source_sha256), device (2026-10-06 (25))
 
 
 def main(argv: list[str] | None = None) -> int:

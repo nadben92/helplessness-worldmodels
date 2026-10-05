@@ -76,3 +76,53 @@ def test_one_point_end_to_end(tmp_path):
     assert r["env_step"] == 200 and r["actions_played_interval"]["from"] == 100
     assert -1.0 <= r["spearman_V_vs_distance_to_goal"]["rho"] <= 1.0 or np.isnan(r["spearman_V_vs_distance_to_goal"]["rho"])
     assert 0.0 <= r["greedy_optimal_share"] <= 1.0 and len(r["goal_pair_masses_at_c"]) == 4
+
+
+def _original_spearman_with_ci(x, y, rng):
+    """The version that ran in gpu_pilot_remeasure's first attempt (commit ff01253), kept to check the fix of 90c5465."""
+    from scipy.stats import spearmanr
+
+    rho = float(spearmanr(x, y).correlation)
+    boots = []
+    for _ in range(vd.N_BOOT):
+        i = rng.integers(0, len(x), len(x))
+        r = spearmanr(x[i], y[i]).correlation
+        if np.isfinite(r):
+            boots.append(r)
+    lo, hi = np.quantile(boots, [0.025, 0.975])
+    return {"rho": rho, "ci95": [float(lo), float(hi)], "n_states": int(len(x))}
+
+
+def test_fix_gives_the_original_values_wherever_the_original_did_not_fail(monkeypatch):
+    """docs/e3/DECISIONS.md, 2026-10-06 (25): on non-constant inputs -- including small samples with ties, where some
+    bootstrap resamples are constant and the original dropped them as NaN -- the fixed function returns exactly the
+    original's values and draws the same random numbers."""
+    import warnings
+
+    monkeypatch.setattr(vd, "N_BOOT", 300)
+    cases = [(np.random.default_rng(1).normal(size=40), np.random.default_rng(2).integers(0, 9, 40).astype(float)),
+             (np.array([0.0, 0.0, 0.0, 1.0, 1.0]), np.array([4.0, 3.0, 2.0, 1.0, 0.0])),  # resamples often constant
+             (np.arange(30.0), -np.arange(30.0) ** 2)]
+    for x, y in cases:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            a = _original_spearman_with_ci(x, y, np.random.default_rng(7))
+            b = vd.spearman_with_ci(x, y, np.random.default_rng(7))
+        assert a == b
+
+
+def test_a_checkpoint_before_the_switch_has_a_constant_critic(tmp_path):
+    """Before the separation switch the agent's heads are not trained and their output layers start at zero: V is 0
+    everywhere, the correlation is undefined (reported, not a failure) and every greedy choice is a tie."""
+    cfg = tiny_config()
+    cfg["measure"]["final"] = False
+    cfg["measure"]["checkpoint_goal_kernel"] = {"draws": 4}
+    cfg["train"]["latent_estimator"].update(switch_js_threshold=1e9, switch_max_steps=100_000)  # no switch in this run
+    d = tmp_path / "r"
+    d.mkdir()
+    report = run_agent.run_one(cfg, 0, "experimental", d, run_mini.configure_runtime(cfg))
+    assert report["switch_step"] is None
+    r = vd.diagnose_point(d, 200, "cpu")
+    assert r["spearman_V_vs_distance_to_goal"]["undefined_reason"] == "constant critic values"
+    assert r["V_by_state_quantiles"] == [0.0, 0.0, 0.0] and r["greedy_tie_fraction_by_state"] == 1.0
+    assert r["greedy_optimal_share"] == r["uniform_optimal_share"]

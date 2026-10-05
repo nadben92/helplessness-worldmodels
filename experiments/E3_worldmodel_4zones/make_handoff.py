@@ -45,6 +45,18 @@ MAX_ARCHIVE_MB = 90.0
 PAIR_ROLE = {"experimental": "experimental", "reference": "control"}
 
 
+def _excluded_from_logs(member: tarfile.TarInfo) -> tarfile.TarInfo | None:
+    """The logs of a measurement batch: everything but the per-run outputs (<measure dir>/runs/, archived run by run)
+    and the preflight's smoke measurement (runs/smoke/) -- gpu_pilot_remeasure's logs.tgz reached 186 MB with them
+    (docs/e3/DECISIONS.md, 2026-10-06 (25))."""
+    parts = Path(member.name).parts
+    if len(parts) >= 4 and parts[3] == "runs" and parts[2].startswith("measure-"):
+        return None
+    if "smoke" in parts:
+        return None
+    return _excluded(member)
+
+
 def _excluded(member: tarfile.TarInfo) -> tarfile.TarInfo | None:
     parts = Path(member.name).parts
     if member.name.endswith(".pt") or "checkpoints" in parts or "wandb" in parts:
@@ -157,7 +169,7 @@ def main(argv: list[str] | None = None) -> int:
     logs = args.out / "logs.tgz"
     with tarfile.open(logs, "w:gz") as tar:
         for d in [*([supervisor] if supervisor else []), *args.preflight_dir]:
-            tar.add(d, arcname=f"logs/kubeflow/{d.name}", filter=_excluded)
+            tar.add(d, arcname=f"logs/kubeflow/{d.name}", filter=_excluded_from_logs if args.measure_dir else _excluded)
             submission = d.parent / f"{d.name}.submission.json"  # the submission record (job id, requested CPUs, runs)
             if submission.exists():
                 tar.add(submission, arcname=f"logs/kubeflow/{submission.name}")

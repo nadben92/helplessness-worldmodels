@@ -3,6 +3,10 @@
 **Current batch: gpu_pilot_remeasure (4 measurement jobs, no training). Follow this file from top to bottom,
 skipping nothing.**
 
+> **Status, 2026-10-06: this batch is FINISHED** (results in `handoff/gpu_pilot_remeasure/`, read in
+> `docs/e3/DECISIONS.md` 2026-10-06 (25)). **Do not launch it again.** No next batch is defined yet; this file will be
+> rewritten for it.
+
 What it is: the four runs of the closed-loop pilot (gpu_pilot_cl) are **measured again** at five of their checkpoints
 -- environment steps 63,096, 100,000, 158,489, 251,189 and 300,000 -- from the weights each run saved there
 (`remeasure_checkpoints.py`: I_s, I_s projected, off-support mass, I_z and the other final measures). **Nothing is
@@ -66,7 +70,7 @@ python -c "import sys; sys.path.insert(0, 'src'); from helplessness.runs import 
 The last command must print exactly:
 
 ```
-{'source_sha256': '84d41d62e18c7801a9213b0521a126933f9754930bd792fd50836104add54001', 'source_n_files': 270}
+{'source_sha256': '1ac4f2d8eaa99c0d40435104fa7b9ae3d5ed52cf6a19241e5e149c24435e7054', 'source_n_files': 270}
 ```
 
 If `git pull` fails or the hash differs, stop: do not launch anything, go to step 5 (without measurement). The
