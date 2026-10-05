@@ -1,0 +1,81 @@
+{
+ "device": "cuda",
+ "gpu": "NVIDIA A100-SXM4-80GB",
+ "batch": [
+  16,
+  64
+ ],
+ "timed_steps": 100,
+ "setup_seconds": 34.16674478724599,
+ "variants": {
+  "world_model": {
+   "seed_steps_per_s": 3.47520856450261,
+   "seconds_per_call": 0.28775251368060706,
+   "warmup_seconds": 1.4603304713964462
+  },
+  "heads": {
+   "seed_steps_per_s": 6.230346604221773,
+   "seconds_per_call": 0.16050471402704716,
+   "warmup_seconds": 0.8695714045315981
+  },
+  "env": {
+   "seed_steps_per_s": 90.08824521874318,
+   "seconds_per_call": 0.011100227311253548,
+   "warmup_seconds": 0.057010799646377563
+  },
+  "stacked_1": {
+   "seed_steps_per_s": 2.3250059514087926,
+   "seconds_per_call": 0.4301064259186387,
+   "warmup_seconds": 2.2220619414001703,
+   "max_rel_loss_diff": 4.6475179260596633e-07
+  },
+  "stacked_2": {
+   "seed_steps_per_s": 4.2337968096719365,
+   "seconds_per_call": 0.4723892264813185,
+   "warmup_seconds": 2.3811826407909393,
+   "max_rel_loss_diff": 1.1450538295321167e-06
+  },
+  "stacked_4": {
+   "seed_steps_per_s": 6.905850215566455,
+   "seconds_per_call": 0.5792190498113632,
+   "warmup_seconds": 2.892561160027981,
+   "max_rel_loss_diff": 1.60889612743631e-06
+  },
+  "stacked_8": {
+   "seed_steps_per_s": 9.467711338624971,
+   "seconds_per_call": 0.8449771770462394,
+   "warmup_seconds": 4.241735124960542,
+   "max_rel_loss_diff": 1.140506356023252e-06
+  },
+  "compiled": {
+   "skipped": "compile gate failed: compiled losses differ from eager by 9.21e-02 (> 0.0001)"
+  },
+  "stacked_1_compiled": {
+   "skipped": "compile gate failed: compiled losses differ from eager by 9.21e-02 (> 0.0001)"
+  },
+  "stacked_2_compiled": {
+   "skipped": "compile gate failed: compiled losses differ from eager by 9.21e-02 (> 0.0001)"
+  },
+  "stacked_4_compiled": {
+   "skipped": "compile gate failed: compiled losses differ from eager by 9.21e-02 (> 0.0001)"
+  },
+  "stacked_8_compiled": {
+   "skipped": "compile gate failed: compiled losses differ from eager by 9.21e-02 (> 0.0001)"
+  }
+ },
+ "compile_gate": {
+  "backend": "inductor",
+  "mode": null,
+  "tol": 0.0001,
+  "passed": false,
+  "max_rel_loss_diff": 0.09205613077098095,
+  "tf32_after": {
+   "matmul": false,
+   "cudnn": false,
+   "float32_matmul_precision": "highest"
+  },
+  "error": "compiled losses differ from eager by 9.21e-02 (> 0.0001)"
+ },
+ "seconds": 354.7257013786584,
+ "one_process_seconds_per_env_step": 0.28005456393584605
+}
