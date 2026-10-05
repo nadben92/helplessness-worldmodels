@@ -1,0 +1,67 @@
+{
+ "runs": [
+  {
+   "job": "win64_seed0_experimental",
+   "exit_code": 0,
+   "started_at": "2026-10-05T17:04:17.174892+00:00",
+   "finished_at": "2026-10-05T18:11:19.847398+00:00",
+   "not_started": false,
+   "run_dir": "grid12x12__4zones__pair-experimental__worldmodel-agent-gpu_pilot_closed_loop__seed00__20261003T144527Z",
+   "finished": true,
+   "output": "grid12x12__4zones__pair-experimental__worldmodel-agent-gpu_pilot_closed_loop__seed00__20261003T144527Z/env*",
+   "checkpoints_done": "5/5",
+   "source_sha256": "84d41d62e18c7801a9213b0521a126933f9754930bd792fd50836104add54001"
+  },
+  {
+   "job": "win64_seed5_experimental",
+   "exit_code": 0,
+   "started_at": "2026-10-05T17:04:17.180811+00:00",
+   "finished_at": "2026-10-05T18:10:33.835336+00:00",
+   "not_started": false,
+   "run_dir": "grid12x12__4zones__pair-experimental__worldmodel-agent-gpu_pilot_closed_loop__seed05__20261003T144527Z",
+   "finished": true,
+   "output": "grid12x12__4zones__pair-experimental__worldmodel-agent-gpu_pilot_closed_loop__seed05__20261003T144527Z/env*",
+   "checkpoints_done": "5/5",
+   "source_sha256": "84d41d62e18c7801a9213b0521a126933f9754930bd792fd50836104add54001"
+  },
+  {
+   "job": "win64_seed0_reference",
+   "exit_code": 0,
+   "started_at": "2026-10-05T17:04:17.187866+00:00",
+   "finished_at": "2026-10-05T18:02:28.752683+00:00",
+   "not_started": false,
+   "run_dir": "grid12x12__4zones__pair-control__worldmodel-agent-gpu_pilot_closed_loop__seed00__20261003T144527Z",
+   "finished": true,
+   "output": "grid12x12__4zones__pair-control__worldmodel-agent-gpu_pilot_closed_loop__seed00__20261003T144527Z/env*",
+   "checkpoints_done": "5/5",
+   "source_sha256": "84d41d62e18c7801a9213b0521a126933f9754930bd792fd50836104add54001"
+  },
+  {
+   "job": "win64_seed5_reference",
+   "exit_code": 0,
+   "started_at": "2026-10-05T17:04:17.193740+00:00",
+   "finished_at": "2026-10-05T18:02:35.770509+00:00",
+   "not_started": false,
+   "run_dir": "grid12x12__4zones__pair-control__worldmodel-agent-gpu_pilot_closed_loop__seed05__20261003T144527Z",
+   "finished": true,
+   "output": "grid12x12__4zones__pair-control__worldmodel-agent-gpu_pilot_closed_loop__seed05__20261003T144527Z/env*",
+   "checkpoints_done": "5/5",
+   "source_sha256": "84d41d62e18c7801a9213b0521a126933f9754930bd792fd50836104add54001"
+  },
+  {
+   "job": "value_diagnostics",
+   "exit_code": 1,
+   "not_started": false,
+   "run_dir": "value_diagnostics",
+   "output": "none",
+   "finished": false
+  }
+ ],
+ "archives": [
+  "grid12x12__4zones__pair-experimental__worldmodel-agent-gpu_pilot_closed_loop__seed00__20261003T144527Z.recomputed.tgz",
+  "grid12x12__4zones__pair-experimental__worldmodel-agent-gpu_pilot_closed_loop__seed05__20261003T144527Z.recomputed.tgz",
+  "grid12x12__4zones__pair-control__worldmodel-agent-gpu_pilot_closed_loop__seed00__20261003T144527Z.recomputed.tgz",
+  "grid12x12__4zones__pair-control__worldmodel-agent-gpu_pilot_closed_loop__seed05__20261003T144527Z.recomputed.tgz",
+  "logs.tgz"
+ ]
+}

@@ -1,0 +1,10 @@
+{
+  "original_measurement_job": "cb163d1aa6aa",
+  "original_value_diagnostics_exit_code": 1,
+  "followup_attempt": "logs/kubeflow/value-diagnostics-retry-20261005-b",
+  "followup_source_commit": "90c546597dd0c9b191adb8ee79bc7613f9e0266a",
+  "followup_exit_code": 0,
+  "original_logs_archive_on_cluster": "handoff/gpu_pilot_remeasure/logs.tgz",
+  "original_logs_archive_sha256": "eca2b610f251427bda17362ffb3f6153712314bfd0fdaae0fa865956bfcffb9b",
+  "log_archive_reduction": "logs_summary.tgz omits runs/ outputs already in separate archives; full original logs.tgz remains on cluster"
+}
