@@ -178,7 +178,13 @@ def main(argv: list[str] | None = None) -> int:
             if batch.get("kind") == "noise":  # one repeat at the largest multiplier, an upper bound for every measurement of a job
                 mn = load_experiment_module("E3_worldmodel_4zones", "measure_noise.py", "preflight_measures_noise")
                 smoke = mn.noise(first, 1, [max(batch["contexts_multipliers"])], args.device)
-                seconds = (time.perf_counter() - t0) * batch["repeats"] * len(batch["contexts_multipliers"])
+                t4 = time.perf_counter() - t0  # one measurement at the largest multiplier: an upper bound for every measurement
+                n_ck = len(batch.get("checkpoint_steps") or [])
+                seconds = t4 * (batch["repeats"] * len(batch["contexts_multipliers"]) + n_ck * len(batch.get("checkpoint_multipliers") or []))
+                if batch.get("fallback_batch"):  # the same jobs with the fallback's checkpoint multipliers (2026-10-06 (27))
+                    fb = cluster.MEASURE_BATCHES[batch["fallback_batch"]]
+                    summary["fallback_seconds_per_job"] = t4 * (batch["repeats"] * len(batch["contexts_multipliers"])
+                                                                + n_ck * len(fb["checkpoint_multipliers"]))
                 out = None
                 rep = smoke["reproducibility"]
                 if rep.get("allow_tf32_matmul") or rep.get("allow_tf32_cudnn"):
@@ -212,6 +218,11 @@ def main(argv: list[str] | None = None) -> int:
     summary["projected_batch_hours"] = hours
     max_hours = batch.get("max_batch_hours", args.max_batch_hours)  # a batch may carry its own ceiling (gpu_pilot_noise: 8 h)
     decision = decide(problems, hours, max_hours)
+    if "fallback_seconds_per_job" in summary:  # over the ceiling with everything, within it with the fallback: launch the fallback
+        rounds = math.ceil(len(jobs) / max(1, args.parallel))
+        summary["projected_batch_hours_fallback"] = summary["fallback_seconds_per_job"] * rounds * CONTENTION / 3600.0
+        if decision == "stop" and not problems and summary["projected_batch_hours_fallback"] <= max_hours:
+            decision = f"launch-fallback-{batch['fallback_batch']}"
     verdict = {"passed": not problems, "problems": problems, "warnings": [], "parallel": args.parallel, "cpus": summary["cpus"],
                "projected_batch_hours": hours, "max_batch_hours": max_hours, "decision": decision, "summary": summary}
     args.out_dir.mkdir(parents=True, exist_ok=True)

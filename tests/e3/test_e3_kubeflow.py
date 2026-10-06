@@ -272,7 +272,12 @@ def test_pilot_noise_batch():
     assert [n for n, _ in jobs][-1] == "goal_control" and len(jobs) == 5
     for name, cmd in jobs[:4]:
         assert cmd[2].endswith("measure_noise.py") and cmd[cmd.index("--repeats") + 1] == "8"
-        assert cmd[cmd.index("--contexts-multipliers") + 1:cmd.index("--device")] == ["1", "2", "4"]
+        assert cmd[cmd.index("--contexts-multipliers") + 1:cmd.index("--checkpoint-steps")] == ["1", "2", "4"]
+        assert cmd[cmd.index("--checkpoint-steps") + 1:cmd.index("--checkpoint-multipliers")] == ["63096", "100000", "158489", "251189", "300000"]
+        assert cmd[cmd.index("--checkpoint-multipliers") + 1:cmd.index("--device")] == ["2", "4"]  # 2026-10-06 (27): x2 first
+    fallback = cluster.commands("measure", "python", Path("/o"), batch="gpu_pilot_noise_x2")[0][1]
+    assert fallback[fallback.index("--checkpoint-multipliers") + 1:fallback.index("--device")] == ["2"]
+    assert cluster.MEASURE_BATCHES["gpu_pilot_noise"]["fallback_batch"] == "gpu_pilot_noise_x2"
     g = jobs[4][1]
     assert g[g.index("--goal-control") + 1].endswith("seed00__20261003T144527Z:15849") and "pair-control" in g[g.index("--goal-control") + 1]
     assert g[g.index("--draws") + 1] == "10000"

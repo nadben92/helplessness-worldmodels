@@ -5,10 +5,11 @@ nothing.**
 
 What it is: the measurement noise of the main measure. On the final weights of the four runs of the closed-loop pilot
 (gpu_pilot_cl), I_s is measured 8 times with independent draws of real contexts, with the present number of contexts
-per state and with 2 and 4 times more (`measure_noise.py --noise`); a fifth job measures, on REF seed 0 at its
+per state and with 2 and 4 times more (`measure_noise.py --noise`), then I_s at the pilot's checkpoints 63,096,
+100,000, 158,489, 251,189 and 300,000 with 2 and then 4 times more contexts (`--checkpoint-steps`); a fifth job measures, on REF seed 0 at its
 checkpoint 15,849, the prior's mass on the goal with 10,000 draws and the agent's Q gaps next to the goal
 (`measure_noise.py --goal-control`). **Nothing is trained.** Its purpose is written in `docs/e3/DECISIONS.md`
-(2026-10-06 (26)). Earlier batches are in `RUN_GPU_HISTORY.md`: **do not use it for this batch.**
+(2026-10-06 (26), (27)). Earlier batches are in `RUN_GPU_HISTORY.md`: **do not use it for this batch.**
 
 The four runs are read **in place, where the pilot wrote them** -- the weights do not move:
 
@@ -66,7 +67,7 @@ python -c "import sys; sys.path.insert(0, 'src'); from helplessness.runs import 
 The last command must print exactly:
 
 ```
-{'source_sha256': '6b1eee46a9a01e35f631c61a080f1a27c9ad260b8552965f1b1a8875321413fa', 'source_n_files': 271}
+{'source_sha256': 'c984cdd6ada798fa67c1280e3ce01a68a80bc885bb89ac274bfa930c41a31477', 'source_n_files': 271}
 ```
 
 If `git pull` fails or the hash differs, stop: do not launch anything, go to step 5 (without measurement). The
@@ -109,16 +110,23 @@ cat "$PRE/runs/preflight_verdict.json"
 
 ## Step 3 -- decision rule (apply it exactly)
 
-- **Launch** if the last line of `preflight.log` is `PREFLIGHT DECISION: launch`, and
-  `$PRE/runs/preflight_verdict.json` says `passed` `true`, `problems` empty, `projected_batch_hours` a number <= 8,
-  `cpus.requested` and `cpus.usable` both 3:
+Read `$PRE/runs/preflight_verdict.json` (it must say `passed` `true`, `problems` empty, `cpus.requested` and
+`cpus.usable` both 3). The last line of `preflight.log` is one of:
+
+- `PREFLIGHT DECISION: launch` -- the whole batch fits in 8 hours (`projected_batch_hours` <= 8):
 
   ```bash
   python experiments/E3_worldmodel_4zones/submit_kubeflow.py --phase measure --batch gpu_pilot_noise --max-parallel 4 --cpu 3
   ```
 
-- **Stop** in every other case (`PREFLIGHT DECISION: stop`, any problem, no verdict file, another number of CPUs): do
-  not launch; go to step 5 (without measurement) with the preflight's output. There is no retry branch.
+- `PREFLIGHT DECISION: launch-fallback-gpu_pilot_noise_x2` -- the whole batch would exceed 8 hours, the same jobs with
+  the checkpoints at 2 times the contexts only fit (`projected_batch_hours_fallback` <= 8 in the verdict's summary):
+
+  ```bash
+  python experiments/E3_worldmodel_4zones/submit_kubeflow.py --phase measure --batch gpu_pilot_noise_x2 --max-parallel 4 --cpu 3
+  ```
+
+- `PREFLIGHT DECISION: stop` -- do not launch; go to step 5 (without measurement) with the preflight's output.
 
 If the decision line and the verdict file disagree, stop (rule 4).
 
@@ -137,7 +145,8 @@ tail -n 2 "$MEAS"/*.log
 ```
 
 The four noise jobs run at once, the fifth (`goal_control`) starts when one of them finishes; each noise job prints a
-line `[noise] ... x<m> repeat <r>: ...` after each of its 24 measurements. `exit_code` is `null` while a job runs, `0` when it finished, `1` when it failed (a failure is a
+line `[noise] ... x<m> repeat <r>: ...` after each of its 24 repeats, then `[checkpoints] ... x<m> env <c>: ...` after
+each checkpoint measurement. `exit_code` is `null` while a job runs, `0` when it finished, `1` when it failed (a failure is a
 result: rule 2). The batch is finished when every `exit_code` is a number and the pod is `Completed` or `Error`. If the
 pod disappears while an `exit_code` is still `null`, stop (rule 4): go to step 5.
 

@@ -29,7 +29,8 @@ def test_every_submission_command_parses(tmp_path, monkeypatch):
     commands = _commands("submit_kubeflow.py")
     assert {tuple(c) for c in commands} == {
         ("--phase", "preflight", "--batch", "gpu_pilot_noise", "--max-parallel", "4", "--cpu", "3"),
-        ("--phase", "measure", "--batch", "gpu_pilot_noise", "--max-parallel", "4", "--cpu", "3")}
+        ("--phase", "measure", "--batch", "gpu_pilot_noise", "--max-parallel", "4", "--cpu", "3"),
+        ("--phase", "measure", "--batch", "gpu_pilot_noise_x2", "--max-parallel", "4", "--cpu", "3")}  # the fallback (27)
     mount = tmp_path / "scratch"
     repo = mount / "helplessness-worldmodels"
     repo.mkdir(parents=True)
@@ -38,7 +39,7 @@ def test_every_submission_command_parses(tmp_path, monkeypatch):
         with pytest.raises(ImportError):  # the arguments passed every check; only the SDK import is left
             cluster.main([*argv, "--repo-dir", str(repo), "--mount", str(mount)])
         phase = argv[argv.index("--phase") + 1]
-        jobs = cluster.commands(phase, "python", tmp_path, batch="gpu_pilot_noise", max_parallel=4, cpus=3)
+        jobs = cluster.commands(phase, "python", tmp_path, batch=argv[argv.index("--batch") + 1], max_parallel=4, cpus=3)
         assert len(jobs) == (1 if phase == "preflight" else 5)
         if phase == "measure":
             assert all(cmd[2].endswith("measure_noise.py") for _, cmd in jobs)
@@ -74,7 +75,8 @@ def test_hash_command_runs_on_the_standard_library_alone():
 def test_decision_lines_are_the_preflight_s():
     preflight_src = (REPO / "experiments" / "E3_worldmodel_4zones" / "preflight_measures.py").read_text(encoding="utf-8")
     assert 'print(f"PREFLIGHT DECISION: {decision}' in preflight_src
-    for decision in ("launch", "stop"):
+    for decision in ("launch", "launch-fallback-gpu_pilot_noise_x2", "stop"):
         assert f"PREFLIGHT DECISION: {decision}" in DOC
+    assert "decision = f\"launch-fallback-{batch['fallback_batch']}\"" in preflight_src
     assert "<= 8" in DOC and cluster.MEASURE_BATCHES["gpu_pilot_noise"]["max_batch_hours"] == 8.0
     assert 'max_hours = batch.get("max_batch_hours", args.max_batch_hours)' in preflight_src

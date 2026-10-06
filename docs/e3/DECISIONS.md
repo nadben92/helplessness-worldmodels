@@ -3573,3 +3573,41 @@ smallest number of contexts per state for which the standard deviation of I_s du
 CN and in CD (in each of the 4 runs). If none reaches it at a reasonable cost [one I_s measurement costing at most 3
 times the present configuration's, measured in this batch], the largest number tested is taken and the resolution
 obtained is recorded. **This protocol will be identical for every run of the campaign.**
+
+## 2026-10-06 (27) -- budget criterion corrected (after the result, before the measurement noise is known); candidate protocols at the checkpoints
+
+### The budget criterion, corrected (user decision)
+
+Made **after the result** of (25), and recorded **before the launch of gpu_pilot_noise, hence before the measurement
+noise is known**. Reason: the criterion of (23)/(24) was unattainable by construction (its threshold was below the
+variation due to the choice of contexts), so the 300,000 steps it gave do not reflect a need of the model. The
+correction bears only on the measurement noise, never on b, and **its result will be accepted even if it gives
+300,000 again.**
+
+New criterion: the budget is the first checkpoint (among 63,096, 100,000, 158,489, 251,189, 300,000) from which, in all
+4 runs of the pilot:
+a. **the agent has finished learning**: median mass over the four pairs into the goal >= 0.9; the success of the next
+   interval compatible with that of the last interval (their 95 % Wilson intervals overlap); **the agent's Delta under
+   P below 1.0 in every zone** (threshold proposed by the implementer from the scale of Delta at the end of the pilot:
+   0 to 0.75 by zone in the 4 runs at 300,000 (2026-10-05 review), against ~19 to 36 for the uniform policy; 1.0 is
+   the cost of one environment step, the unit of the episode's reward; Delta = mean over the zone's states of
+   V*(s) - V^pi(s) with the agent's greedy policy read on real contexts, checkpoints.jsonl agent_delta.real_contexts);
+b. **I_s changes from one checkpoint to the next by less than 2 times the standard deviation due to the contexts**
+   (task a of gpu_pilot_noise), by zone, measured with the protocol retained by the rule of (26).
+If no checkpoint satisfies both, the budget stays at 300,000.
+**Transparency:** the quantities of a (goal masses, success per interval, Delta at every checkpoint) were already read
+and reported in the pilot's review (2026-10-05 (22), (23)); the threshold on Delta is proposed after having seen them.
+Only b depends on measurements not yet made.
+
+### Candidate protocols at the checkpoints (in gpu_pilot_noise)
+
+Each of the four noise jobs, after its 24 repeats, measures I_s by zone at the 5 checkpoints with 2 and then 4 times
+the contexts per state (`measure_noise.py --checkpoint-steps`; the weights at each checkpoint, the replay as of it --
+the 300,000 point on the replay at 290,000, flagged --; one measurement per checkpoint and multiplier, the same seed
+at every checkpoint). The x1 values exist (gpu_pilot_remeasure, (25)). **Only the measurements at the protocol retained
+by the rule of (26) serve criterion b; the others are set aside.**
+Cost: one I_s measurement (real contexts + kernel, K = 1,358) on the A100 is not measured yet; the preflight times one
+at 4 times the contexts (an upper bound for every measurement of the batch) and projects each job as 24 repeats + 10
+checkpoint measurements (5 x2 + 5 x4) of that duration, 4 jobs side by side (x 1.25). **If the whole exceeds the 8-hour
+ceiling, the preflight's decision is to launch gpu_pilot_noise_x2: the same batch with the checkpoints at x2 only
+(priority to x2).**

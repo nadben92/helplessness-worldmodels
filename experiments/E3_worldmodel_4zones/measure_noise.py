@@ -8,6 +8,11 @@ kernel keeping its K draws per (s, a) spread over the state's contexts. I_s is t
 (probe.real_context_kernel -> run_mini.controllability_of_kernel -> zone mean over the measured states). Reported per
 multiplier: I_s by zone for every repeat, their standard deviation, and the seconds of each measurement.
 
+--noise RUN_DIR --checkpoint-steps C ... [--checkpoint-multipliers 2 4]: also (after the repeats) I_s by zone of the
+weights saved at each checkpoint C, on the replay as of C (remeasure_checkpoints.replay_prefix; the last checkpoint
+after the resume point on the resume point's replay, flagged), once per multiplier, with the same seed at every
+checkpoint (docs/e3/DECISIONS.md, 2026-10-06 (27): the candidate protocols for the budget criterion).
+
 --goal-control RUN_DIR:ENV_STEP: with the weights at that checkpoint and the replay as of it, the mass of the prior on
 the goal for each pair into it with --draws draws (probe.real_context_kernel_pairs), and at each state next to the
 goal the Q gap (the agent's greedy Q, probe.agent_greedy_policy, averaged over the state's contexts) between the action
@@ -110,6 +115,32 @@ def noise(run_dir: Path, repeats: int, multipliers: list[int], device_arg: str |
     return out
 
 
+def checkpoints(run_dir: Path, steps: list[int], multipliers: list[int], device_arg: str | None) -> dict:
+    cfg, meta, device, world, resume = _load(run_dir, device_arg)
+    records = {r["env_step"]: r for r in (json.loads(line) for line in (run_dir / "checkpoints.jsonl").read_text(encoding="utf-8").splitlines())}
+    full = pickle.loads(resume["replay"])
+    resume_env = int(resume["progress"]["env_step"])
+    base = run_mini.real_context_settings(cfg)["max_per_state"]
+    out = {"run": run_dir.name, "base_max_per_state": base, "by_multiplier": {}, "reproducibility": run_mini.environment_metadata(device)}
+    for m in multipliers:  # in the given order: the first multiplier is complete before the next starts
+        rows = {}
+        for c in steps:
+            if c <= resume_env:
+                replay, replay_env = remeasure.replay_prefix(full, c + int(records[c]["episodes"])), c
+            else:
+                replay, replay_env = full, resume_env
+            if device.type == "cuda":
+                replay.to_device(device)
+            state = torch.load(remeasure.weights_path(run_dir, c, int(meta["env_steps"])), map_location="cpu", weights_only=False)
+            _, rssm, _, _ = _models(cfg, state, device)
+            t0 = time.perf_counter()
+            one = is_by_zone_once(rssm, world, replay, cfg, base * m, np.random.default_rng(SEED), torch.Generator(device=device).manual_seed(SEED))
+            rows[str(c)] = {**one, "replay_env_steps": replay_env, "seconds": time.perf_counter() - t0}
+            print(f"[checkpoints] {run_dir.name[:60]} x{m} env {c}: {json.dumps(one)} {rows[str(c)]['seconds']:.0f}s", flush=True)
+        out["by_multiplier"][str(m)] = {"max_per_state": base * m, "by_checkpoint": rows}
+    return out
+
+
 def goal_control(run_dir: Path, c: int, draws: int, device_arg: str | None) -> dict:
     cfg, meta, device, world, resume = _load(run_dir, device_arg)
     records = {r["env_step"]: r for r in (json.loads(line) for line in (run_dir / "checkpoints.jsonl").read_text(encoding="utf-8").splitlines())}
@@ -149,6 +180,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repeats", type=int, default=8)
     parser.add_argument("--contexts-multipliers", type=int, nargs="+", default=[1, 2, 4])
     parser.add_argument("--draws", type=int, default=10_000)
+    parser.add_argument("--checkpoint-steps", type=int, nargs="*", default=None, help="with --noise: also measure these checkpoints")
+    parser.add_argument("--checkpoint-multipliers", type=int, nargs="+", default=[2, 4])
     parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default=None)
     parser.add_argument("--out-dir", type=Path, required=True)
     args = parser.parse_args(argv)
@@ -156,7 +189,12 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("give exactly one of --noise and --goal-control")
     os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
     if args.noise is not None:
+        args.out_dir.mkdir(parents=True, exist_ok=True)
         res, name = noise(args.noise, args.repeats, args.contexts_multipliers, args.device), f"noise__{args.noise.name}.json"
+        (args.out_dir / name).write_text(json.dumps(run_mini._jsonable(res), indent=1), encoding="utf-8")  # kept if the next part fails
+        if args.checkpoint_steps:
+            res = checkpoints(args.noise, args.checkpoint_steps, args.checkpoint_multipliers, args.device)
+            name = f"checkpoints__{args.noise.name}.json"
     else:
         run_dir, step = args.goal_control.rsplit(":", 1)
         res, name = goal_control(Path(run_dir), int(step), args.draws, args.device), "goal_control.json"

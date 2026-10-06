@@ -42,3 +42,21 @@ def pytest_approx(x):
     import pytest
 
     return pytest.approx(x)
+
+
+def test_checkpoints_mode(tmp_path):
+    """2026-10-06 (27): I_s by zone of each checkpoint's weights on the replay as of it, once per multiplier."""
+    cfg = tiny_config()
+    cfg["measure"]["final"] = False
+    cfg["measure"]["checkpoint_goal_kernel"] = {"draws": 4}
+    d = tmp_path / "r"
+    d.mkdir()
+    run_agent.run_one(cfg, 0, "experimental", d, run_mini.configure_runtime(cfg))
+    out = tmp_path / "o"
+    assert mn.main(["--noise", str(d), "--repeats", "2", "--contexts-multipliers", "1", "--checkpoint-steps", "100", "300",
+                    "--checkpoint-multipliers", "2", "--device", "cpu", "--out-dir", str(out)]) == 0
+    assert (out / f"noise__{d.name}.json").exists()
+    c = json.loads((out / f"checkpoints__{d.name}.json").read_text())
+    rows = c["by_multiplier"]["2"]["by_checkpoint"]
+    assert set(rows) == {"100", "300"} and rows["100"]["replay_env_steps"] == 100 and rows["300"]["replay_env_steps"] == 250
+    assert c["by_multiplier"]["2"]["max_per_state"] == 2 * c["base_max_per_state"]

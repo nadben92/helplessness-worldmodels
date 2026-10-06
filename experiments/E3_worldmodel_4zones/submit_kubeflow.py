@@ -88,14 +88,21 @@ MEASURE_BATCHES["gpu_pilot_noise"] = {
     "repeats": 8,
     "contexts_multipliers": [1, 2, 4],
     "goal_control": ("win64_seed0_reference", 15849, 10_000),
+    # 2026-10-06 (27): after its repeats, each job re-measures I_s at the 5 checkpoints with the candidate protocols
+    # (x2 first, then x4); if the whole exceeds max_batch_hours, the fallback batch keeps x2 only
+    "checkpoint_steps": list(MEASURE_BATCHES["gpu_pilot_remeasure"]["env_steps"]),
+    "checkpoint_multipliers": [2, 4],
+    "fallback_batch": "gpu_pilot_noise_x2",
     "max_batch_hours": 8.0,
     "runs": dict(MEASURE_BATCHES["gpu_pilot_remeasure"]["runs"]),
 }
+MEASURE_BATCHES["gpu_pilot_noise_x2"] = {**MEASURE_BATCHES["gpu_pilot_noise"], "checkpoint_multipliers": [2], "fallback_batch": None}
 DEFAULT_BATCH = "gpu_e30"
 # The job's CPU request, PER BATCH (docs/e3/DECISIONS.md, 2026-09-30 (5)): gpu_e30b was prescribed 5 CPUs and ran on 3,
 # because --cpu defaulted to 3 and a command without it (or with another value) was accepted silently. The
 # request now defaults to the batch's own value, and a different --cpu is refused unless --allow-cpu-override.
-BATCH_CPUS = {"gpu_e30": 3, "gpu_e30b": 5, "gpu_e30b_measures": 3, "gpu_pilot_cl": 3, "gpu_pilot_remeasure": 3, "gpu_pilot_noise": 3}
+BATCH_CPUS = {"gpu_e30": 3, "gpu_e30b": 5, "gpu_e30b_measures": 3, "gpu_pilot_cl": 3, "gpu_pilot_remeasure": 3, "gpu_pilot_noise": 3,
+              "gpu_pilot_noise_x2": 3}
 DEFAULT_CPUS = BATCH_CPUS[DEFAULT_BATCH]
 
 
@@ -204,8 +211,10 @@ def commands(phase: str, python: str, output: Path, resume: str = "", runs: list
         if MEASURE_BATCHES[batch].get("kind") == "noise":
             b = MEASURE_BATCHES[batch]
             jobs = [(name, [python, "-u", f"{SCRIPT}/measure_noise.py", "--noise", f"{root}/{known[name][0]}", "--repeats", str(b["repeats"]),
-                            "--contexts-multipliers", *[str(m) for m in b["contexts_multipliers"]], "--device", "cuda",
-                            "--out-dir", str(output / "runs" / known[name][0])]) for name in select_runs(runs, batch)]
+                            "--contexts-multipliers", *[str(m) for m in b["contexts_multipliers"]],
+                            *(["--checkpoint-steps", *[str(c) for c in b["checkpoint_steps"]], "--checkpoint-multipliers",
+                               *[str(m) for m in b["checkpoint_multipliers"]]] if b.get("checkpoint_steps") else []),
+                            "--device", "cuda", "--out-dir", str(output / "runs" / known[name][0])]) for name in select_runs(runs, batch)]
             if not runs:
                 job, c, draws = b["goal_control"]
                 jobs.append(("goal_control", [python, "-u", f"{SCRIPT}/measure_noise.py", "--goal-control", f"{root}/{known[job][0]}:{c}",
