@@ -3523,3 +3523,53 @@ fact; it bears on how the stability criterion can be read (the threshold is belo
 At REF 0's unexplained interval of (23), the critic already ranks states by their distance to the goal (V higher near
 the goal) while the prior puts no mass on the goal: the information reached the policy through V's generalisation
 in the latent space. EXP 5's unexplained interval stays undetermined under the rule.
+**Corrected 2026-10-06 (26), after the result:** the label "generalisation of V in the latent space" does not hold --
+the critic is trained on imagined trajectories only (see (26)); the reading retained is a mass on the goal below the
+measurement's resolution, amplified by the +50 / -1 asymmetry.
+
+## 2026-10-06 (26) -- budget 300,000 by the rule; the critic is trained on imagination only (correction of (25)); measurement-noise batch: rule fixed before computing
+
+### Budget (user decision)
+
+The campaign's budget is **300,000 environment steps**, by application of the rule of (24). Recorded: the threshold
+of 0.005 bit in CN was below the measurement's variation due to the choice of real contexts (0.01 to 0.03 bit, the
+300,000 control of (25)), so **the criterion was unattainable by construction; it is not modified after the fact.**
+
+### What the critic is trained on (code check)
+
+`src/helplessness/agents/worldmodel/imagination.py`:
+- `train_heads_step` (lines 97-124): the goal head is trained on the replay batch's posterior states against the REAL
+  arrival rewards, `goal_head_loss(goal_head, h, z, reward)` (line 112: BCE against 1[r > 0]); the critic is trained
+  on `rollout = imagine(rssm, goal_head, critic, h, z, cfg, generator)` (line 116) and
+  `critic_loss(critic, slow_critic, goal_head, rollout, cfg)` (line 118).
+- `imagine` (lines 36-52): from the replay's posterior states (stop-gradient), `cfg.horizon` steps of the prior
+  (`rssm.imagination_step`, line 48), actions from the agent's own epsilon-greedy policy.
+- `critic_loss` (lines 66-78): r and c of every imagined state from the goal head, `r, c = reward_from_goal(p, cfg),
+  continuation_from_goal(p)` with `p = goal_head.p_goal(h, z)` (lines 71-72); lambda-returns on the slow critic
+  (line 73); weights cumprod(c) (line 74).
+**The critic receives no target from real transitions** (no real reward, no real termination): only lambda-returns of
+imagined trajectories, with r_hat and c predicted by the goal head on imagined (prior) latents. Its only contact with
+the replay is the start state s_0.
+
+**Correction of the reading of (25) at REF 0 / 15,849, made after the result.** "V higher near the goal with null goal
+masses" means: **a mass on the goal below the measurement's resolution (256 draws per pair: a mass under ~1/256 reads
+as 0) guides the agent, amplified by the +50 / -1 asymmetry** (r_hat = 50 p - (1 - p): p = 0.01 already gives r_hat
+~ -0.49 against -1, and the critic propagates it over the horizon) -- **not a generalisation of the critic.**
+Mechanistic reason: the critic cannot learn the value of the goal unless the goal has a non-zero probability under
+the prior on imagined trajectories, since that is its only source of reward.
+
+### Measurement-noise batch (prepared, not launched): rule of choice of the measurement protocol (fixed before computing)
+
+a. On the final weights of the pilot's 4 runs (agent_final.pt, replay of the last resume point, 290,000), I_s by zone
+   measured with R = 8 independent draws of real contexts (and of the kernel's prior draws), at the present
+   configuration (real_context.max_per_state 50) and with 2x and 4x more contexts per state (100, 200); the kernel
+   keeps K = 1,358 draws per (s, a), spread over the state's contexts. Reported: the standard deviation of I_s by
+   zone over the 8 repeats, by number of contexts, and the cost of each configuration.
+b. Goal control on REF 0 at 15,849: the mass on each of the 4 pairs into the goal with 10,000 draws; at the 4 states
+   next to the goal, the Q gap between the action into the goal and the best other action, against the tie-break
+   tolerance (0.0751).
+**Rule (user decision; the cost bound in brackets is the implementer's, set here):** the measurement protocol is the
+smallest number of contexts per state for which the standard deviation of I_s due to the contexts is <= 0.005 bit in
+CN and in CD (in each of the 4 runs). If none reaches it at a reasonable cost [one I_s measurement costing at most 3
+times the present configuration's, measured in this batch], the largest number tested is taken and the resolution
+obtained is recorded. **This protocol will be identical for every run of the campaign.**
