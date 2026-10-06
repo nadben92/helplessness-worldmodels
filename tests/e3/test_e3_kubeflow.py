@@ -262,3 +262,18 @@ def test_pilot_remeasure_batch():
     with pytest.raises(ValueError, match="measurement batch"):
         cluster.commands("train", "python", Path("/o"), batch="gpu_pilot_remeasure")
     assert cluster.resolve_cpus("gpu_pilot_remeasure", None) == 3
+
+
+def test_pilot_noise_batch():
+    """docs/e3/DECISIONS.md, 2026-10-06 (26): 4 noise jobs on the pilot's final weights, then the goal control."""
+    from pathlib import Path
+
+    jobs = cluster.commands("measure", "python", Path("/o"), batch="gpu_pilot_noise")
+    assert [n for n, _ in jobs][-1] == "goal_control" and len(jobs) == 5
+    for name, cmd in jobs[:4]:
+        assert cmd[2].endswith("measure_noise.py") and cmd[cmd.index("--repeats") + 1] == "8"
+        assert cmd[cmd.index("--contexts-multipliers") + 1:cmd.index("--device")] == ["1", "2", "4"]
+    g = jobs[4][1]
+    assert g[g.index("--goal-control") + 1].endswith("seed00__20261003T144527Z:15849") and "pair-control" in g[g.index("--goal-control") + 1]
+    assert g[g.index("--draws") + 1] == "10000"
+    assert cluster.resolve_cpus("gpu_pilot_noise", None) == 3 and cluster.MEASURE_BATCHES["gpu_pilot_noise"]["max_batch_hours"] == 8.0

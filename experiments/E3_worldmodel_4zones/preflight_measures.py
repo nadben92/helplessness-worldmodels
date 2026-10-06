@@ -47,6 +47,8 @@ RUN_GPU = HERE / "RUN_GPU.md"
 REQUIRED_FILES = ("config.yaml", "meta.yaml", "world.json", "replay.npz", "checkpoints/weights_final.pt")
 # a closed-loop run re-measured at its checkpoints (kind "checkpoints", remeasure_checkpoints.py)
 REQUIRED_FILES_CHECKPOINTS = ("config.yaml", "meta.yaml", "checkpoints.jsonl", "counts.npz", "checkpoints/resume.pt")
+# a closed-loop run's final weights measured repeatedly (kind "noise", measure_noise.py)
+REQUIRED_FILES_NOISE = ("config.yaml", "meta.yaml", "checkpoints.jsonl", "checkpoints/resume.pt", "checkpoints/agent_final.pt")
 CONTENTION = 1.25
 ROLE = {"experimental": "experimental", "reference": "control"}
 
@@ -73,7 +75,7 @@ def check_run(job: str, run_dir: Path, expected_sha256: str | None, kind: str = 
     problems = []
     if not run_dir.is_dir():
         return [f"{job}: {run_dir} does not exist"]
-    required = REQUIRED_FILES if kind == "final" else REQUIRED_FILES_CHECKPOINTS
+    required = {"final": REQUIRED_FILES, "checkpoints": REQUIRED_FILES_CHECKPOINTS, "noise": REQUIRED_FILES_NOISE}[kind]
     missing = [f for f in required if not (run_dir / f).is_file()]
     if kind == "checkpoints":
         meta0 = yaml.safe_load((run_dir / "meta.yaml").read_text(encoding="utf-8")) if (run_dir / "meta.yaml").is_file() else {}
@@ -147,6 +149,11 @@ def main(argv: list[str] | None = None) -> int:
     for job in jobs:
         run_name, sha = batch["runs"][job]
         problems += check_run(job, Path(batch["source_root"]) / run_name, sha, batch.get("kind", "final"), batch.get("env_steps"))
+    if batch.get("goal_control"):  # the goal control's checkpoint (2026-10-06 (26))
+        job, c, _ = batch["goal_control"]
+        w = Path(batch["source_root"]) / batch["runs"][job][0] / "checkpoints" / f"agent_env{c:06d}.pt"
+        if not w.is_file():
+            problems.append(f"goal control: {w} is missing")
     for job, c in batch.get("value_diagnostics", []):  # the value diagnostic's checkpoints (2026-10-05 (24))
         w = Path(batch["source_root"]) / batch["runs"][job][0] / "checkpoints" / f"agent_env{c:06d}.pt"
         if not w.is_file():
@@ -168,7 +175,16 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[preflight-measures] smoke: full recomputation of {jobs[0]} on {device} ...", flush=True)
         t0 = time.perf_counter()
         try:
-            if batch.get("kind") == "checkpoints":  # one checkpoint of the first run; the job measures len(env_steps)
+            if batch.get("kind") == "noise":  # one repeat at the largest multiplier, an upper bound for every measurement of a job
+                mn = load_experiment_module("E3_worldmodel_4zones", "measure_noise.py", "preflight_measures_noise")
+                smoke = mn.noise(first, 1, [max(batch["contexts_multipliers"])], args.device)
+                seconds = (time.perf_counter() - t0) * batch["repeats"] * len(batch["contexts_multipliers"])
+                out = None
+                rep = smoke["reproducibility"]
+                if rep.get("allow_tf32_matmul") or rep.get("allow_tf32_cudnn"):
+                    problems.append(f"smoke measurement ran with TF32 on: {rep}")
+                summary["smoke"] = {"seconds": seconds, "one_repeat_at_the_largest_multiplier": smoke["by_multiplier"]}
+            elif batch.get("kind") == "checkpoints":  # one checkpoint of the first run; the job measures len(env_steps)
                 remeasure = load_experiment_module("E3_worldmodel_4zones", "remeasure_checkpoints.py", "preflight_measures_remeasure")
                 out = remeasure.remeasure(first, batch["env_steps"][:1], args.device, args.out_dir / "smoke")[0]
                 seconds = (time.perf_counter() - t0) * len(batch["env_steps"])
@@ -176,26 +192,28 @@ def main(argv: list[str] | None = None) -> int:
                 out = recompute.recompute(first, ["final"], args.device, out_dir=args.out_dir / "smoke",
                                           weights_sha256=batch["runs"][jobs[0]][1])[0]
                 seconds = time.perf_counter() - t0
-            missing = [f for f in ("results.json", "arrays.npz", "SUMMARY.md") if not (out / f).is_file()]
-            if missing:
-                problems.append(f"smoke recomputation wrote no {missing}")
-            res = json.loads((out / "results.json").read_text(encoding="utf-8"))
-            rep = res.get("reproducibility", {})
-            if rep.get("allow_tf32_matmul") or rep.get("allow_tf32_cudnn"):
-                problems.append(f"smoke recomputation ran with TF32 on: {rep}")
-            comparison = out / "comparison_with_run.json"
-            summary["smoke"] = {"seconds": seconds, "out": str(out),
-                                "identical_to_original": json.loads(comparison.read_text()) if comparison.exists() else None}
+            if out is not None:
+                missing = [f for f in ("results.json", "arrays.npz", "SUMMARY.md") if not (out / f).is_file()]
+                if missing:
+                    problems.append(f"smoke recomputation wrote no {missing}")
+                res = json.loads((out / "results.json").read_text(encoding="utf-8"))
+                rep = res.get("reproducibility", {})
+                if rep.get("allow_tf32_matmul") or rep.get("allow_tf32_cudnn"):
+                    problems.append(f"smoke recomputation ran with TF32 on: {rep}")
+                comparison = out / "comparison_with_run.json"
+                summary["smoke"] = {"seconds": seconds, "out": str(out),
+                                    "identical_to_original": json.loads(comparison.read_text()) if comparison.exists() else None}
             rounds = math.ceil(len(jobs) / max(1, args.parallel))
             hours = seconds * rounds * CONTENTION / 3600.0
             print(f"[preflight-measures] smoke: {seconds:.0f} s; identical to the run's original arrays: "
-                  f"{summary['smoke']['identical_to_original']} (reported only: the aggregation compares them)", flush=True)
+                  f"{summary['smoke'].get('identical_to_original')} (reported only: the aggregation compares them)", flush=True)
         except Exception as err:  # the measurement fails on this machine: a problem, reported with its message
             problems.append(f"smoke recomputation failed: {type(err).__name__}: {err}")
     summary["projected_batch_hours"] = hours
-    decision = decide(problems, hours, args.max_batch_hours)
+    max_hours = batch.get("max_batch_hours", args.max_batch_hours)  # a batch may carry its own ceiling (gpu_pilot_noise: 8 h)
+    decision = decide(problems, hours, max_hours)
     verdict = {"passed": not problems, "problems": problems, "warnings": [], "parallel": args.parallel, "cpus": summary["cpus"],
-               "projected_batch_hours": hours, "max_batch_hours": args.max_batch_hours, "decision": decision, "summary": summary}
+               "projected_batch_hours": hours, "max_batch_hours": max_hours, "decision": decision, "summary": summary}
     args.out_dir.mkdir(parents=True, exist_ok=True)
     (args.out_dir / "preflight_verdict.json").write_text(json.dumps(run_mini._jsonable(verdict), indent=1), encoding="utf-8")
     print("PREFLIGHT PASSED" if not problems else "PREFLIGHT FAILED:\n  - " + "\n  - ".join(problems), flush=True)

@@ -79,11 +79,23 @@ MEASURE_BATCHES["gpu_pilot_remeasure"] = {
             "win64_seed5_reference": ("grid12x12__4zones__pair-control__worldmodel-agent-gpu_pilot_closed_loop__seed05__20261003T144527Z", None),
     },
 }
+# Measurement noise of I_s and the goal control (docs/e3/DECISIONS.md, 2026-10-06 (26)): measure_noise.py on the pilot's
+# final weights (8 independent context draws x 1, 2, 4 times the contexts per state), and the goal control at REF 0 /
+# 15,849 (10,000 draws per pair into the goal), runs read in place.
+MEASURE_BATCHES["gpu_pilot_noise"] = {
+    "kind": "noise",
+    "source_root": PILOT_RESULTS,
+    "repeats": 8,
+    "contexts_multipliers": [1, 2, 4],
+    "goal_control": ("win64_seed0_reference", 15849, 10_000),
+    "max_batch_hours": 8.0,
+    "runs": dict(MEASURE_BATCHES["gpu_pilot_remeasure"]["runs"]),
+}
 DEFAULT_BATCH = "gpu_e30"
 # The job's CPU request, PER BATCH (docs/e3/DECISIONS.md, 2026-09-30 (5)): gpu_e30b was prescribed 5 CPUs and ran on 3,
 # because --cpu defaulted to 3 and a command without it (or with another value) was accepted silently. The
 # request now defaults to the batch's own value, and a different --cpu is refused unless --allow-cpu-override.
-BATCH_CPUS = {"gpu_e30": 3, "gpu_e30b": 5, "gpu_e30b_measures": 3, "gpu_pilot_cl": 3, "gpu_pilot_remeasure": 3}
+BATCH_CPUS = {"gpu_e30": 3, "gpu_e30b": 5, "gpu_e30b_measures": 3, "gpu_pilot_cl": 3, "gpu_pilot_remeasure": 3, "gpu_pilot_noise": 3}
 DEFAULT_CPUS = BATCH_CPUS[DEFAULT_BATCH]
 
 
@@ -189,6 +201,16 @@ def commands(phase: str, python: str, output: Path, resume: str = "", runs: list
         if phase != "measure":
             raise ValueError(f"{batch} is a measurement batch: phases preflight and measure only, never {phase}")
         root, known = MEASURE_BATCHES[batch]["source_root"], MEASURE_BATCHES[batch]["runs"]
+        if MEASURE_BATCHES[batch].get("kind") == "noise":
+            b = MEASURE_BATCHES[batch]
+            jobs = [(name, [python, "-u", f"{SCRIPT}/measure_noise.py", "--noise", f"{root}/{known[name][0]}", "--repeats", str(b["repeats"]),
+                            "--contexts-multipliers", *[str(m) for m in b["contexts_multipliers"]], "--device", "cuda",
+                            "--out-dir", str(output / "runs" / known[name][0])]) for name in select_runs(runs, batch)]
+            if not runs:
+                job, c, draws = b["goal_control"]
+                jobs.append(("goal_control", [python, "-u", f"{SCRIPT}/measure_noise.py", "--goal-control", f"{root}/{known[job][0]}:{c}",
+                                              "--draws", str(draws), "--device", "cuda", "--out-dir", str(output / "runs" / "goal_control")]))
+            return jobs
         if MEASURE_BATCHES[batch].get("kind") == "checkpoints":
             steps = [str(c) for c in MEASURE_BATCHES[batch]["env_steps"]]
             jobs = [(name, [python, "-u", f"{SCRIPT}/remeasure_checkpoints.py", f"{root}/{known[name][0]}", "--env-steps", *steps,

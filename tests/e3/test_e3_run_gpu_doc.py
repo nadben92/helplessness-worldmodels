@@ -25,11 +25,11 @@ def _commands(script: str) -> list[list[str]]:
 
 
 def test_every_submission_command_parses(tmp_path, monkeypatch):
-    """Batch gpu_pilot_remeasure (docs/e3/DECISIONS.md, 2026-10-05 (23)): the preflight and the measurement, 4 jobs, 3 CPUs."""
+    """Batch gpu_pilot_noise (docs/e3/DECISIONS.md, 2026-10-06 (26)): the preflight and the measurement, 5 jobs, 3 CPUs."""
     commands = _commands("submit_kubeflow.py")
     assert {tuple(c) for c in commands} == {
-        ("--phase", "preflight", "--batch", "gpu_pilot_remeasure", "--max-parallel", "4", "--cpu", "3"),
-        ("--phase", "measure", "--batch", "gpu_pilot_remeasure", "--max-parallel", "4", "--cpu", "3")}
+        ("--phase", "preflight", "--batch", "gpu_pilot_noise", "--max-parallel", "4", "--cpu", "3"),
+        ("--phase", "measure", "--batch", "gpu_pilot_noise", "--max-parallel", "4", "--cpu", "3")}
     mount = tmp_path / "scratch"
     repo = mount / "helplessness-worldmodels"
     repo.mkdir(parents=True)
@@ -38,12 +38,12 @@ def test_every_submission_command_parses(tmp_path, monkeypatch):
         with pytest.raises(ImportError):  # the arguments passed every check; only the SDK import is left
             cluster.main([*argv, "--repo-dir", str(repo), "--mount", str(mount)])
         phase = argv[argv.index("--phase") + 1]
-        jobs = cluster.commands(phase, "python", tmp_path, batch="gpu_pilot_remeasure", max_parallel=4, cpus=3)
+        jobs = cluster.commands(phase, "python", tmp_path, batch="gpu_pilot_noise", max_parallel=4, cpus=3)
         assert len(jobs) == (1 if phase == "preflight" else 5)
         if phase == "measure":
-            assert all(cmd[2].endswith("remeasure_checkpoints.py") for _, cmd in jobs[:4])
-            assert jobs[4][1][2].endswith("diagnose_value_generalisation.py")
-    for run_dir, _ in cluster.MEASURE_BATCHES["gpu_pilot_remeasure"]["runs"].values():
+            assert all(cmd[2].endswith("measure_noise.py") for _, cmd in jobs)
+            assert jobs[4][0] == "goal_control"
+    for run_dir, _ in cluster.MEASURE_BATCHES["gpu_pilot_noise"]["runs"].values():
         assert run_dir in DOC  # the doc names every run it reads
     assert cluster.PILOT_RESULTS in DOC
 
@@ -57,7 +57,7 @@ def test_handoff_commands_use_existing_options(capsys):
     for argv in commands:
         for flag in (a for a in argv if a.startswith("--")):
             assert flag in help_text, flag
-        assert "--out" in argv and argv[argv.index("--out") + 1] == "handoff/gpu_pilot_remeasure"
+        assert "--out" in argv and argv[argv.index("--out") + 1] == "handoff/gpu_pilot_noise"
 
 
 def test_hash_command_runs_on_the_standard_library_alone():
@@ -76,4 +76,5 @@ def test_decision_lines_are_the_preflight_s():
     assert 'print(f"PREFLIGHT DECISION: {decision}' in preflight_src
     for decision in ("launch", "stop"):
         assert f"PREFLIGHT DECISION: {decision}" in DOC
-    assert "<= 4" in DOC and 'parser.add_argument("--max-batch-hours", type=float, default=4.0)' in preflight_src
+    assert "<= 8" in DOC and cluster.MEASURE_BATCHES["gpu_pilot_noise"]["max_batch_hours"] == 8.0
+    assert 'max_hours = batch.get("max_batch_hours", args.max_batch_hours)' in preflight_src

@@ -96,6 +96,12 @@ def measure_row(name: str, job: dict, measure_dir: Path) -> tuple[dict, Path | N
     """A measurement job (recompute_measures.py <source run> ... --out-dir <measure dir>/runs): its row and the
     directory to archive (<measure dir>/runs/<run name>), None when the job wrote nothing."""
     command = job["command"]
+    if any(c.endswith("measure_noise.py") for c in command):  # measurement noise / goal control (2026-10-06 (26))
+        out = Path(command[command.index("--out-dir") + 1])
+        done = out.exists() and any(out.glob("*.json"))
+        row = {"job": name, "exit_code": job.get("exit_code"), "not_started": bool(job.get("not_started")), "run_dir": out.name,
+               "output": f"{out.name}/*.json" if done else "none", "finished": done}
+        return row, (out if done else None)
     if any(c.endswith("diagnose_value_generalisation.py") for c in command):  # the read-only value diagnostic (2026-10-05 (24))
         out = Path(command[command.index("--out-dir") + 1])
         done = (out / "value_diagnostics.json").exists()
