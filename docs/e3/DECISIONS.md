@@ -3611,3 +3611,112 @@ at 4 times the contexts (an upper bound for every measurement of the batch) and 
 checkpoint measurements (5 x2 + 5 x4) of that duration, 4 jobs side by side (x 1.25). **If the whole exceeds the 8-hour
 ceiling, the preflight's decision is to launch gpu_pilot_noise_x2: the same batch with the checkpoints at x2 only
 (priority to x2).**
+
+## 2026-10-07 (28) -- gpu_pilot_noise read: measurement noise, protocol (rule of (26)), budget (criterion of (27)), goal control
+
+Archive: `handoff/gpu_pilot_noise/` (commit b084f01 on main). No rule is modified here; results only.
+
+### Provenance
+
+- Preflight `preflight-20261006T184406428649Z`: passed, decision **launch** (the complete variant, not the x2
+  fallback), projected 2.32 h (fallback 1.98 h), CPUs requested / usable 3 / 3, code source_sha256
+  c984cdd6...a31477 (271 files) as stated in RUN_GPU.md, A100, TF32 off, deterministic on.
+- Measurement `measure-20261006T184805129601Z`, batch gpu_pilot_noise: the 4 noise jobs 18:48 -> 21:12-21:13 UTC
+  (about 2 h 24 each), goal_control 21:12:14 -> 21:12:29; **all 5 exit code 0**; every output records the same
+  source_sha256.
+- On the cluster: no measurement relaunched or corrected. **The handoff step was run twice**: a first call of
+  make_handoff.py with `.venv-cluster/bin/python` instead of the runbook's `python` failed at `import yaml` before
+  writing anything; the runbook's command then succeeded with the same arguments (recorded by the supervisor in
+  handoff.md, `## Stop`).
+- Remark (no effect on any decision): for this batch kind the preflight log line "smoke: 6692 s" prints the projected
+  seconds per job (one x4 measurement, 196.8 s, x 34 measurements), not the smoke's duration.
+
+### Task a: standard deviation of I_s due to the contexts (8 repeats; final weights, replay of 290,000)
+
+sd by zone (bit). Every single measurement took 251-261 s, **whatever the number of contexts** (mean per run and
+multiplier 254-257 s): the cost is that of the kernel (K = 1,358 draws per (s, a)), not of the contexts.
+
+| run | x | contexts | UD | CN | UN | CD | s / measurement |
+|---|---|---|---|---|---|---|---|
+| EXP 0 | 1 | 7,198 | 0.0006 | 0.0116 | 0.0009 | 0.0039 | 254 |
+| EXP 0 | 2 | 14,204 | 0.0008 | 0.0131 | 0.0009 | 0.0033 | 254 |
+| EXP 0 | 4 | 27,640 | 0.0005 | 0.0059 | 0.0004 | 0.0026 | 254 |
+| EXP 5 | 1 | 7,118 | 0.0014 | 0.0089 | 0.0015 | 0.0017 | 254 |
+| EXP 5 | 2 | 14,087 | 0.0007 | 0.0051 | 0.0007 | 0.0023 | 254 |
+| EXP 5 | 4 | 27,630 | 0.0016 | 0.0058 | 0.0008 | 0.0023 | 255 |
+| REF 0 | 1 | 7,200 | 0.0044 | 0.0099 | 0.0161 | 0.0045 | 256 |
+| REF 0 | 2 | 14,400 | 0.0072 | 0.0067 | 0.0099 | 0.0033 | 256 |
+| REF 0 | 4 | 28,732 | 0.0024 | 0.0060 | 0.0050 | 0.0010 | 257 |
+| REF 5 | 1 | 7,200 | 0.0023 | 0.0116 | 0.0084 | 0.0050 | 255 |
+| REF 5 | 2 | 14,400 | 0.0031 | 0.0079 | 0.0101 | 0.0033 | 256 |
+| REF 5 | 4 | 28,800 | 0.0026 | 0.0038 | 0.0045 | 0.0022 | 256 |
+
+In CN the sd goes from ~0.010 (x1) to ~0.0054 (x4), less than the factor 2 expected from the contexts alone (part of
+the noise, e.g. the kernel's prior draws, does not decrease with the contexts). An sd over 8 repeats has a relative
+error of about 25 %.
+
+### Protocol (rule of (26), applied as is): **x4, real_context.max_per_state 200**
+
+No multiplier gives sd <= 0.005 bit in CN in all 4 runs (x4: EXP 0 0.0059, EXP 5 0.0058, REF 0 0.0060, REF 5 0.0038;
+CD is <= 0.005 at every multiplier). The cost bound is not binding (x4 costs 1.0 time the present measurement).
+Hence the largest number tested, x4. **Resolution obtained (sd due to the contexts at x4): CN 0.0038-0.0060, CD
+0.0010-0.0026, UD 0.0005-0.0026, UN 0.0004-0.0050 bit.**
+
+### Budget (criterion of (27), applied as is): no checkpoint satisfies b -> **the budget stays at 300,000**
+
+Point a (checkpoints.jsonl; success per interval with 95 % Wilson intervals; Delta = agent_delta.real_contexts,
+largest zone):
+
+| run | median goal mass at 63,096 / 100,000 / 158,489 / 251,189 / 300,000 | next interval vs last interval | max Delta by zone, same checkpoints | a |
+|---|---|---|---|---|
+| REF 0 | 0.998 / 1 / 1 / 1 / 1 | all 1.000, overlap | 0.49 / 0.30 / 0.37 / 0.25 / 0.32 | holds at all |
+| REF 5 | 1 / 1 / 1 / 1 / 1 | all 1.000, overlap | **1.16** / 0.87 / 0.69 / 0.51 / 0.42 | fails at 63,096, holds from 100,000 |
+| EXP 0 | 0.996 / 1 / 1 / 1 / 1 | 0.999-1.000, overlap | **6.69** / 0.54 / 0.62 / 0.32 / 0.25 | fails at 63,096, holds from 100,000 |
+| EXP 5 | **0.537** / 0.971 / 1 / 1 / 1 | 0.997-1.000, overlap | **18.09** / 0.62 / 0.55 / 0.54 / 0.75 | fails at 63,096, holds from 100,000 |
+
+Point b (x4 measurements; |I_s(next) - I_s(this)| / 2 x sd of task a at x4, same run and zone, in bit; failures in
+bold):
+
+| run | 63,096 -> 100,000 | 100,000 -> 158,489 | 158,489 -> 251,189 | 251,189 -> 300,000 (replay of 290,000) |
+|---|---|---|---|---|
+| REF 0 | fails in 4 zones | fails in 4 zones | fails in 4 zones | **UD 0.0160 / 0.0048, UN 0.0181 / 0.0099**; CN 0.0081 / 0.0120, CD 0.0019 / 0.0020 |
+| REF 5 | fails in 4 zones | fails in 4 zones | fails in 4 zones | **UD 0.0059 / 0.0051, CN 0.0165 / 0.0076**; UN 0.0064 / 0.0091, CD 0.0003 / 0.0044 |
+| EXP 0 | fails in 4 zones | fails in 4 zones | fails in 4 zones | **UN 0.0014 / 0.0008**; UD 0.0004 / 0.0010, CN 0.0028 / 0.0118, CD 0.0033 / 0.0053 |
+| EXP 5 | fails in 4 zones | fails in 4 zones | fails in 4 zones | **UD 0.0059 / 0.0031, UN 0.0052 / 0.0016**; CN 0.0075 / 0.0117, CD 0.0003 / 0.0047 |
+
+251,189 is the only checkpoint where a holds in all 4 runs and b comes close; b fails there in every run (2 zones in
+3 runs, 1 in EXP 0). **Flagged:** the 300,000 point is measured on the replay at 290,000 (the last resume point),
+with the final weights; the 2 x sd threshold is the sd measured on the final weights, assumed to hold at the earlier
+checkpoints. The x2 measurements are set aside, as recorded in (27).
+
+### Task b: goal control, REF 0 at 15,849 (10,000 draws per pair, 50 contexts per state; tie tolerance 0.0751)
+
+| state | action into the goal | mass on the goal | Q gap (into the goal - best other) | gap / tolerance | tied set (within the tolerance of the max) |
+|---|---|---|---|---|---|
+| 1 | 3 | 0.00010 | -0.0518 | -0.69 | actions 0, 1, 3 (the goal's among 3) |
+| 11 | 1 | 0.00081 | +0.0132 | +0.18 | actions 0, 1, 2 (the goal's is the max, among 3) |
+| 12 | 0 | 0 (0 / 10,000) | +0.0263 | +0.35 | actions 0, 1 (the goal's is the max, among 2) |
+| 132 | 2 | 0.00010 | -0.0675 | -0.90 | actions 0, 1, 2, 3 (the goal's among 4) |
+
+- **Mass below the resolution: confirmed.** All four masses are below 1/256 (0 to 0.0008); the 256-draw reading
+  gave 0.
+- **Amplification by the +50 / -1 asymmetry: not shown at the goal's neighbours.** No Q gap reaches the tolerance;
+  the action into the goal is the strict maximum in 2 states of 4 and below the best other action in the other 2.
+  The largest positive gap (+0.026) is at the state whose mass is exactly 0 (state 12); at the largest mass (0.0008,
+  state 11) the expected one-step gain, 51 p ~ 0.04, is not visible beyond the tolerance (+0.013). The action into the
+  goal is in the tied set at all 4 states (greedy probability 1/4 to 1/2 against 1/5): a weak push whose origin these
+  data do not identify. **The corrected reading of (25) is only partly supported**: the mass part is confirmed, the
+  mechanism (amplification guiding the agent) is not.
+
+### Between-seed dispersion and measurement noise (x1, CN)
+
+sd due to the contexts at x1 in CN: 0.0099, 0.0116, 0.0116, 0.0089 (root mean square 0.0106 bit per I_s
+measurement). Against the calibration's between-seed spread of 0.01 to 0.015 bit in CN (gpu_e30b): **measurement
+noise alone accounts for 50 % (0.0106^2 / 0.015^2) to all (0.0106^2 / 0.010^2 = 1.1) of that variance**; for a
+difference of two measures (b) the noise alone is sqrt(2) x 0.0106 = 0.015 bit. Limits: the calibration spread has one
+degree of freedom (two seeds), and the noise was measured on the closed-loop pilot's weights, not on gpu_e30b's.
+
+### Stop after the analysis
+
+The final batch is not prepared: the goal control gives an ambiguous answer to the reading of (25) (above), which
+the instruction of 2026-10-07 makes a reason to stop and report before part 2.
