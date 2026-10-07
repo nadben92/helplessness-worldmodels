@@ -25,7 +25,7 @@ def _commands(script: str) -> list[list[str]]:
 
 
 def test_every_submission_command_parses(tmp_path, monkeypatch):
-    """Batch gpu_campaign (docs/e3/DECISIONS.md, 2026-10-07 (29)): the preflight, the training of the 8 runs at 4 or 2 at
+    """Batch gpu_campaign (docs/e3/DECISIONS.md, 2026-10-07 (29), (30)): the preflight, the 8 jobs at 4 or 2 at
     once, and the resume of one run (only with the user's agreement); 3 CPUs everywhere."""
     commands = _commands("submit_kubeflow.py")
     assert {tuple(c) for c in commands} == {
@@ -45,15 +45,18 @@ def test_every_submission_command_parses(tmp_path, monkeypatch):
         phase = argv[argv.index("--phase") + 1]
         mp = int(argv[argv.index("--max-parallel") + 1]) if "--max-parallel" in argv else None
         jobs = cluster.commands(phase, "python", tmp_path, resume=str(mount / "a_run"), batch="gpu_campaign", max_parallel=mp, cpus=3)
-        if phase == "train":
-            assert [name for name, _ in jobs] == [f"seed{s}_{c}" for s in (1, 6, 2, 7) for c in ("experimental", "reference")]
-            assert all(cmd[2].endswith("run_agent.py") and "configs/e3/gpu_campaign.yaml" in cmd for _, cmd in jobs)
+        if phase == "train":  # the 4 new runs, then the 4 pilot runs measured as campaign seeds (2026-10-07 (30))
+            assert [name for name, _ in jobs] == [f"seed{s}_{c}" for s in (1, 6) for c in ("experimental", "reference")] +                 [f"pilot_win64_seed{s}_{c}" for c in ("experimental", "reference") for s in (0, 5)]
+            assert all(cmd[2].endswith("run_agent.py") and "configs/e3/gpu_campaign.yaml" in cmd for _, cmd in jobs[:4])
+            assert all(cmd[2].endswith("campaign_measure_pilot.py") and "configs/e3/gpu_campaign.yaml" in cmd for _, cmd in jobs[4:])
         elif phase == "preflight":
             assert jobs[0][1][2].endswith("preflight_agent.py")
         else:
             assert jobs[0][1][2].endswith("run_agent.py") and "--resume" in jobs[0][1]
     assert cluster.AGENT_BATCHES["gpu_campaign"]["config"] in DOC
     assert cluster.AGENT_BATCHES["gpu_campaign"]["measure_smoke_run"].rsplit("/", 1)[1] in DOC  # the run read by the preflight
+    for run_dir in cluster.AGENT_BATCHES["gpu_campaign"]["pilot_runs"].values():
+        assert run_dir.rsplit("/", 1)[1] in DOC  # the doc names every pilot run it reads
 
 
 def test_handoff_commands_use_existing_options(capsys):

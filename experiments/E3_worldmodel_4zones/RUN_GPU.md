@@ -1,26 +1,36 @@
 # Running the current E3 GPU batch (UCL ARC Kubeflow, A100)
 
-**Current batch: gpu_campaign -- the E3 campaign (8 closed-loop runs). Follow this file from top to bottom, skipping
-nothing.**
+**Current batch: gpu_campaign -- the E3 campaign: 4 new closed-loop runs and the 4 pilot runs measured again. Follow
+this file from top to bottom, skipping nothing.**
 
-What it is: the agent in closed loop (`run_agent.py`), configuration `configs/e3/gpu_campaign.yaml` -- the pilot's
-configuration (gpu_pilot_cl) unchanged, with 4 times more real contexts per state in the measures and the measures
-taken at every checkpoint after the switch --, seeds 1, 2, 6 and 7, each in the experimental environment and in its
-reference, 300,000 environment steps each. **8 runs, queued, at most 4 at a time.** Its purpose and the analyses
-decided before the launch are written in `docs/e3/DECISIONS.md` (2026-10-07 (28), (29)). The pilot's runs are not
-used, except the final weights of one of them, read only by the preflight to time the measures. Earlier batches are
-in `RUN_GPU_HISTORY.md`: **do not use it for this batch.**
+What it is: N = 4 seeds. Seeds 1 and 6 are new runs of the agent in closed loop (`run_agent.py`), configuration
+`configs/e3/gpu_campaign.yaml` -- the pilot's configuration (gpu_pilot_cl) unchanged, with 4 times more real contexts
+per state in the measures and the measures taken at every checkpoint after the switch --, each in the experimental
+environment and in its reference, 300,000 environment steps each: **4 runs, all at once**. Seeds 0 and 5 are the
+pilot's four runs, **read in place** and measured with the same measures from their saved weights and replay
+(`campaign_measure_pilot.py`): **4 measurement jobs, queued after the four runs** (nothing is trained in them). Its
+purpose and the analyses decided before the launch are written in `docs/e3/DECISIONS.md` (2026-10-07 (28), (29),
+(30)). Earlier batches are in `RUN_GPU_HISTORY.md`: **do not use it for this batch.**
 
-The eight runs, in launch order (two pairs per round of four):
+The eight jobs, in launch order:
 
 ```
 seed1_experimental   seed1_reference   seed6_experimental   seed6_reference
-seed2_experimental   seed2_reference   seed7_experimental   seed7_reference
+pilot_win64_seed0_experimental   pilot_win64_seed5_experimental   pilot_win64_seed0_reference   pilot_win64_seed5_reference
 ```
 
-**Expected duration: about 3.5 days in total** -- the preflight about 1 hour, then two rounds of about 42 hours (each
-run: about 37 hours of training at ~2.2 environment steps per second with 4 runs on the GPU, plus about 5 hours of
-measures). The preflight measures both and prints its own projection.
+The four pilot runs, read only (rule 5), under `/scratch/helplessness-worldmodels/results/E3_worldmodel_4zones/`:
+
+```
+grid12x12__4zones__pair-experimental__worldmodel-agent-gpu_pilot_closed_loop__seed00__20261003T144527Z
+grid12x12__4zones__pair-experimental__worldmodel-agent-gpu_pilot_closed_loop__seed05__20261003T144527Z
+grid12x12__4zones__pair-control__worldmodel-agent-gpu_pilot_closed_loop__seed00__20261003T144527Z
+grid12x12__4zones__pair-control__worldmodel-agent-gpu_pilot_closed_loop__seed05__20261003T144527Z
+```
+
+**Expected duration: about 2 days in total** -- the preflight about 1 hour, the four runs about 42 hours (each: about
+37 hours of training at ~2.2 environment steps per second with 4 runs on the GPU, plus about 5 hours of measures), then
+the four pilot measurement jobs about 6 hours. The preflight measures both and prints its own projection.
 
 ## Rules for the person or the assistant running this file
 
@@ -34,9 +44,8 @@ measures). The preflight measures both and prints its own projection.
 4. If anything happens that this file does not foresee (an error, a message not described here, a command that
    fails, a pod that does not start), stop: do not try to fix it. Go to step 5 with what you have, and report the
    complete output of the command that failed.
-5. The pilot's run directory read by the preflight
-   (`/scratch/helplessness-worldmodels/results/E3_worldmodel_4zones/grid12x12__4zones__pair-control__worldmodel-agent-gpu_pilot_closed_loop__seed00__20261003T144527Z`)
-   is only read: do not modify, move or delete anything in it.
+5. The four pilot run directories listed above (the preflight reads the third one, the measurement jobs all four) are
+   only read: do not modify, move or delete anything in them.
 
 Every command below runs in a terminal of the Kubeflow notebook (`language-mind-v1-0`, namespace
 `kubeflow-v-weilnhammer`), from the checkout `/scratch/helplessness-worldmodels`. Steps 2 to 5 use the shell variables
@@ -66,7 +75,7 @@ python -c "import sys; sys.path.insert(0, 'src'); from helplessness.runs import 
 The last command must print exactly:
 
 ```
-{'source_sha256': '77015377ea0e67ab9d81e2be067274bb1a8b4c615100a962c749d36950464e1c', 'source_n_files': 273}
+{'source_sha256': 'd84dec84a3bd9542ea4846502ae30b20e9909c9c7b49b6e8ac019a4fd21d1a80', 'source_n_files': 274}
 ```
 
 If `git pull` fails or the hash differs, stop: do not launch anything, go to step 5 (without training). The
@@ -91,8 +100,9 @@ PRE=<the "output" path printed above>
 ```
 
 The preflight checks CUDA, TF32 off and determinism on, **3 CPUs requested and 3 usable**, the code hash above, that
-no acceleration is configured; then the campaign's measures on the pilot's final weights (rule 5: read only; about 30
-to 45 minutes, written to `$PRE/runs/measure_smoke/`), a truncated real run (1,100 environment steps, about 15
+no acceleration is configured, that the four pilot runs hold what the measurement jobs read; then the campaign's
+measures on the pilot's final weights (rule 5: read only; about 30 to 45 minutes, written to
+`$PRE/runs/measure_smoke/`), a truncated real run (1,100 environment steps, about 15
 minutes, its outputs checked), and the closed loop in 2 and then 4 processes side by side to choose how many runs
 share the GPU; it projects the batch's duration. There is no speed bench this time. Follow the pod until it has
 finished:
@@ -114,14 +124,14 @@ cat "$PRE/runs/preflight_verdict.json"
 
 The last line of `preflight.log` is one of:
 
-- `PREFLIGHT DECISION: launch-max-parallel-4` -- launch the eight runs, four at a time (the next one starts when one
-  finishes):
+- `PREFLIGHT DECISION: launch-max-parallel-4` -- launch the eight jobs, four at a time (the four runs, then the four
+  pilot measurement jobs as places free up):
 
   ```bash
   python experiments/E3_worldmodel_4zones/submit_kubeflow.py --phase train --batch gpu_campaign --max-parallel 4 --cpu 3
   ```
 
-- `PREFLIGHT DECISION: launch-max-parallel-2` -- launch the eight runs, two at a time:
+- `PREFLIGHT DECISION: launch-max-parallel-2` -- launch the eight jobs, two at a time:
 
   ```bash
   python experiments/E3_worldmodel_4zones/submit_kubeflow.py --phase train --batch gpu_campaign --max-parallel 2 --cpu 3
@@ -134,7 +144,7 @@ Check it against `$PRE/runs/preflight_verdict.json`: launch only if `passed` is 
 `projected_batch_hours` in the verdict is the projected duration of the whole batch (under 336 hours, else the
 decision is stop).
 
-## Step 4 -- follow the training (about 3.5 days)
+## Step 4 -- follow the training (about 2 days)
 
 After the training submission, copy its `"output"` path (ending in `logs/kubeflow/train-<date>`):
 
@@ -153,7 +163,8 @@ Each run logs a line every 1,000 environment steps (`env step  12000/300000 | ..
 the switch, `full measures at environment step ...` and `full measures at ... done in ... s` (about 20 to 40 minutes
 each, during which the run's step counter does not move: this is expected). Its directory is
 `results/E3_worldmodel_4zones/grid12x12__4zones__pair-<experimental|control>__worldmodel-agent-gpu_campaign__seed<NN>__<date>/`;
-`checkpoints.jsonl` and `measures/` there grow at each checkpoint and can be read before the end. `exit_code` is
+`checkpoints.jsonl` and `measures/` there grow at each checkpoint and can be read before the end. A pilot measurement
+job logs `checkpoint <c> done` after each of its checkpoints and writes into `$TRAIN/runs/<pilot run name>/`. `exit_code` is
 `null` while a run is running or queued, `0` when it finished, `1` when it failed (a failure is a result: rule 2). The
 batch is finished when every `exit_code` is a number and the pod is `Completed` or `Error`.
 
@@ -169,7 +180,8 @@ python experiments/E3_worldmodel_4zones/submit_kubeflow.py --phase resume --batc
 ```
 
 and a run never started (`not_started` in `status.json`) is launched with
-`--phase train --batch gpu_campaign --runs <its name> --max-parallel 4 --cpu 3`, also only with his agreement. Write
+`--phase train --batch gpu_campaign --runs <its name> --max-parallel 4 --cpu 3`, also only with his agreement. A pilot
+measurement job that did not finish is reported as it is: what to do with it is his decision. Write
 down in `handoff/gpu_campaign/handoff.md` (step 5, section `## Interruptions`) what was done, when, from which
 environment step, and his agreement. A run whose log ends with an error of its own (`SeparationNotReachedError`,
 `CollapseAfterSwitchError`, a Python traceback) is never resumed.
@@ -188,8 +200,8 @@ Without training (stop at step 1 or 3):
 python experiments/E3_worldmodel_4zones/make_handoff.py --preflight-dir "$PRE" --out handoff/gpu_campaign
 ```
 
-The script writes `handoff/gpu_campaign/handoff.md` (each run's status and the number of checkpoints measured), and
-for each run three archives: `<run>.tgz` (its records, final measures, counts, twin kernels -- about 3 MB),
+The script writes `handoff/gpu_campaign/handoff.md` (each job's status and the number of checkpoints measured), and
+for each run -- new or pilot -- three archives: `<run>.tgz` (its records, final measures, counts, twin kernels -- about 3 MB),
 `<run>.measures.tgz` (the measures at its checkpoints -- about 10 MB) and `<run>.weights.tgz` (the weights at every
 checkpoint and the final replay -- about 40 MB; never `resume.pt`), and `logs.tgz`. In total about 420 MB. If it ends
 with `STOP: archive(s) above 90 MB`, do not commit: stop (rule 4). After a stop under rule 4, add at the end of

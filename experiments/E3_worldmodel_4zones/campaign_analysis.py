@@ -13,6 +13,8 @@ SECONDARY, at every checkpoint measured in both runs of a pair (environment / re
     with the number of states on each side;
   - difference of differences, by zone: [I_WM - I_twin]_env - [I_WM - I_twin]_ref, I_WM the zone's I_s (real contexts)
     and I_twin the tabular twin's I on the same run's counts at the checkpoint (checkpoints.jsonl twin_by_zone I_hat);
+    DESCRIPTIVE (2026-10-07 (30)), reported with its parts: b_WM, b_twin, and each run's I_WM - I_true and
+    I_twin - I_true (I_true: the run's true kernel);
   - alpha, the weight of an action-independent component in the predicted kernel (measures.kernel_probe.
     action_independent_weight on the real-context kernel against the run's true kernel), mean over each zone's states,
     environment, reference and their difference (expected ~0 in the controllable zones);
@@ -48,6 +50,12 @@ N_SEEDS, FRACTION, REFERENCE_EFFECT = 4, 0.5, 0.02
 BUDGET_ENV_STEPS = 300_000
 VISIT_CLASSES = ((0, 9), (10, 29), (30, 99), (100, 299), (300, 999), (1000, None))
 PROBE_TEST_FRAC, PROBE_SEED = 0.2, 20261007
+
+
+def controllability_of_kernel(P: np.ndarray) -> np.ndarray:
+    """Per-state I of a kernel, the one implementation (measures.controllability via run_mini)."""
+    run_mini = load_experiment_module("E3_worldmodel_4zones", "run_mini.py", "campaign_analysis_run_mini")
+    return run_mini.controllability_of_kernel(P)
 
 
 def class_label(lo: int, hi: int | None) -> str:
@@ -125,6 +133,15 @@ def checkpoint_pair(exp: Run, ref: Run, c: int) -> dict:
         r = v(rc_r["I_s_by_zone"][cat]["mean"]) - v(twin_r[cat]["I_hat"])
         did[cat] = {"wm_minus_twin_env": e, "wm_minus_twin_ref": r, "did": e - r}
     out["difference_of_differences"] = did
+    # its decomposition (2026-10-07 (30)): did = b_WM - b_twin; each run's I_WM and I_twin against the true kernel's I
+    zone_e, zone_r = np.array(res_e["zone_of_state"]), np.array(res_r["zone_of_state"])
+    true_e = zone_mean(controllability_of_kernel(arr_e["P_true"]), zone_e)
+    true_r = zone_mean(controllability_of_kernel(arr_r["P_true"]), zone_r)
+    out["decomposition"] = {cat: {"b_wm": out["b_I_s"][cat], "b_twin": v(twin_e[cat]["I_hat"]) - v(twin_r[cat]["I_hat"]),
+                                  "wm_minus_true_env": v(rc_e["I_s_by_zone"][cat]["mean"]) - true_e[cat],
+                                  "wm_minus_true_ref": v(rc_r["I_s_by_zone"][cat]["mean"]) - true_r[cat],
+                                  "twin_minus_true_env": v(twin_e[cat]["I_hat"]) - true_e[cat],
+                                  "twin_minus_true_ref": v(twin_r[cat]["I_hat"]) - true_r[cat]} for cat in CATEGORIES}
     a_e = zone_mean(action_independent_weight(arr_e["real_p_hat"], arr_e["P_true"]), zone)
     a_r = zone_mean(action_independent_weight(arr_r["real_p_hat"], arr_r["P_true"]), zone)
     out["alpha"] = {cat: {"env": a_e[cat], "ref": a_r[cat], "difference": a_e[cat] - a_r[cat]} for cat in CATEGORIES}
@@ -181,7 +198,10 @@ def markdown(res: dict) -> str:
             e = c["env_step"]
             lines.append(f"| {e} | b (I_s) | " + " | ".join(_f(c["b_I_s"][k]) for k in cats) + " |")
             lines.append(f"| {e} | b (I_s projected) | " + " | ".join(_f(c["b_I_s_projected"][k]) for k in cats) + " |")
-            lines.append(f"| {e} | difference of differences | " + " | ".join(_f(c["difference_of_differences"][k]["did"]) for k in cats) + " |")
+            lines.append(f"| {e} | difference of differences (descriptive) | " + " | ".join(_f(c["difference_of_differences"][k]["did"]) for k in cats) + " |")
+            lines.append(f"| {e} | its parts: b_twin; WM - true env / ref | " + " | ".join(
+                f"{_f(c['decomposition'][k]['b_twin'])}; {_f(c['decomposition'][k]['wm_minus_true_env'])} / {_f(c['decomposition'][k]['wm_minus_true_ref'])}"
+                for k in cats) + " |")
             lines.append(f"| {e} | alpha env / ref | " + " | ".join(f"{_f(c['alpha'][k]['env'])} / {_f(c['alpha'][k]['ref'])}" for k in cats) + " |")
         lines += ["", "b by visit class (n(s) = visits of the state's least-visited action; b [states env / ref]):", "",
                   f"| checkpoint | class | {head} |", "|---|---|" + "---|" * len(cats)]

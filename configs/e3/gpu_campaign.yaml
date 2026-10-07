@@ -1,7 +1,8 @@
 # The E3 campaign (docs/e3/DECISIONS.md, 2026-10-07 (29)): the closed-loop pilot's configuration
 # (gpu_pilot_closed_loop.yaml) unchanged, with the measurement protocol and budget retained in 2026-10-07 (28):
-# real_context.max_per_state 200 (x4, rule of (26)) and 300,000 environment steps (criterion of (27)); seeds 1, 2 (class A)
-# and 6, 7 (class B), each in the environment and its reference; the pilot's runs are not reused. Added to the pilot,
+# real_context.max_per_state 200 (x4, rule of (26)) and 300,000 environment steps (criterion of (27)); new runs for seeds
+# 1 (class A) and 6 (class B), each in the environment and its reference; seeds 0 and 5 are the pilot's runs, measured
+# with this file's measure blocks by campaign_measure_pilot.py (2026-10-07 (30)). Added to the pilot,
 # measures only (training unchanged; tested in tests/e3/test_e3_campaign_config.py): full measures at every checkpoint
 # after the switch (checkpoint_measures), the goal pairs with 10,000 draws, the agent's Q gaps next to the goal, V by
 # zone and the zones' separation in the latent (checkpoint_goal_kernel), the twin's kernels (twin.save_kernels), the
@@ -182,5 +183,5 @@ runtime:
   device: cuda
   deterministic: true
 
-seeds: [1, 2, 6, 7]       # classes A (1, 2) and B (6, 7): env.block_class_for_seed
+seeds: [1, 6]             # the new runs: classes A (1) and B (6), env.block_class_for_seed; seeds 0 and 5 are the pilot's runs
 conditions: [experimental, reference]

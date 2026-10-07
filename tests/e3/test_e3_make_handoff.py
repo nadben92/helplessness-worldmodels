@@ -232,3 +232,22 @@ def test_handoff_of_the_campaign_with_measures_and_weights(tmp_path):
     assert sorted(n.rsplit("/", 1)[-1] for n in weights) == ["agent_env001000.pt", "agent_env300000.pt", "agent_final.pt", "replay_final.npz"]
     text = (out / "handoff.md").read_text(encoding="utf-8")
     assert "| seed1_experimental | 0 | done | 300000 | 6000 | yes | 2 | - |" in text and "*.weights.tgz" in text
+
+
+def test_handoff_of_a_pilot_run_measured_as_a_campaign_seed(tmp_path):
+    """2026-10-07 (30): a campaign_measure_pilot.py job wrote <out-dir>/<pilot run name>/, laid out as a run: same three
+    archives as a new run."""
+    name = "grid12x12__4zones__pair-control__worldmodel-agent-gpu_pilot_closed_loop__seed00__20261003T144527Z"
+    out_dir = tmp_path / "t" / "runs"
+    d = _run(out_dir, name, {"status": "done", "env_steps": 300000, "switch_step": 6301}, True)
+    (d / "checkpoints" / "agent_env300000.pt").write_bytes(b"w")
+    (d / "measures" / "env300000").mkdir(parents=True)
+    (d / "measures" / "env300000" / "results.json").write_text("{}", encoding="utf-8")
+    (d / "replay_final.npz").write_bytes(b"r")
+    job = {"command": ["python", "-u", "experiments/E3_worldmodel_4zones/campaign_measure_pilot.py", f"/scratch/x/results/{name}",
+                       "--config", "configs/e3/gpu_campaign.yaml", "--device", "cuda", "--out-dir", str(out_dir)], "exit_code": 0}
+    (tmp_path / "t" / "status.json").write_text(json.dumps({"pilot_win64_seed0_reference": job}), encoding="utf-8")
+    out = tmp_path / "h"
+    assert handoff.main(["--train-dir", str(tmp_path / "t"), "--out", str(out), "--results-root", str(tmp_path / "none"), "--with-weights"]) == 0
+    assert {f"{name}.tgz", f"{name}.measures.tgz", f"{name}.weights.tgz"} <= {p.name for p in out.iterdir()}
+    assert "| pilot_win64_seed0_reference | 0 | done | 300000 | 6301 | yes | 1 | - |" in (out / "handoff.md").read_text(encoding="utf-8")

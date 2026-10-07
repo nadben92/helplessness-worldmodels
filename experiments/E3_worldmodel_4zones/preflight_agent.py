@@ -14,7 +14,10 @@ Checks, each a PROBLEM when it fails (decision "stop"):
    that run's final weights and replay (read only; the pilot's REF seed 0 on the cluster), with the BATCH's config, the
    checkpoint goal diagnostics (run_agent.goal_kernel_at_checkpoint: 10,000 draws per pair into the goal, Q gaps, V,
    latent separation) and one complete checkpoint measurement (run_agent.full_measures_at_checkpoint, x4 contexts), timed,
-   into <out-dir>/measure_smoke/; they must run and write their outputs.
+   into <out-dir>/measure_smoke/; they must run and write their outputs. And (2026-10-07 (30)) every pilot run the batch
+   measures as a campaign seed ("pilot_runs") has what campaign_measure_pilot.py reads: meta.yaml done, config.yaml,
+   console.log with the switch, checkpoints.jsonl, counts.npz, checkpoints/resume.pt, the weights of every checkpoint
+   and agent_final.pt.
 Informative, never in the decision:
 7. The speed bench (bench_agent.py: world-model, heads and environment steps, stacked seeds 1-8, torch.compile behind
    its equivalence gate), --bench-minutes (default 30), into <out-dir>/bench_agent.json.
@@ -23,7 +26,9 @@ processes side by side (bench_agent.py --loop); 4 is chosen if the 4 processes' 
 at least the 2 processes' total, else 2 (the supervisor starts the jobs in order: the two experimental runs first).
 Projection: the planned environment steps / the per-process rate at the chosen parallelism, x 2 rounds when 2 run at
 once; with the campaign's measures, each run adds MEASURED_CHECKPOINTS full measurements and GOAL_DIAGNOSTICS goal
-diagnostics of the smoke's durations, x CONTENTION (the smoke runs alone on the GPU, the runs' measures beside others). The verdict (<out-dir>/preflight_verdict.json) ends with "PREFLIGHT DECISION: launch-max-parallel-4 |
+diagnostics of the smoke's durations, x CONTENTION (the smoke runs alone on the GPU, the runs' measures beside others);
+the pilot runs' measurement jobs (PILOT_MEASURED_CHECKPOINTS full measurements and PILOT_GOAL_DIAGNOSTICS goal
+diagnostics each, x CONTENTION) are queued after the training jobs: the batch's duration is the queue's (makespan). The verdict (<out-dir>/preflight_verdict.json) ends with "PREFLIGHT DECISION: launch-max-parallel-4 |
 launch-max-parallel-2 | stop"; stop also when the projection exceeds --max-batch-hours (default 336).
 """
 
@@ -58,6 +63,42 @@ OUTPUTS = ("config.yaml", "meta.yaml", "console.log", "metrics.csv", "checkpoint
 MEASURED_CHECKPOINTS = 9
 GOAL_DIAGNOSTICS = 15  # the 14 grid checkpoints of a 300,000-step run and one extra
 CONTENTION = 1.25
+PILOT_MEASURED_CHECKPOINTS = 9  # the pilot's checkpoints after its switches (8,758 to 11,342): 8 or 9
+PILOT_GOAL_DIAGNOSTICS = 14
+
+
+def check_pilot_run(run_dir: Path) -> list[str]:
+    """What campaign_measure_pilot.py reads in a pilot run (read only)."""
+    run_dir = Path(run_dir)
+    files = ["meta.yaml", "config.yaml", "console.log", "checkpoints.jsonl", "counts.npz", "checkpoints/resume.pt", "checkpoints/agent_final.pt"]
+    problems = [f"pilot run {run_dir.name}: missing {f}" for f in files if not (run_dir / f).is_file()]
+    if problems:
+        return problems
+    meta = yaml.safe_load((run_dir / "meta.yaml").read_text(encoding="utf-8")) or {}
+    if meta.get("status") != "done":
+        problems.append(f"pilot run {run_dir.name}: status {meta.get('status')!r}")
+    steps = [json.loads(line)["env_step"] for line in (run_dir / "checkpoints.jsonl").read_text(encoding="utf-8").splitlines()]
+    last = int(meta.get("env_steps", -1))
+    missing = [c for c in steps if not (run_dir / "checkpoints" / f"agent_env{c:06d}.pt").is_file() and c != last]
+    if missing:
+        problems.append(f"pilot run {run_dir.name}: no weights for checkpoints {missing}")
+    if ">>> SWITCH" not in (run_dir / "console.log").read_text(encoding="utf-8"):
+        problems.append(f"pilot run {run_dir.name}: no switch in console.log")
+    return problems
+
+
+def pilot_job_hours(smoke: dict) -> float:
+    return CONTENTION * (PILOT_MEASURED_CHECKPOINTS * smoke["seconds_full_measures"]
+                         + PILOT_GOAL_DIAGNOSTICS * smoke["seconds_goal_diagnostics"]) / 3600.0
+
+
+def makespan(durations: list[float], parallel: int) -> float:
+    """The supervisor's queue: jobs in order, each started on the first free slot."""
+    slots = [0.0] * parallel
+    for d in durations:
+        i = slots.index(min(slots))
+        slots[i] += d
+    return max(slots) if durations else 0.0
 
 
 def check_truncated(run_dir: Path, cfg: dict | None = None) -> list[str]:
@@ -215,7 +256,9 @@ def main(argv: list[str] | None = None) -> int:
             (args.out_dir / "bench_agent.json").write_text(json.dumps(bench, indent=1), encoding="utf-8")
             summary["bench"] = bench
             print(f"[preflight-agent] bench: {json.dumps(bench)[:2000]}", flush=True)
-        # 6. the campaign's measures on an existing run (read only)
+        # 6. the campaign's measures on an existing run (read only); the pilot runs to measure
+        for run_dir in batch.get("pilot_runs", {}).values():
+            problems += check_pilot_run(Path(run_dir))
         smoke = None
         if batch.get("measure_smoke_run"):
             print(f"[preflight-agent] measure smoke on {batch['measure_smoke_run']} (read only) ...", flush=True)
@@ -250,7 +293,13 @@ def main(argv: list[str] | None = None) -> int:
                 hours = projected_hours(planned, rate, parallel, len(batch["runs"]), smoke)
                 summary["projection"] = {"max_parallel": parallel, "slowest_process_env_steps_per_s": rate, "planned_env_steps": planned,
                                          "projected_run_hours": run_hours(planned, rate, smoke),
-                                         "rounds": math.ceil(len(batch["runs"]) / parallel), "projected_batch_hours": hours}
+                                         "rounds": math.ceil(len(batch["runs"]) / parallel)}
+                if batch.get("pilot_runs") and smoke is not None:  # the queue: training jobs, then the pilot runs' measures
+                    durations = ([run_hours(planned, rate, smoke)] * len(batch["runs"])
+                                 + [pilot_job_hours(smoke)] * len(batch["pilot_runs"]))
+                    hours = makespan(durations, parallel)
+                    summary["projection"]["projected_pilot_job_hours"] = pilot_job_hours(smoke)
+                summary["projection"]["projected_batch_hours"] = hours
                 print(f"[preflight-agent] env steps/s in total: 2 processes {two['total']:.2f}, 4 processes {four['total']:.2f} -> "
                       f"--max-parallel {parallel}; projected batch {hours:.1f} h", flush=True)
     decision = decide(problems, hours, args.max_batch_hours, parallel)

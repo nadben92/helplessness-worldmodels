@@ -31,7 +31,7 @@ def test_campaign_is_the_pilot_with_the_retained_protocol_and_budget():
     assert c["light_arrays"] is True and c["final"] is True
     assert campaign["twin"] == {**pilot["twin"], "save_kernels": True}
     assert campaign["checkpoints"] == {**pilot["checkpoints"], "save_final_replay": True}
-    # seeds: 1, 2 (class A), 6, 7 (class B), none of the pilot's
-    assert campaign["seeds"] == [1, 2, 6, 7] and not set(campaign["seeds"]) & set(pilot["seeds"])
-    assert [env.block_class_for_seed(s) for s in campaign["seeds"]] == ["A", "A", "B", "B"]
+    # new runs: seeds 1 (class A) and 6 (class B); with the pilot's 0 (A) and 5 (B), N = 4 (2026-10-07 (30))
+    assert campaign["seeds"] == [1, 6] and not set(campaign["seeds"]) & set(pilot["seeds"])
+    assert [env.block_class_for_seed(s) for s in campaign["seeds"] + pilot["seeds"]] == ["A", "B", "A", "B"]
     assert campaign["conditions"] == ["experimental", "reference"]

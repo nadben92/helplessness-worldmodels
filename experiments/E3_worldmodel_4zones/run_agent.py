@@ -307,11 +307,12 @@ def light_arrays(arrays: dict, cfg: dict) -> dict:
 
 
 def full_measures_at_checkpoint(rssm, world, replay, N: np.ndarray, cfg: dict, seed: int, condition: str, run_dir: Path, log,
-                                grad_step: int, env_step: int, device: torch.device) -> tuple[dict, dict, dict]:
+                                grad_step: int, env_step: int, device: torch.device, extra: dict | None = None) -> tuple[dict, dict, dict]:
     """The complete E3 measures (run_mini.measure_final: I_s, I_s projected, off-support mass, I_z, kernels, probes) of the
     weights at a checkpoint, on the replay as it is then, into <run dir>/measures/env<NNNNNN>/ (results.json, arrays.npz,
     artifacts/). The run's own measurement streams (run_mini.seed_streams), as the final measures; the global torch RNG
     is forked and the model's training mode restored, so the training that follows is the one it would have been.
+    extra: fields added to results.json (the pilot's runs measured afterwards: the replay's provenance).
     Returns (fields, arrays, the summary recorded in checkpoints.jsonl)."""
     from helplessness.measures.kernel_probe import off_support_mass
 
@@ -326,7 +327,8 @@ def full_measures_at_checkpoint(rssm, world, replay, N: np.ndarray, cfg: dict, s
     fields.pop("diagnostics_final")
     arrays = light_arrays(arrays, cfg)
     seconds = time.perf_counter() - t0
-    results = {"seed": seed, "condition": condition, "checkpoint_env_step": env_step, "grad_step": grad_step, "seconds": seconds, **fields}
+    results = {"seed": seed, "condition": condition, "checkpoint_env_step": env_step, "grad_step": grad_step, "seconds": seconds,
+               **(extra or {}), **fields}
     (out / "results.json").write_text(json.dumps(run_mini._jsonable({k: v for k, v in results.items() if k not in run_mini.ARRAY_FIELDS}),
                                                  indent=1), encoding="utf-8")
     np.savez_compressed(out / "arrays.npz", **arrays)

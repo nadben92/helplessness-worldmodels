@@ -191,7 +191,12 @@ def main(argv: list[str] | None = None) -> int:
                 tar.add(out, arcname=out.name, filter=_excluded)
             archives.append(archive)
     for name, job in (status.items() if args.train_dir else ()):
-        run_dir = run_of_job(job["command"], job.get("started_at"), args.results_root) if not job.get("not_started") else None
+        if any(c.endswith("campaign_measure_pilot.py") for c in job["command"]):  # a pilot run measured as a campaign seed (30)
+            cmd = job["command"]
+            run_dir = Path(cmd[cmd.index("--out-dir") + 1]) / Path(cmd[cmd.index("--config") - 1]).name
+            run_dir = run_dir if not job.get("not_started") and run_dir.exists() else None
+        else:
+            run_dir = run_of_job(job["command"], job.get("started_at"), args.results_root) if not job.get("not_started") else None
         rows.append(run_row(name, job, run_dir))
         if run_dir is not None:
             arcname = f"results/E3_worldmodel_4zones/{run_dir.name}"

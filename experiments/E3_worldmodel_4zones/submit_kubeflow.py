@@ -97,13 +97,15 @@ MEASURE_BATCHES["gpu_pilot_noise"] = {
     "runs": dict(MEASURE_BATCHES["gpu_pilot_remeasure"]["runs"]),
 }
 MEASURE_BATCHES["gpu_pilot_noise_x2"] = {**MEASURE_BATCHES["gpu_pilot_noise"], "checkpoint_multipliers": [2], "fallback_batch": None}
-# The E3 campaign (docs/e3/DECISIONS.md, 2026-10-07 (29)): seeds 1, 2 (class A) and 6, 7 (class B), each in the
-# environment and its reference, 8 runs queued at most 4 at a time. Jobs in pairs, A and B alternating (seed 1, seed 6,
-# then seed 2, seed 7): each round of 4 holds two complete pairs, one per class. The preflight times the campaign's
-# measures on the pilot's REF seed 0 (read only) and skips the speed bench (measured for the pilot).
+# The E3 campaign (docs/e3/DECISIONS.md, 2026-10-07 (29), (30)): N = 4 seeds. Seeds 1 (class A) and 6 (class B): new runs,
+# each in the environment and its reference, 4 runs in one round (at most 4 at a time). Seeds 0 (A) and 5 (B): the
+# pilot's runs, read in place and measured with the campaign's protocol by campaign_measure_pilot.py, queued after the
+# training jobs (whole batch only). The preflight times the campaign's measures on the pilot's REF seed 0 (read only)
+# and skips the speed bench (measured for the pilot).
 AGENT_BATCHES["gpu_campaign"] = {
     "config": "configs/e3/gpu_campaign.yaml",
-    "runs": {f"seed{seed}_{condition}": (seed, condition) for seed in (1, 6, 2, 7) for condition in CONDITIONS},
+    "runs": {f"seed{seed}_{condition}": (seed, condition) for seed in (1, 6) for condition in CONDITIONS},
+    "pilot_runs": {f"pilot_{job}": f"{PILOT_RESULTS}/{run_dir}" for job, (run_dir, _) in MEASURE_BATCHES["gpu_pilot_remeasure"]["runs"].items()},
     "measure_smoke_run": f"{PILOT_RESULTS}/{MEASURE_BATCHES['gpu_pilot_remeasure']['runs']['win64_seed0_reference'][0]}",
     "bench_minutes": 0,
 }
@@ -212,8 +214,13 @@ def commands(phase: str, python: str, output: Path, resume: str = "", runs: list
         if phase != "train":
             raise ValueError(f"{batch} is a closed-loop batch: phases preflight, train and resume, never {phase}")
         known = AGENT_BATCHES[batch]["runs"]
-        return [(name, agent + ["--config", AGENT_BATCHES[batch]["config"], "--device", "cuda", "--seeds", str(known[name][0]),
+        jobs = [(name, agent + ["--config", AGENT_BATCHES[batch]["config"], "--device", "cuda", "--seeds", str(known[name][0]),
                                 "--conditions", known[name][1]]) for name in select_runs(runs, batch)]
+        if not runs:  # the pilot's runs measured as campaign seeds (2026-10-07 (30)), after the training jobs, whole batch only
+            jobs += [(name, [python, "-u", f"{SCRIPT}/campaign_measure_pilot.py", run_dir, "--config", AGENT_BATCHES[batch]["config"],
+                             "--device", "cuda", "--out-dir", str(output / "runs")])
+                     for name, run_dir in AGENT_BATCHES[batch].get("pilot_runs", {}).items()]
+        return jobs
     if batch in MEASURE_BATCHES:
         if phase != "measure":
             raise ValueError(f"{batch} is a measurement batch: phases preflight and measure only, never {phase}")

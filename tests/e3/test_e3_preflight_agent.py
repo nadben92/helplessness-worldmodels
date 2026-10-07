@@ -77,3 +77,23 @@ def test_measure_smoke_on_a_finished_run(tmp_path):
     assert smoke["seconds_full_measures"] > 0 and smoke["seconds_goal_diagnostics"] > 0 and smoke["contexts"] > 0
     assert len(smoke["goal_pair_masses"]) == 4 and set(smoke["I_s_by_zone"]) == set(pa.run_mini.e3_env.ZONE_CATEGORIES)
     assert (tmp_path / "pre" / "measure_smoke" / "measures" / "env000300" / "arrays.npz").exists()
+
+
+def test_pilot_runs_checked_and_queued(tmp_path):
+    """2026-10-07 (30): the pilot runs measured as campaign seeds must have what campaign_measure_pilot.py reads; their
+    jobs are queued after the training jobs and the projection is the queue's."""
+    assert pa.makespan([40.0] * 4 + [5.0] * 4, 4) == 45.0 and pa.makespan([40.0] * 4 + [5.0] * 4, 2) == 90.0
+    assert pa.pilot_job_hours({"seconds_full_measures": 1800.0, "seconds_goal_diagnostics": 60.0}) == pytest.approx(
+        pa.CONTENTION * (pa.PILOT_MEASURED_CHECKPOINTS * 1800 + pa.PILOT_GOAL_DIAGNOSTICS * 60) / 3600)
+    d = tmp_path / "pilot"
+    (d / "checkpoints").mkdir(parents=True)
+    for f in ("config.yaml", "counts.npz", "checkpoints/resume.pt", "checkpoints/agent_final.pt", "checkpoints/agent_env001000.pt"):
+        (d / f).write_text("x", encoding="utf-8")
+    (d / "meta.yaml").write_text(yaml.safe_dump({"status": "done", "env_steps": 3000}), encoding="utf-8")
+    (d / "console.log").write_text("[agent] >>> SWITCH to straight-through ... environment step 1500)\n", encoding="utf-8")
+    (d / "checkpoints.jsonl").write_text("".join(json.dumps({"env_step": e}) + "\n" for e in (1000, 2000, 3000)), encoding="utf-8")
+    assert pa.check_pilot_run(d) == [f"pilot run pilot: no weights for checkpoints [2000]"]  # 3000: agent_final.pt
+    (d / "checkpoints" / "agent_env002000.pt").write_text("x", encoding="utf-8")
+    assert pa.check_pilot_run(d) == []
+    (d / "counts.npz").unlink()
+    assert pa.check_pilot_run(d) == ["pilot run pilot: missing counts.npz"]

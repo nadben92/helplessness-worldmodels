@@ -3842,3 +3842,89 @@ and stream states: resume.pt stays on the volume), and the per-step training sca
   correction without telling the user** (a resume after an interruption only with his agreement).
 - Fixed: preflight_measures.py printed the projection per job as the smoke's duration ("smoke: 6692 s", (28)); it now
   prints both (smoke_line, tested).
+
+## 2026-10-07 (30) -- the pilot's runs reused as campaign seeds; the difference of differences examined (before the launch)
+
+### Decisions (user, 2026-10-07)
+
+- The operational definitions of (29) are validated: the visit class of a state (its least-visited action) and alpha
+  (a mixture with a component shared by every action).
+- **Seeds: N = 4. Seeds 0 (class A) and 5 (class B): the pilot's runs (gpu_pilot_cl), measured with the campaign's
+  protocol** (x4, every measure of (29) at every checkpoint, the zone probe on (h, z) included), from the weights and
+  replay saved on the cluster. **Seeds 1 (A) and 6 (B): new runs**, environment and reference: 4 runs in one round.
+  The pilot runs' handoff includes their weights at the checkpoints, as the new runs'.
+- **Recorded: the pilot's runs served to fix the budget** (the stability criterion of (24) and the corrected criterion
+  of (27), on I_s's stability and the agent's learning -- never on b) **and are reused as campaign seeds.**
+  Transparency: their b by zone has been seen (the pilot's review (22), the x1 re-measurement (25) and the test of the
+  analyses on their archives, (29)); the analyses and the hybrid-code rule were fixed in (16) and (29), the rule's
+  parameters by the user before the campaign.
+
+### Check before anything else: the training of the new runs is the pilot's
+
+- The pilot's code: source_sha256 3a71c745... (its 4 runs' meta.yaml), the tree of commits 002ee50, be79c75 and 720593c
+  (recomputed from `git archive`). From 720593c to the branch, in the hash's scope (src, experiments, configs,
+  pyproject.toml): no change to src/ except the new measure measures.kernel_probe.action_independent_weight; none to
+  run_mini.py, env.py, rng_streams.py, config.yaml, the E2 twin, gpu_pilot_closed_loop.yaml, gpu_e30b_win64.yaml; in
+  run_agent.py only the campaign's additions of (29), each behind its config key; the rest are measurement, preflight,
+  handoff and analysis scripts. **No difference touches the training.**
+- Tested on the CPU (tiny configuration, tests/e3/test_e3_campaign_measure_pilot.py): a run trained with the pilot's
+  keys and a run trained with the campaign's keys end with the same weights; the first, measured afterwards by
+  campaign_measure_pilot.py, gives at every checkpoint up to its last resume point exactly what the second measured
+  during its training (goal diagnostics, full measures' arrays, twin kernels). The measures of (29) do not change the
+  training (test of (29)).
+- **The checkpoint grid of the new runs is the pilot's** (checkpoints.grid "e2", resume_every 10,000; tested in
+  test_e3_campaign_config.py, campaign_measure_pilot.py refuses a run whose grid or training blocks differ).
+- Not covered by the hash: the cluster's Python environment (the image's torch, .venv-cluster); each run records its
+  own in meta.yaml.
+
+### The pilot's runs as campaign seeds (campaign_measure_pilot.py)
+
+Read only on the run; written into the job's directory laid out as a run (config.yaml with the campaign's measure, twin
+and checkpoints blocks, checkpoints.jsonl, counts.npz, twin.npz, measures/env<NNNNNN>/, results.json and arrays.npz,
+replay_final.npz, the weights). At every checkpoint (14): the twin (checked identical to the pilot's own record) and
+the goal diagnostics of (29); at every checkpoint after the switch (environment steps 8,758 to 11,342: 8 checkpoints,
+9 for EXP 5), the full measures at x4 -- the same rule as the new runs, no extra checkpoint needed. Same streams keyed by
+the checkpoint as in a campaign run. **Flagged: the pilot's last checkpoint, 300,000 (the budget's), is measured on the
+replay of its last resume point, 290,000** (no later replay was saved): its contexts miss the last 10,000 steps; the
+order of the effect is that of the context noise ((25): 0.01-0.03 bit in CN at x1, from 290,000 vs 300,000 replays).
+replay_final.npz of these runs is that replay. The new runs have their exact final replay.
+
+### The difference of differences (asked before the launch)
+
+On the pilot's archives (x1), CN, did = [I_WM - I_twin]_env - [I_WM - I_twin]_ref = b_WM - b_twin:
+
+| seed | checkpoint | b_WM | b_twin | did | I_WM - I_true env / ref | I_twin - I_true env / ref |
+|---|---|---|---|---|---|---|
+| 0 | 100,000 | +0.067 | +0.008 | +0.059 | +0.072 / +0.005 | -0.052 / -0.060 |
+| 0 | 300,000 | +0.109 | +0.004 | +0.105 | +0.248 / +0.139 | -0.025 / -0.029 |
+| 5 | 100,000 | -0.046 | -0.027 | -0.019 | +0.146 / +0.192 | -0.044 / -0.016 |
+| 5 | 300,000 | -0.091 | -0.034 | -0.056 | +0.208 / +0.298 | -0.037 / -0.003 |
+
+- **Where the variability comes from: the world model's own excess in CN, not the twin.** I_WM is above the true
+  kernel's I by +0.14 to +0.30 bit at 300,000 (the CN kernel predicted sharper than the truth, as in gpu_e30b, (4)); the
+  excess grows with training (100,000 -> 300,000) and with the state's visits (Spearman with the least-visited action's
+  visits +0.20 to +0.88 over the 25 CN states), and its level differs from run to run. The twin is within -0.06 to 0 of
+  the truth and almost the same in both runs (b_twin -0.03 to +0.01). So did ~ b_WM: it varies between seeds as b
+  itself does in CN (+0.109 / -0.091 at 300,000).
+- Not the twin's counts in little-visited contexts: at 300,000 every CN state's least-visited action has 25 or more
+  visits, and restricted to states with 50 or more, the WM's excess is as large (+0.23 to +0.34). Not the weighting:
+  both terms are unweighted means over the same 25 states. Not the support: every CN state is measured in every run.
+- **Its measurement noise:** that of b_WM, the contexts' (the twin is deterministic given the counts): sqrt(2) x 0.0054
+  ~ 0.008 bit in CN at x4 (0.015 at x1, (28)). The twin adds the statistical uncertainty of its counts, ~0.013-0.016 bit
+  per run on the CN zone mean (Dirichlet posterior, 100 draws), ~0.02 on b_twin. Both are well below the observed
+  between-seed spread (~0.16): did is not too noisy to measure; it varies between runs.
+- **Decision recorded (implementer's proposal, before the launch):** no restriction would make it more robust -- the
+  variation is the world model's run-to-run behaviour, which is what the quantity contrasts with the count-based
+  estimator, and it does not shrink on well-visited states. **The definition is kept; the difference of differences is
+  reported as DESCRIPTIVE, with its parts** (b_WM, b_twin, and each run's I_WM - I_true and I_twin - I_true, by zone;
+  campaign_analysis.py). Note for the main analysis: the same between-seed variation of b in CN, with N = 4, will be
+  read through the hybrid-code rule and the interval over seeds, as decided.
+
+### Batch, duration, handoff
+
+- gpu_campaign: the 4 new runs (seeds 1, 6; environment, reference), then the 4 pilot measurement jobs queued after them
+  (at most 4 at a time). The preflight also checks that each pilot run has what the jobs read (weights at every
+  checkpoint, resume.pt, counts, console.log with the switch) and projects the queue: **~2 days** (preflight ~1 h; the
+  4 runs ~42 h; the pilot jobs ~6 h: 8-9 full measurements and 14 goal diagnostics each).
+- Handoff: three archives per run, new or pilot (records and final measures, checkpoint measures, weights and replay):
+  ~52 MB per run, ~420 MB in total, every archive under 90 MB.
