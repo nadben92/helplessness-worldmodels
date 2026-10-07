@@ -295,6 +295,44 @@ def context_state_probes(contexts: dict, test_frac: float, rng: np.random.Genera
             for key in ("h", "z")}
 
 
+def latent_zone_separation(x: np.ndarray | torch.Tensor, states: np.ndarray, zone_of_state: list[str], categories: list[str],
+                           test_frac: float, rng: np.random.Generator, epochs: int = 300) -> dict:
+    """How far the latent separates the zones (docs/e3/DECISIONS.md, 2026-10-07 (29); a secondary analysis): x (n, d)
+    the latent states of real contexts (h and z concatenated in the campaign; z alone on an archive without h),
+    states (n,) their true states (labels only), zone_of_state the appearance category of each state; contexts of
+    states outside `categories` (the corridor) are left out.
+      - probe_zone: a linear probe x -> zone (4 categories), probe.linear_state_probe, held-out accuracy;
+      - probe_controllability: the same, x -> controllable_* vs uncontrollable_* category (in the reference environment
+        every zone is controllable: there it separates appearances only, a control);
+      - distances on standardised features (each dimension z-scored over the contexts): between the centroids of the
+        controllable_* and uncontrollable_* categories, divided by the root-mean-square distance of a context to its
+        own category's centroid (centroid_distance_ratio); and the 4 x 4 matrix of zone-centroid distances, same unit.
+    The probes draw their splits and initial weights from `rng` (zone first)."""
+    x = torch.as_tensor(np.asarray(x) if not isinstance(x, torch.Tensor) else x).float()
+    x = x.reshape(x.shape[0], -1)
+    zone = np.array([zone_of_state[s] for s in np.asarray(states)])
+    keep = np.isin(zone, categories)
+    x, zone = x[torch.as_tensor(keep, device=x.device)], zone[keep]
+    label = np.array([categories.index(c) for c in zone])
+    group = np.array([0 if c.startswith("uncontrollable") else 1 for c in zone])
+    out = {"n_contexts": int(len(label)), "contexts_by_zone": {c: int((zone == c).sum()) for c in categories}}
+    out["probe_zone"] = linear_state_probe(x, torch.as_tensor(label, device=x.device), len(categories), test_frac, rng, epochs=epochs)
+    out["probe_controllability"] = linear_state_probe(x, torch.as_tensor(group, device=x.device), 2, test_frac, rng, epochs=epochs)
+    xs = x.double().cpu().numpy()
+    sd = xs.std(axis=0)
+    xs = (xs - xs.mean(axis=0)) / np.where(sd > 0, sd, 1.0)
+    cats = [c for c in categories if (zone == c).any()]
+    centroids = {c: xs[zone == c].mean(axis=0) for c in cats}
+    within = float(np.sqrt(np.mean([((xs[zone == c] - centroids[c]) ** 2).sum(axis=1).mean() for c in cats])))
+    out["within_rms"] = within
+    out["zone_centroid_distances"] = {a: {b: float(np.linalg.norm(centroids[a] - centroids[b]) / within) for b in cats} for a in cats}
+    if (group == 0).any() and (group == 1).any():
+        out["centroid_distance_ratio"] = float(np.linalg.norm(xs[group == 0].mean(axis=0) - xs[group == 1].mean(axis=0)) / within)
+    else:
+        out["centroid_distance_ratio"] = float("nan")
+    return out
+
+
 # ---------------------------------------------------------------------
 # 5.5 -- context dispersion
 # ---------------------------------------------------------------------

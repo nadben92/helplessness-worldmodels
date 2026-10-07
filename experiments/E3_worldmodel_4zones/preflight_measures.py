@@ -115,6 +115,13 @@ def cpu_problems(requested: int | None, prescribed: int, cpus: dict) -> list[str
     return problems
 
 
+def smoke_line(smoke_seconds: float, projected_seconds_per_job: float, identical) -> str:
+    """The smoke's own duration, then the projection per job made from it (until 2026-10-07 the line printed the
+    projection as if it were the smoke's duration: "smoke: 6692 s" for a 197 s measurement, DECISIONS (28))."""
+    return (f"[preflight-measures] smoke: {smoke_seconds:.0f} s; projected per job: {projected_seconds_per_job:.0f} s; identical to the "
+            f"run's original arrays: {identical} (reported only: the aggregation compares them)")
+
+
 def decide(problems: list[str], hours: float | None, max_hours: float) -> str:
     return "launch" if not problems and hours is not None and math.isfinite(hours) and hours <= max_hours else "stop"
 
@@ -189,11 +196,12 @@ def main(argv: list[str] | None = None) -> int:
                 rep = smoke["reproducibility"]
                 if rep.get("allow_tf32_matmul") or rep.get("allow_tf32_cudnn"):
                     problems.append(f"smoke measurement ran with TF32 on: {rep}")
-                summary["smoke"] = {"seconds": seconds, "one_repeat_at_the_largest_multiplier": smoke["by_multiplier"]}
+                summary["smoke"] = {"seconds": t4, "one_repeat_at_the_largest_multiplier": smoke["by_multiplier"]}
             elif batch.get("kind") == "checkpoints":  # one checkpoint of the first run; the job measures len(env_steps)
                 remeasure = load_experiment_module("E3_worldmodel_4zones", "remeasure_checkpoints.py", "preflight_measures_remeasure")
                 out = remeasure.remeasure(first, batch["env_steps"][:1], args.device, args.out_dir / "smoke")[0]
-                seconds = (time.perf_counter() - t0) * len(batch["env_steps"])
+                summary["smoke"] = {"seconds": time.perf_counter() - t0}
+                seconds = summary["smoke"]["seconds"] * len(batch["env_steps"])
             else:
                 out = recompute.recompute(first, ["final"], args.device, out_dir=args.out_dir / "smoke",
                                           weights_sha256=batch["runs"][jobs[0]][1])[0]
@@ -207,12 +215,12 @@ def main(argv: list[str] | None = None) -> int:
                 if rep.get("allow_tf32_matmul") or rep.get("allow_tf32_cudnn"):
                     problems.append(f"smoke recomputation ran with TF32 on: {rep}")
                 comparison = out / "comparison_with_run.json"
-                summary["smoke"] = {"seconds": seconds, "out": str(out),
+                summary["smoke"] = {**summary.get("smoke", {"seconds": seconds}), "out": str(out),
                                     "identical_to_original": json.loads(comparison.read_text()) if comparison.exists() else None}
             rounds = math.ceil(len(jobs) / max(1, args.parallel))
             hours = seconds * rounds * CONTENTION / 3600.0
-            print(f"[preflight-measures] smoke: {seconds:.0f} s; identical to the run's original arrays: "
-                  f"{summary['smoke'].get('identical_to_original')} (reported only: the aggregation compares them)", flush=True)
+            summary["projected_seconds_per_job"] = seconds
+            print(smoke_line(summary["smoke"]["seconds"], seconds, summary["smoke"].get("identical_to_original")), flush=True)
         except Exception as err:  # the measurement fails on this machine: a problem, reported with its message
             problems.append(f"smoke recomputation failed: {type(err).__name__}: {err}")
     summary["projected_batch_hours"] = hours

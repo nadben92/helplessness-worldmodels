@@ -10,14 +10,20 @@ Checks, each a PROBLEM when it fails (decision "stop"):
    at 1,000 and the end), into <out-dir>/truncated/; its outputs must be complete (meta.yaml done on cuda, weights at
    the checkpoint, agent_final.pt, results.json and arrays.npz from the final measures, the checkpoint goal
    diagnostics in checkpoints.jsonl).
+6. The campaign's measures (a batch with "measure_smoke_run", gpu_campaign; docs/e3/DECISIONS.md, 2026-10-07 (29)): on
+   that run's final weights and replay (read only; the pilot's REF seed 0 on the cluster), with the BATCH's config, the
+   checkpoint goal diagnostics (run_agent.goal_kernel_at_checkpoint: 10,000 draws per pair into the goal, Q gaps, V,
+   latent separation) and one complete checkpoint measurement (run_agent.full_measures_at_checkpoint, x4 contexts), timed,
+   into <out-dir>/measure_smoke/; they must run and write their outputs.
 Informative, never in the decision:
-6. The speed bench (bench_agent.py: world-model, heads and environment steps, stacked seeds 1-8, torch.compile behind
+7. The speed bench (bench_agent.py: world-model, heads and environment steps, stacked seeds 1-8, torch.compile behind
    its equivalence gate), --bench-minutes (default 30), into <out-dir>/bench_agent.json.
 Parallelism (decides the launch's --max-parallel): the closed loop's inner loop run for --loop-seconds in 2, then 4
 processes side by side (bench_agent.py --loop); 4 is chosen if the 4 processes' total environment steps per second is
 at least the 2 processes' total, else 2 (the supervisor starts the jobs in order: the two experimental runs first).
 Projection: the planned environment steps / the per-process rate at the chosen parallelism, x 2 rounds when 2 run at
-once. The verdict (<out-dir>/preflight_verdict.json) ends with "PREFLIGHT DECISION: launch-max-parallel-4 |
+once; with the campaign's measures, each run adds MEASURED_CHECKPOINTS full measurements and GOAL_DIAGNOSTICS goal
+diagnostics of the smoke's durations, x CONTENTION (the smoke runs alone on the GPU, the runs' measures beside others). The verdict (<out-dir>/preflight_verdict.json) ends with "PREFLIGHT DECISION: launch-max-parallel-4 |
 launch-max-parallel-2 | stop"; stop also when the projection exceeds --max-batch-hours (default 336).
 """
 
@@ -47,8 +53,20 @@ OUTPUTS = ("config.yaml", "meta.yaml", "console.log", "metrics.csv", "checkpoint
            "checkpoints/agent_final.pt", "checkpoints/agent_env001000.pt")
 
 
-def check_truncated(run_dir: Path) -> list[str]:
-    problems = [f"truncated run: missing {f}" for f in OUTPUTS if not (run_dir / f).is_file()]
+# The campaign (2026-10-07 (29)): an upper bound on the checkpoints measured in full per run -- the E2 grid points from
+# 10,000 on (the pilot switched at environment steps 8,700-11,300, so 9 or 8), the extra checkpoint rule adding none then
+MEASURED_CHECKPOINTS = 9
+GOAL_DIAGNOSTICS = 15  # the 14 grid checkpoints of a 300,000-step run and one extra
+CONTENTION = 1.25
+
+
+def check_truncated(run_dir: Path, cfg: dict | None = None) -> list[str]:
+    outputs = list(OUTPUTS)
+    if cfg is not None and cfg["twin"].get("save_kernels"):
+        outputs.append("twin.npz")
+    if cfg is not None and cfg["checkpoints"].get("save_final_replay"):
+        outputs.append("replay_final.npz")
+    problems = [f"truncated run: missing {f}" for f in outputs if not (run_dir / f).is_file()]
     if (run_dir / "meta.yaml").is_file():
         meta = yaml.safe_load((run_dir / "meta.yaml").read_text(encoding="utf-8")) or {}
         if meta.get("status") != "done":
@@ -59,7 +77,63 @@ def check_truncated(run_dir: Path) -> list[str]:
         records = [json.loads(line) for line in (run_dir / "checkpoints.jsonl").read_text(encoding="utf-8").splitlines()]
         if not records or "goal_diagnostics" not in records[0]:
             problems.append("truncated run: no goal_diagnostics at the checkpoints")
+        elif cfg is not None and cfg["measure"]["checkpoint_goal_kernel"].get("agent"):
+            missing = [k for k in ("goal_neighbours", "V_by_zone", "latent_zone_separation") if k not in records[0]["goal_diagnostics"]]
+            if missing:
+                problems.append(f"truncated run: no {missing} in the goal diagnostics")
     return problems
+
+
+def measure_smoke(cfg: dict, run_dir: Path, device, out_dir: Path) -> dict:
+    """Check 6: the campaign's checkpoint measures on an existing run's final weights and replay (read only), timed."""
+    import pickle
+
+    import numpy as np
+    import torch
+
+    from helplessness.agents.worldmodel.heads import Critic, GoalHead
+
+    run_agent = load_experiment_module("E3_worldmodel_4zones", "run_agent.py", "preflight_agent_run_agent")
+    meta = yaml.safe_load((run_dir / "meta.yaml").read_text(encoding="utf-8"))
+    seed, condition, last = int(meta["seed"]), meta["condition"], int(meta["env_steps"])
+    world = run_mini.build_world(cfg, seed, condition)
+    world.templates_t, world.background_t = world.templates_t.to(device), world.background_t.to(device)
+    replay = pickle.loads(torch.load(run_dir / "checkpoints" / "resume.pt", map_location="cpu", weights_only=False)["replay"])
+    if device.type == "cuda":
+        replay.to_device(device)
+    state = torch.load(run_dir / "checkpoints" / "agent_final.pt", map_location="cpu", weights_only=False)
+    acfg = run_agent.agent_config(cfg)
+    rssm = run_mini.build_rssm(cfg)
+    rssm.load_state_dict(state["rssm"])
+    goal_head = GoalHead(rssm.cfg.h_dim, rssm.cfg.latent_dim, acfg.hidden_dim)
+    goal_head.load_state_dict(state["goal_head"])
+    critic = Critic(rssm.cfg.h_dim, rssm.cfg.latent_dim, acfg.hidden_dim)
+    critic.load_state_dict(state["critic"])
+    for m in (rssm, goal_head, critic):
+        m.to(device).eval()
+    N = np.load(run_dir / "counts.npz")[f"N_{last}"]
+    out_dir.mkdir(parents=True, exist_ok=True)
+    log = run_mini.RunLog(out_dir / "console.log", "[preflight measure smoke]")
+    t0 = time.perf_counter()
+    goal = run_agent.goal_kernel_at_checkpoint(rssm, world, replay, N, cfg, seed, condition, last, device, goal_head=goal_head,
+                                               critic=critic, acfg=acfg)
+    t_goal = time.perf_counter() - t0
+    _, arrays, summary = run_agent.full_measures_at_checkpoint(rssm, world, replay, N, cfg, seed, condition, out_dir, log,
+                                                               int(state["step"]), last, device)
+    t_full = time.perf_counter() - t0 - t_goal
+    (out_dir / "goal_diagnostics.json").write_text(json.dumps(run_mini._jsonable(goal), indent=1), encoding="utf-8")
+    return {"run": run_dir.name, "env_step": last, "replay_observations": len(replay), "seconds_goal_diagnostics": t_goal,
+            "seconds_full_measures": t_full, "I_s_by_zone": summary["I_s_by_zone"], "contexts": int(arrays["real_n_contexts"].sum()),
+            "goal_pair_masses": [p["mass_on_goal"] for p in goal["goal_pairs"]],
+            "zone_probe_accuracy": goal["latent_zone_separation"]["probe_zone"]["test_accuracy"]}
+
+
+def run_hours(planned_env_steps: int, per_process_rate: float, smoke: dict | None) -> float:
+    """One run's projected hours: its environment steps at the per-process rate, plus (campaign) its measures."""
+    seconds = planned_env_steps / per_process_rate if per_process_rate > 0 else float("inf")
+    if smoke is not None:
+        seconds += CONTENTION * (MEASURED_CHECKPOINTS * smoke["seconds_full_measures"] + GOAL_DIAGNOSTICS * smoke["seconds_goal_diagnostics"])
+    return seconds / 3600.0
 
 
 def choose_parallel(total_2: float, total_4: float) -> int:
@@ -67,9 +141,9 @@ def choose_parallel(total_2: float, total_4: float) -> int:
     return 4 if total_4 >= total_2 else 2
 
 
-def projected_hours(planned_env_steps: int, per_process_rate: float, parallel: int, n_runs: int) -> float:
+def projected_hours(planned_env_steps: int, per_process_rate: float, parallel: int, n_runs: int, smoke: dict | None = None) -> float:
     rounds = math.ceil(n_runs / parallel)
-    return planned_env_steps / per_process_rate * rounds / 3600.0 if per_process_rate > 0 else float("inf")
+    return run_hours(planned_env_steps, per_process_rate, smoke) * rounds
 
 
 def decide(problems: list[str], hours: float | None, max_hours: float, parallel: int | None) -> str:
@@ -129,16 +203,30 @@ def main(argv: list[str] | None = None) -> int:
             problems.append(f"runtime: TF32 on or determinism off ({flags})")
         mode_problems, _ = preflight.execution_mode_problems(cfg, device, {config.name: cfg})
         problems += mode_problems
-        # 6. the speed bench (informative)
-        print("[preflight-agent] speed bench (informative) ...", flush=True)
-        bench_mod = load_experiment_module("E3_worldmodel_4zones", "bench_agent.py", "preflight_agent_bench")
-        try:
-            bench = run_mini._jsonable(bench_mod.bench(cfg, device, budget_minutes=args.bench_minutes))
-        except Exception as err:
-            bench = {"error": f"{type(err).__name__}: {err}"}
-        (args.out_dir / "bench_agent.json").write_text(json.dumps(bench, indent=1), encoding="utf-8")
-        summary["bench"] = bench
-        print(f"[preflight-agent] bench: {json.dumps(bench)[:2000]}", flush=True)
+        # 7. the speed bench (informative; a batch may skip it: bench_minutes 0)
+        bench_minutes = batch.get("bench_minutes", args.bench_minutes)
+        if bench_minutes:
+            print("[preflight-agent] speed bench (informative) ...", flush=True)
+            bench_mod = load_experiment_module("E3_worldmodel_4zones", "bench_agent.py", "preflight_agent_bench")
+            try:
+                bench = run_mini._jsonable(bench_mod.bench(cfg, device, budget_minutes=bench_minutes))
+            except Exception as err:
+                bench = {"error": f"{type(err).__name__}: {err}"}
+            (args.out_dir / "bench_agent.json").write_text(json.dumps(bench, indent=1), encoding="utf-8")
+            summary["bench"] = bench
+            print(f"[preflight-agent] bench: {json.dumps(bench)[:2000]}", flush=True)
+        # 6. the campaign's measures on an existing run (read only)
+        smoke = None
+        if batch.get("measure_smoke_run"):
+            print(f"[preflight-agent] measure smoke on {batch['measure_smoke_run']} (read only) ...", flush=True)
+            try:
+                smoke = measure_smoke(cfg, Path(batch["measure_smoke_run"]), device, args.out_dir / "measure_smoke")
+                summary["measure_smoke"] = smoke
+                print(f"[preflight-agent] measure smoke: goal diagnostics {smoke['seconds_goal_diagnostics']:.0f} s, full measures "
+                      f"{smoke['seconds_full_measures']:.0f} s ({smoke['contexts']} contexts); {json.dumps(run_mini._jsonable(smoke))}",
+                      flush=True)
+            except Exception as err:
+                problems.append(f"measure smoke failed: {type(err).__name__}: {err}")
         # 5. the truncated real run
         print(f"[preflight-agent] truncated run: run_agent.py --max-env-steps {args.max_env_steps} ...", flush=True)
         t0 = time.perf_counter()
@@ -147,7 +235,7 @@ def main(argv: list[str] | None = None) -> int:
                        check=False)
         summary["truncated_run_seconds"] = time.perf_counter() - t0
         runs = sorted((args.out_dir / "truncated" / run_mini.EXPERIMENT_ID).glob("*__seed00__*"))
-        problems += check_truncated(runs[-1]) if runs else ["the truncated run wrote no run directory"]
+        problems += check_truncated(runs[-1], cfg) if runs else ["the truncated run wrote no run directory"]
         # parallelism and projection
         if not problems and args.device == "cuda":
             print("[preflight-agent] parallelism: 2 then 4 processes side by side ...", flush=True)
@@ -159,9 +247,10 @@ def main(argv: list[str] | None = None) -> int:
                 parallel = choose_parallel(two["total"], four["total"])
                 rate = min((four if parallel == 4 else two)["per_process"])
                 planned = cfg["budget"]["total_steps"] + cfg["budget"]["prefill_steps"]
-                hours = projected_hours(planned, rate, parallel, len(batch["runs"]))
+                hours = projected_hours(planned, rate, parallel, len(batch["runs"]), smoke)
                 summary["projection"] = {"max_parallel": parallel, "slowest_process_env_steps_per_s": rate, "planned_env_steps": planned,
-                                         "projected_batch_hours": hours}
+                                         "projected_run_hours": run_hours(planned, rate, smoke),
+                                         "rounds": math.ceil(len(batch["runs"]) / parallel), "projected_batch_hours": hours}
                 print(f"[preflight-agent] env steps/s in total: 2 processes {two['total']:.2f}, 4 processes {four['total']:.2f} -> "
                       f"--max-parallel {parallel}; projected batch {hours:.1f} h", flush=True)
     decision = decide(problems, hours, args.max_batch_hours, parallel)

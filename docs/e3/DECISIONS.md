@@ -3720,3 +3720,125 @@ degree of freedom (two seeds), and the noise was measured on the closed-loop pil
 
 The final batch is not prepared: the goal control gives an ambiguous answer to the reading of (25) (above), which
 the instruction of 2026-10-07 makes a reason to stop and report before part 2.
+
+## 2026-10-07 (29) -- the campaign's final batch (gpu_campaign): protocol x4 and budget 300,000 retained; design, measures and analyses recorded before the launch
+
+### Decisions on (28) (user, 2026-10-07)
+
+- **The goal control (28) does not block the final batch**: it bears on the learning dynamics of one run (REF 0, the
+  interval up to 15,849), not on the campaign's measures, protocol or budget. Recorded: **the mechanism of REF 0's early
+  success is not identified.** The goal masses are confirmed below the resolution; the amplification by the reward
+  asymmetry is not demonstrated (Q gaps below the tolerance, the action into the goal in the tied set). Candidate
+  explanations: a weak push at the last step through the tied set, combined with a navigation guided by V upstream; or a
+  correlation of V with the distance to the goal due to a spatially structured artefact of the critic (the distance to
+  the goal is structured by zones), which does not show that V carries information on the goal. **Question left open,
+  to revisit if needed with the campaign's data** (V by zone and the Q gaps next to the goal are recorded at every
+  checkpoint for that purpose, below).
+- **Measurement protocol x4 (real_context.max_per_state 200) and budget 300,000 environment steps: retained**, by
+  application of the rules of (26) and (27).
+
+### The batch (user decision; implemented, not launched)
+
+- Seeds: **N = 4, seeds 1 and 2 (class A), 6 and 7 (class B)**, each in the environment and its reference: 8 runs,
+  queued, at most 4 at a time (submit_kubeflow.AGENT_BATCHES["gpu_campaign"]; jobs in pairs, A and B alternating --
+  seeds 1, 6, then 2, 7 -- so each round of 4 holds two complete pairs). The pilot's runs are not reused.
+- Configuration `configs/e3/gpu_campaign.yaml`: the pilot's (gpu_pilot_closed_loop.yaml) identical for training,
+  agent, environment and budget (299,744 + 256 = 300,000 environment steps), with the protocol (max_per_state 200) and
+  the measures below; tested (tests/e3/test_e3_campaign_config.py). The measures fork the global torch RNG and restore
+  the model's mode: a run with them trains exactly as without them (tested), and a resumed run gives the same outputs
+  (tested).
+
+### Rule for the hybrid codes (user decision)
+
+aggregate_b.campaign_rule with **N = 4, FRACTION = 1/2, REFERENCE EFFECT = 0.02 bit** (E2's effect in CN): per
+controllable zone, b is interpretable if the 95 % Student-t intervals (3 degrees of freedom) of b(I_s) - b(I_s projected)
+and of the off-support difference both lie within +- 0.01 bit. **With N = 4 the rule may declare zones not
+interpretable; that will be reported as it is.**
+
+### Measures during the runs (run_agent.py; protocol x4)
+
+- **Full measures** (run_mini.measure_final: I_s, I_s projected, off-support mass, I_z, kernels, probes) **at every
+  checkpoint of the E2 grid after the switch**, into `measures/env<NNNNNN>/`; when fewer than 2 grid checkpoints fall
+  within the 50,000 environment steps after the switch, extra checkpoints at the switch + 25,000 (then + 50,000) until
+  there are 2 (run_agent.extra_checkpoints). With the pilot's switches (environment steps 8,700 to 11,300) that is 8 or
+  9 checkpoints (10,000 or 15,849, 25,119, 39,811, 63,096, 100,000, 158,489, 251,189, 300,000), 3 of them within 50,000
+  steps after the switch; whatever the switch (the separation deadline puts it before ~41,900), at least 6, at least 2
+  in the window, and **the budget's checkpoint, 300,000, whose measures are the run's final measures**.
+- **At every checkpoint** (the 14 of the grid and any extra one): the counts N[s, a, s'] (counts.npz); the tabular
+  twin's kernel T_hat and its per-state I_hat, I_ref, b, Delta (twin.npz); the prior's mass on the four pairs into the
+  goal with **10,000 draws** each (the pairs visited 2-8 times keep 256); at the four states next to the goal, the
+  agent's Q and the gap between the action into the goal and the best other action, against the tolerance 0.0751; **V
+  averaged by state and by zone** (the critic on the contexts' posterior latents); the zones' separation in the latent
+  (below). All in checkpoints.jsonl (goal_diagnostics).
+- Light arrays: the measures' arrays leave out the per-context latent distributions (real_prior_probs,
+  real_post_probs: 37 MB per measurement at 200 contexts per state), reproducible from the weights and replay handed
+  off.
+
+### Analyses (recorded before the launch; campaign_analysis.py)
+
+**Main:** b by zone on I_s at the budget's checkpoint (300,000), with the hybrid-code rule above and E3-0's aberration
+control (configs/e3/e30_aberration_control.yaml: flags to be explained, never exclusions).
+
+**Secondary, at every checkpoint measured in both runs of a pair** (operational definitions are the implementer's, set
+here before any campaign value):
+- **b by visit class**: a state's visits are those of its least-visited action, n(s) = min_a N[s, a] (its I_s rests on
+  its 5 kernel rows, the least-visited limiting it); classes 0-9, 10-29, 30-99, 100-299, 300-999, 1000+; in each zone
+  and class, the mean I_s over the environment run's states of that class minus the mean over the reference run's
+  states of that class (each run classes its own states), with the number of states on each side.
+- **Difference of differences**, by zone: [I_WM - I_twin]_env - [I_WM - I_twin]_ref, I_WM the zone's I_s and I_twin
+  the twin's I on the same run's counts at the checkpoint.
+- **alpha, the weight of an action-independent component in the predicted kernel**
+  (measures.kernel_probe.action_independent_weight): per state, the least-squares fit of
+  p_hat(.|s, a) = (1 - alpha) P(.|s, a) + alpha m(.), m shared by every action; the shared part drops out of the action
+  contrasts, so 1 - alpha = sum_a <p_hat_a - mean p_hat, P_a - mean P> / sum_a |P_a - mean P|^2 (exact for a mixture,
+  whatever m; not clipped; undefined where P has no action contrast, i.e. the uncontrollable zones of the environment).
+  Zone means, environment, reference and their difference; read in the controllable zones.
+- **The zones' separation in the latent** (probe.latent_zone_separation, on h and z concatenated, the real contexts of
+  the goal diagnostics): held-out accuracy of a linear probe latent -> zone (4 categories) and latent -> controllable vs
+  uncontrollable category (in the reference every zone is controllable: there it separates appearances only, a
+  control); the distance between the centroids of the controllable and uncontrollable categories in units of the
+  within-category RMS distance, on standardised features (diluted by uninformative dimensions: read between
+  environment and reference and across checkpoints, not as an absolute).
+- From the records: V by zone and the Q gaps next to the goal, reported without a rule (for the open question above).
+
+**Expectation, recorded before:** in the controllable zones, b ~ 0 and alpha ~ 0 at the budget, compatible with
+visually distinct zones; a transient early effect is possible. **A null result will be reported as a bound (no effect
+larger than the resolution obtained), not as the absence of an effect.**
+
+**Tested on the pilot's archives** (gpu_pilot_cl runs, gpu_pilot_remeasure measures at x1, 63,096 to 300,000; the
+300,000 point on the replay at 290,000): the script runs end to end. Descriptive values, not campaign results:
+- alpha (environment / reference), CN: seed 0, 0.237 / 0.290 at 63,096, 0.000 / 0.040 at 300,000; seed 5, 0.101 /
+  0.114, then -0.003 / -0.019. CD: 0.054 / 0.037 to 0.009 / 0.010 (seed 0), 0.054 / 0.053 to 0.004 / 0.013 (seed 5).
+  UD and UN of the environment: undefined, as defined.
+- Difference of differences at 300,000, CN: +0.105 (seed 0), -0.056 (seed 5); CD -0.008, -0.003.
+- Separation: the pilot's archives hold z only (real_post_probs), not h, so the probe ran on z: zone and
+  controllability probes at 1.000 at every checkpoint, centroid ratio 0.39-0.45 (environment) and 0.33-0.35
+  (reference). In the campaign it is computed in the run on h and z.
+- b by visit class: at 300,000 most states fall in the classes 10-29 and 30-99 (the least-visited action is visited
+  through epsilon); the cells with few states on one side are listed with their counts.
+- The hybrid-code rule: "not applied: two seeds (pilot)", as designed.
+
+### Handoff and what can be recomputed afterwards
+
+Per run (measured on the pilot's network and arrays): the weights, 2.6 MB per checkpoint x 15 = **~40 MB**; the final
+replay, compact (states, actions, rewards, flags; replay_final.npz), **< 1 MB**; the measures at 8-9 checkpoints,
+**~1 MB each** (light arrays) plus a figure; records, counts, twin kernels and final measures **~3 MB**. About **52 MB
+per run, ~420 MB for the 8**, every archive under 90 MB: **repatriable, included in the handoff**
+(make_handoff.py --with-weights: <run>.tgz, <run>.measures.tgz, <run>.weights.tgz; never resume.pt). With the weights
+at every checkpoint, the whole replay and the counts, every measure and analysis can be recomputed off the cluster
+(a GPU is preferable for the kernels; a recomputation on another device may differ in the last digits -- the cluster's
+values stay the reference). **What cannot be recomputed:** the continuation of training (optimiser states, environment
+and stream states: resume.pt stays on the volume), and the per-step training scalars that are not logged.
+
+### Duration, preflight, runbook
+
+- Projection: ~37 h of training per run (2.23 environment steps per second per process with 4 on the GPU, (23)), plus
+  ~5 h of measures (9 full measurements of an estimated 20-40 min at x4, and the goal diagnostics), i.e. ~42 h per
+  run, **two rounds: ~3.5 days, plus a preflight of ~1 h**. The preflight measures it: on the pilot's REF seed 0 final
+  weights (read only), the goal diagnostics and one full measurement at x4, timed; the projection adds 9 full
+  measurements and 15 goal diagnostics per run (x 1.25 for contention) to the training time at the measured rate. No
+  speed bench (measured for the pilot).
+- RUN_GPU.md: preflight, queue of the 8 runs, measures, handoff with the weights, duration; **no relaunch and no code
+  correction without telling the user** (a resume after an interruption only with his agreement).
+- Fixed: preflight_measures.py printed the projection per job as the smoke's duration ("smoke: 6692 s", (28)); it now
+  prints both (smoke_line, tested).

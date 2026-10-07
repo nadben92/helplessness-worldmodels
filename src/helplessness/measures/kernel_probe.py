@@ -83,6 +83,23 @@ def off_support_mass(p_hat: np.ndarray, support: np.ndarray) -> np.ndarray:
     return np.where(np.isfinite(p_hat).all(axis=-1), outside, np.nan)
 
 
+def action_independent_weight(p_hat: np.ndarray, P: np.ndarray) -> np.ndarray:
+    """The weight alpha of an action-independent component in a predicted kernel (docs/e3/DECISIONS.md, 2026-10-07 (29)):
+    per state s, the least-squares fit of p_hat(.|s, a) = (1 - alpha) P(.|s, a) + alpha m(.), m one distribution
+    shared by every action. The shared part drops out of the action contrasts d_a = p_hat_a - mean_a p_hat and
+    D_a = P_a - mean_a P, so 1 - alpha = sum_a <d_a, D_a> / sum_a |D_a|^2 (the predicted contrast projected on the true
+    one). alpha = w exactly for p_hat = (1 - w) P + w m, whatever m; 0 for p_hat = P; not clipped (< 0: contrasts
+    sharper than P's; > 1: reversed). p_hat, P: (n_states, n_actions, n_states). Returns (n_states,); NaN where a row
+    of p_hat is NaN (state not measured) or where P has no action contrast (an uncontrollable state: nothing to lose)."""
+    d = p_hat - p_hat.mean(axis=1, keepdims=True)
+    D = P - P.mean(axis=1, keepdims=True)
+    denom = (D ** 2).sum(axis=(1, 2))
+    with np.errstate(invalid="ignore", divide="ignore"):
+        alpha = 1.0 - (d * D).sum(axis=(1, 2)) / denom
+    ok = np.isfinite(p_hat).all(axis=(1, 2)) & (denom > 1e-12)
+    return np.where(ok, alpha, np.nan)
+
+
 def kernel_from_matches(nearest_state: np.ndarray, is_ghost: np.ndarray, n_states: int) -> dict[str, np.ndarray | float | int]:
     """Aggregates match_templates()'s per-draw output into a renormalised
     kernel p_hat(s'|.) over the n_states valid states -- renormalised

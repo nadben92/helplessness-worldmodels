@@ -65,8 +65,8 @@ def test_handoff_archives_and_report(tmp_path):
         assert names and not any(n.endswith(".pt") or "/checkpoints" in n for n in names), names
     text = (out / "handoff.md").read_text(encoding="utf-8")
     assert "decision **launch**" in text and "| win16_seed0_reference | - | not started |" in text
-    assert "| win64_seed0_experimental | 0 | done | - | 4201 | yes | - |" in text
-    assert "| win16_seed5_reference | 1 | failed | 25000 | none | no | separation not reached |" in text
+    assert "| win64_seed0_experimental | 0 | done | - | 4201 | yes | 0 | - |" in text
+    assert "| win16_seed5_reference | 1 | failed | 25000 | none | no | 0 | separation not reached |" in text
     with pytest.raises(SystemExit):
         handoff.main(["--train-dir", str(train), "--out", str(out), "--results-root", str(results)])
 
@@ -143,7 +143,7 @@ def test_handoff_of_a_closed_loop_batch(tmp_path):
     with tarfile.open(out / f"{name}.tgz") as tar:
         names = tar.getnames()
     assert any(n.endswith("checkpoints.jsonl") for n in names) and not any(n.endswith(".pt") for n in names)
-    assert "| seed0_experimental | 0 | done | 300000 | 4100 | yes | - |" in (out / "handoff.md").read_text(encoding="utf-8")
+    assert "| seed0_experimental | 0 | done | 300000 | 4100 | yes | 0 | - |" in (out / "handoff.md").read_text(encoding="utf-8")
 
 
 def test_handoff_of_a_checkpoint_remeasurement(tmp_path):
@@ -196,3 +196,39 @@ def test_measurement_logs_leave_out_the_run_outputs(tmp_path):
         names = tar.getnames()
     assert any(n.endswith("w.log") for n in names) and any(n.endswith("preflight_verdict.json") for n in names)
     assert not any("/runs/somerun" in n or "/smoke" in n for n in names)
+
+
+def test_handoff_of_the_campaign_with_measures_and_weights(tmp_path):
+    """docs/e3/DECISIONS.md, 2026-10-07 (29): the run's checkpoint measures in <run>.measures.tgz, and with --with-weights
+    the checkpoint and final weights and the final replay in <run>.weights.tgz -- never resume.pt; the light archive
+    keeps neither."""
+    results = tmp_path / "r"
+    name = "grid12x12__4zones__pair-experimental__worldmodel-agent-gpu_campaign__seed01__20261008T100006Z"
+    d = _run(results, name, {"status": "done", "env_steps": 300000, "switch_step": 6000}, True)
+    for f in ("agent_env001000.pt", "agent_env300000.pt", "agent_final.pt", "resume.pt"):
+        (d / "checkpoints" / f).write_bytes(b"w")
+    (d / "replay_final.npz").write_bytes(b"r")
+    (d / "checkpoints.jsonl").write_text("{}\n", encoding="utf-8")
+    for c in ("env015849", "env300000"):
+        (d / "measures" / c / "artifacts").mkdir(parents=True)
+        (d / "measures" / c / "results.json").write_text("{}", encoding="utf-8")
+        (d / "measures" / c / "arrays.npz").write_bytes(b"a")
+    train = tmp_path / "t"
+    train.mkdir()
+    job = {"command": ["python", "-u", "experiments/E3_worldmodel_4zones/run_agent.py", "--config", "configs/e3/gpu_campaign.yaml",
+                       "--device", "cuda", "--seeds", "1", "--conditions", "experimental"], "exit_code": 0,
+           "started_at": "2026-10-08T10:00:05+00:00", "finished_at": "2026-10-10T10:00:00+00:00"}
+    (train / "status.json").write_text(json.dumps({"seed1_experimental": job}), encoding="utf-8")
+    out = tmp_path / "h"
+    assert handoff.main(["--train-dir", str(train), "--out", str(out), "--results-root", str(results), "--with-weights"]) == 0
+    with tarfile.open(out / f"{name}.tgz") as tar:
+        light = tar.getnames()
+    with tarfile.open(out / f"{name}.measures.tgz") as tar:
+        measures = tar.getnames()
+    with tarfile.open(out / f"{name}.weights.tgz") as tar:
+        weights = [n for n in tar.getnames() if "." in n.rsplit("/", 1)[-1]]
+    assert not any("/measures" in n or n.endswith((".pt", "replay_final.npz")) for n in light)
+    assert any(n.endswith("measures/env300000/arrays.npz") for n in measures) and any(n.endswith("env015849/results.json") for n in measures)
+    assert sorted(n.rsplit("/", 1)[-1] for n in weights) == ["agent_env001000.pt", "agent_env300000.pt", "agent_final.pt", "replay_final.npz"]
+    text = (out / "handoff.md").read_text(encoding="utf-8")
+    assert "| seed1_experimental | 0 | done | 300000 | 6000 | yes | 2 | - |" in text and "*.weights.tgz" in text

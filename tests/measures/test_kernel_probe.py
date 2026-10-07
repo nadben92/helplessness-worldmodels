@@ -178,3 +178,24 @@ def test_off_support_mass():
     out = off_support_mass(p_hat, support)
     assert out[0].tolist() == pytest.approx([0.1, 0.0]) and out[1].tolist() == pytest.approx([0.5, 1.0])
     assert np.isnan(out[2]).all()
+
+
+def test_action_independent_weight_recovers_a_mixture_weight():
+    """docs/e3/DECISIONS.md, 2026-10-07 (29): alpha = w for p_hat = (1 - w) P + w m, whatever the shared m; NaN where P
+    has no action contrast or p_hat is not measured."""
+    from helplessness.measures.kernel_probe import action_independent_weight
+
+    rng = np.random.default_rng(0)
+    S, A = 6, 5
+    P = rng.dirichlet(np.ones(S), size=(S, A))
+    P[4] = P[4, 0]  # state 4: every action leads to the same distribution (uncontrollable)
+    m = rng.dirichlet(np.ones(S), size=S)[:, None, :]
+    w = np.array([0.0, 0.1, 0.3, 0.9, 0.5, 0.2])
+    p_hat = (1 - w)[:, None, None] * P + w[:, None, None] * m
+    p_hat[5] = np.nan
+    alpha = action_independent_weight(p_hat, P)
+    assert np.allclose(alpha[:4], w[:4]) and np.isnan(alpha[4]) and np.isnan(alpha[5])
+    assert np.allclose(action_independent_weight(P, P)[[0, 1, 2, 3, 5]], 0.0)
+    # a kernel that ignores the action entirely has alpha 1
+    uniform = np.full_like(P, 1.0 / S)
+    assert np.allclose(action_independent_weight(uniform, P)[[0, 1, 2, 3, 5]], 1.0)

@@ -97,12 +97,22 @@ MEASURE_BATCHES["gpu_pilot_noise"] = {
     "runs": dict(MEASURE_BATCHES["gpu_pilot_remeasure"]["runs"]),
 }
 MEASURE_BATCHES["gpu_pilot_noise_x2"] = {**MEASURE_BATCHES["gpu_pilot_noise"], "checkpoint_multipliers": [2], "fallback_batch": None}
+# The E3 campaign (docs/e3/DECISIONS.md, 2026-10-07 (29)): seeds 1, 2 (class A) and 6, 7 (class B), each in the
+# environment and its reference, 8 runs queued at most 4 at a time. Jobs in pairs, A and B alternating (seed 1, seed 6,
+# then seed 2, seed 7): each round of 4 holds two complete pairs, one per class. The preflight times the campaign's
+# measures on the pilot's REF seed 0 (read only) and skips the speed bench (measured for the pilot).
+AGENT_BATCHES["gpu_campaign"] = {
+    "config": "configs/e3/gpu_campaign.yaml",
+    "runs": {f"seed{seed}_{condition}": (seed, condition) for seed in (1, 6, 2, 7) for condition in CONDITIONS},
+    "measure_smoke_run": f"{PILOT_RESULTS}/{MEASURE_BATCHES['gpu_pilot_remeasure']['runs']['win64_seed0_reference'][0]}",
+    "bench_minutes": 0,
+}
 DEFAULT_BATCH = "gpu_e30"
 # The job's CPU request, PER BATCH (docs/e3/DECISIONS.md, 2026-09-30 (5)): gpu_e30b was prescribed 5 CPUs and ran on 3,
 # because --cpu defaulted to 3 and a command without it (or with another value) was accepted silently. The
 # request now defaults to the batch's own value, and a different --cpu is refused unless --allow-cpu-override.
 BATCH_CPUS = {"gpu_e30": 3, "gpu_e30b": 5, "gpu_e30b_measures": 3, "gpu_pilot_cl": 3, "gpu_pilot_remeasure": 3, "gpu_pilot_noise": 3,
-              "gpu_pilot_noise_x2": 3}
+              "gpu_pilot_noise_x2": 3, "gpu_campaign": 3}
 DEFAULT_CPUS = BATCH_CPUS[DEFAULT_BATCH]
 
 

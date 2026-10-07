@@ -1,4 +1,4 @@
-"""RUN_GPU.md (docs/e3/DECISIONS.md, 2026-09-30 (3); batch gpu_e30b_measures, 2026-10-01 (10)) is executed as written by
+"""RUN_GPU.md (docs/e3/DECISIONS.md, 2026-09-30 (3); batch gpu_campaign, 2026-10-07 (29)) is executed as written by
 an assistant on the GPU environment: every command it gives must exist and
 accept its options, the hash command must run on the standard library alone,
 and the decision line it quotes must be the preflight's."""
@@ -25,28 +25,35 @@ def _commands(script: str) -> list[list[str]]:
 
 
 def test_every_submission_command_parses(tmp_path, monkeypatch):
-    """Batch gpu_pilot_noise (docs/e3/DECISIONS.md, 2026-10-06 (26)): the preflight and the measurement, 5 jobs, 3 CPUs."""
+    """Batch gpu_campaign (docs/e3/DECISIONS.md, 2026-10-07 (29)): the preflight, the training of the 8 runs at 4 or 2 at
+    once, and the resume of one run (only with the user's agreement); 3 CPUs everywhere."""
     commands = _commands("submit_kubeflow.py")
     assert {tuple(c) for c in commands} == {
-        ("--phase", "preflight", "--batch", "gpu_pilot_noise", "--max-parallel", "4", "--cpu", "3"),
-        ("--phase", "measure", "--batch", "gpu_pilot_noise", "--max-parallel", "4", "--cpu", "3"),
-        ("--phase", "measure", "--batch", "gpu_pilot_noise_x2", "--max-parallel", "4", "--cpu", "3")}  # the fallback (27)
+        ("--phase", "preflight", "--batch", "gpu_campaign", "--max-parallel", "4", "--cpu", "3"),
+        ("--phase", "train", "--batch", "gpu_campaign", "--max-parallel", "4", "--cpu", "3"),
+        ("--phase", "train", "--batch", "gpu_campaign", "--max-parallel", "2", "--cpu", "3"),
+        ("--phase", "resume", "--batch", "gpu_campaign", "--cpu", "3", "--resume", "<the", "run's", "directory>")}
     mount = tmp_path / "scratch"
     repo = mount / "helplessness-worldmodels"
     repo.mkdir(parents=True)
     monkeypatch.setitem(sys.modules, "kubeflow", None)  # the submission itself needs the cluster's SDK
     for argv in commands:
+        if argv[argv.index("--phase") + 1] == "resume":
+            argv = argv[:argv.index("--resume") + 1] + [str(mount / "a_run")]
         with pytest.raises(ImportError):  # the arguments passed every check; only the SDK import is left
             cluster.main([*argv, "--repo-dir", str(repo), "--mount", str(mount)])
         phase = argv[argv.index("--phase") + 1]
-        jobs = cluster.commands(phase, "python", tmp_path, batch=argv[argv.index("--batch") + 1], max_parallel=4, cpus=3)
-        assert len(jobs) == (1 if phase == "preflight" else 5)
-        if phase == "measure":
-            assert all(cmd[2].endswith("measure_noise.py") for _, cmd in jobs)
-            assert jobs[4][0] == "goal_control"
-    for run_dir, _ in cluster.MEASURE_BATCHES["gpu_pilot_noise"]["runs"].values():
-        assert run_dir in DOC  # the doc names every run it reads
-    assert cluster.PILOT_RESULTS in DOC
+        mp = int(argv[argv.index("--max-parallel") + 1]) if "--max-parallel" in argv else None
+        jobs = cluster.commands(phase, "python", tmp_path, resume=str(mount / "a_run"), batch="gpu_campaign", max_parallel=mp, cpus=3)
+        if phase == "train":
+            assert [name for name, _ in jobs] == [f"seed{s}_{c}" for s in (1, 6, 2, 7) for c in ("experimental", "reference")]
+            assert all(cmd[2].endswith("run_agent.py") and "configs/e3/gpu_campaign.yaml" in cmd for _, cmd in jobs)
+        elif phase == "preflight":
+            assert jobs[0][1][2].endswith("preflight_agent.py")
+        else:
+            assert jobs[0][1][2].endswith("run_agent.py") and "--resume" in jobs[0][1]
+    assert cluster.AGENT_BATCHES["gpu_campaign"]["config"] in DOC
+    assert cluster.AGENT_BATCHES["gpu_campaign"]["measure_smoke_run"].rsplit("/", 1)[1] in DOC  # the run read by the preflight
 
 
 def test_handoff_commands_use_existing_options(capsys):
@@ -58,7 +65,8 @@ def test_handoff_commands_use_existing_options(capsys):
     for argv in commands:
         for flag in (a for a in argv if a.startswith("--")):
             assert flag in help_text, flag
-        assert "--out" in argv and argv[argv.index("--out") + 1] == "handoff/gpu_pilot_noise"
+        assert "--out" in argv and argv[argv.index("--out") + 1] == "handoff/gpu_campaign"
+    assert "--with-weights" in commands[0]  # the weights and the final replay come back (2026-10-07 (29))
 
 
 def test_hash_command_runs_on_the_standard_library_alone():
@@ -73,10 +81,7 @@ def test_hash_command_runs_on_the_standard_library_alone():
 
 
 def test_decision_lines_are_the_preflight_s():
-    preflight_src = (REPO / "experiments" / "E3_worldmodel_4zones" / "preflight_measures.py").read_text(encoding="utf-8")
-    assert 'print(f"PREFLIGHT DECISION: {decision}' in preflight_src
-    for decision in ("launch", "launch-fallback-gpu_pilot_noise_x2", "stop"):
+    preflight_src = (REPO / "experiments" / "E3_worldmodel_4zones" / "preflight_agent.py").read_text(encoding="utf-8")
+    assert 'print(f"PREFLIGHT DECISION: {decision}' in preflight_src and 'return f"launch-max-parallel-{parallel}"' in preflight_src
+    for decision in ("launch-max-parallel-4", "launch-max-parallel-2", "stop"):
         assert f"PREFLIGHT DECISION: {decision}" in DOC
-    assert "decision = f\"launch-fallback-{batch['fallback_batch']}\"" in preflight_src
-    assert "<= 8" in DOC and cluster.MEASURE_BATCHES["gpu_pilot_noise"]["max_batch_hours"] == 8.0
-    assert 'max_hours = batch.get("max_batch_hours", args.max_batch_hours)' in preflight_src

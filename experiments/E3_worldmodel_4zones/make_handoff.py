@@ -7,7 +7,12 @@ writes into --out
     handoff.md                      status of every run (exit code, meta.yaml status, gradient steps
                                     done, switch step, error), the preflight's decision, the archives;
     <run directory name>.tgz        one light archive per run: everything except checkpoints/,
-                                    failure/*.pt, any .pt file and wandb/;
+                                    failure/*.pt, any .pt file, wandb/, measures/ and replay_final.npz;
+    <run directory name>.measures.tgz   the run's checkpoint measures (measures/env<NNNNNN>/: results.json,
+                                    arrays.npz, artifacts), when it has some (the campaign, DECISIONS 2026-10-07 (29));
+    <run directory name>.weights.tgz    with --with-weights: the weights at every checkpoint and the final ones
+                                    (checkpoints/agent_env<NNNNNN>.pt, agent_final.pt) and the final replay
+                                    (replay_final.npz) -- never resume.pt (optimisers, environment, streams);
     logs.tgz                        the supervisor's logs and status.json, and the preflight's
                                     directories without their .pt files.
 
@@ -64,6 +69,24 @@ def _excluded(member: tarfile.TarInfo) -> tarfile.TarInfo | None:
     return member
 
 
+def _excluded_run(member: tarfile.TarInfo) -> tarfile.TarInfo | None:
+    """The light run archive: _excluded, and the measures and final replay, which have their own archives."""
+    parts = Path(member.name).parts
+    if "measures" in parts or member.name.endswith("replay_final.npz"):
+        return None
+    return _excluded(member)
+
+
+def _weights_only(member: tarfile.TarInfo) -> tarfile.TarInfo | None:
+    """The weights archive: the checkpoint and final weights and the final replay; never resume.pt or failure/."""
+    name = Path(member.name).name
+    if member.isdir():
+        return member
+    if name.startswith("agent_") and name.endswith(".pt") or name == "replay_final.npz":
+        return member
+    return None
+
+
 def run_of_job(command: list[str], started_at: str | None, results_root: Path) -> Path | None:
     """The run directory a supervisor job wrote: run_mini.py --config <c> --seeds <n> --conditions <cond>
     -> results_root/*__pair-<role>__worldmodel-<config stem>__seed<nn>__<UTC>, the latest one created at or
@@ -88,7 +111,8 @@ def run_row(name: str, job: dict, run_dir: Path | None) -> dict:
         meta = yaml.safe_load((run_dir / "meta.yaml").read_text(encoding="utf-8")) or {}
         error = str(meta.get("error") or "")
         row.update(status=meta.get("status"), steps_done=meta.get("steps_done") or meta.get("env_steps"), switch_step=meta.get("switch_step"),
-                   error=error.splitlines()[0][:300] if error else "", finished=(run_dir / "results.json").exists())
+                   error=error.splitlines()[0][:300] if error else "", finished=(run_dir / "results.json").exists(),
+                   measured_checkpoints=len(list((run_dir / "measures").glob("env*/results.json"))))
     return row
 
 
@@ -145,6 +169,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--preflight-dir", type=Path, nargs="*", default=[], help="the preflight's output directories")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--results-root", type=Path, default=RESULTS_ROOT)
+    parser.add_argument("--with-weights", action="store_true",
+                        help="also one <run>.weights.tgz per run: checkpoint and final weights, final replay (the campaign)")
     args = parser.parse_args(argv)
 
     if args.out.exists() and any(args.out.iterdir()):
@@ -168,10 +194,24 @@ def main(argv: list[str] | None = None) -> int:
         run_dir = run_of_job(job["command"], job.get("started_at"), args.results_root) if not job.get("not_started") else None
         rows.append(run_row(name, job, run_dir))
         if run_dir is not None:
+            arcname = f"results/E3_worldmodel_4zones/{run_dir.name}"
             archive = args.out / f"{run_dir.name}.tgz"
             with tarfile.open(archive, "w:gz") as tar:
-                tar.add(run_dir, arcname=f"results/E3_worldmodel_4zones/{run_dir.name}", filter=_excluded)
+                tar.add(run_dir, arcname=arcname, filter=_excluded_run)
             archives.append(archive)
+            if (run_dir / "measures").is_dir():
+                archive = args.out / f"{run_dir.name}.measures.tgz"
+                with tarfile.open(archive, "w:gz") as tar:
+                    tar.add(run_dir / "measures", arcname=f"{arcname}/measures", filter=_excluded)
+                archives.append(archive)
+            if args.with_weights:
+                archive = args.out / f"{run_dir.name}.weights.tgz"
+                with tarfile.open(archive, "w:gz") as tar:
+                    if (run_dir / "checkpoints").is_dir():
+                        tar.add(run_dir / "checkpoints", arcname=f"{arcname}/checkpoints", filter=_weights_only)
+                    if (run_dir / "replay_final.npz").exists():
+                        tar.add(run_dir / "replay_final.npz", arcname=f"{arcname}/replay_final.npz")
+                archives.append(archive)
     logs = args.out / "logs.tgz"
     with tarfile.open(logs, "w:gz") as tar:
         for d in [*([supervisor] if supervisor else []), *args.preflight_dir]:
@@ -196,7 +236,8 @@ def main(argv: list[str] | None = None) -> int:
     lines = [f"# GPU batch handoff -- {args.out.name}", "",
              f"Written {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')} by make_handoff.py from "
              f"`{supervisor.name if supervisor else 'no training / measurement (not launched)'}`. "
-             "No weights (.pt) in any archive.", "", "## Preflight", ""]
+             + ("Weights (.pt) only in the *.weights.tgz archives (checkpoint and final weights, final replay; no resume.pt)."
+              if args.with_weights else "No weights (.pt) in any archive."), "", "## Preflight", ""]
     lines += [f"- {d}" for d in decisions] or ["- (no preflight directory given)"]
     lines += ["", "## Runs", ""]
     rows_for_train = rows
@@ -212,15 +253,15 @@ def main(argv: list[str] | None = None) -> int:
     elif not args.train_dir:
         lines.append("Training not launched (see the preflight above).")
     else:
-        lines += ["| job | exit code | status (meta.yaml) | gradient steps done | switch step | finished (results.json) | error |",
-                  "|---|---|---|---|---|---|---|"]
+        lines += ["| job | exit code | status (meta.yaml) | steps done | switch step | finished (results.json) | checkpoints measured | error |",
+                  "|---|---|---|---|---|---|---|---|"]
     for r in rows_for_train:
         if r["not_started"]:
-            lines.append(f"| {r['job']} | - | not started | - | - | - | - |")
+            lines.append(f"| {r['job']} | - | not started | - | - | - | - | - |")
             continue
         lines.append(f"| {r['job']} | {r['exit_code']} | {r.get('status', 'no run directory')} | {r.get('steps_done') or '-'} | "
                      f"{r.get('switch_step') if r.get('switch_step') is not None else 'none'} | {'yes' if r.get('finished') else 'no'} | "
-                     f"{r.get('error') or '-'} |")
+                     f"{r.get('measured_checkpoints', '-')} | {r.get('error') or '-'} |")
     lines += ["", "## Archives", ""] + [f"- `{a.name}`: {a.stat().st_size / 2**20:.1f} MB" for a in archives]
     (args.out / "handoff.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     (args.out / "handoff.json").write_text(json.dumps({"runs": rows, "archives": [a.name for a in archives]}, indent=1), encoding="utf-8")

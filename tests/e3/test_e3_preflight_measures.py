@@ -80,3 +80,9 @@ def test_check_run_of_a_closed_loop_run(tmp_path):
     assert pm.check_run("win64_seed5_reference", d, None, "checkpoints", [63096, 300000]) == []  # 300,000: agent_final.pt
     assert "agent_env100000.pt" in pm.check_run("win64_seed5_reference", d, None, "checkpoints", [63096, 100000])[0]
     assert "directory name" in pm.check_run("win64_seed0_reference", d, None, "checkpoints", [63096])[0]
+
+
+def test_smoke_line_separates_the_smoke_from_the_projection():
+    """2026-10-07 (28): gpu_pilot_noise's log printed "smoke: 6692 s", the projection per job, for a 197 s measurement."""
+    line = pm.smoke_line(196.8, 6692.0, None)
+    assert "smoke: 197 s" in line and "projected per job: 6692 s" in line
