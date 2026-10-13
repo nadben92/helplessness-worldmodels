@@ -137,6 +137,11 @@ slowest test (about 2 min).
 - `recompute_measures.py`: every measure recomputed from a run directory (`--kernel-draws K` to measure an older run at another K_s).
 - `aggregate_b.py`: b = I(experimental) - I(reference) by zone from finished pairs of runs (I_s main, I_z secondary), by block class, with each run's calibration criteria.
 - `action_in_latent.py`, `is_pooling_check.py`: diagnostics of 2026-09-29/30 (does z' carry the action at fixed arrival state; I_s per context vs pooled).
+- `campaign_report.py`: the campaign's analysis pipeline in one command (`--handoff handoff/gpu_campaign`): integrity
+  (`campaign_integrity.py`: refuses an incomplete handoff), analyses (`campaign_analysis.py`: main, secondary,
+  propagation; `campaign_learning.py`: learning and behaviour, noisy-zone measurement error, convergence of the
+  deterministic zones), the RSA of the latent on the CPU (`rsa_latents.py`, on the generic `helplessness.measures.rsa`),
+  figures (`campaign_figures.py`), tables and a results section (docs/e3/DECISIONS.md, 2026-10-13 (31)).
 - `hybrid_codes_check.py`: the hybrid-codes test of 2026-09-30 (5) on existing weights (is the off-support mass made of codes the posterior never produces).
 - `run_agent.py` (config `configs/e3/agent_mini.yaml`): Phase 5, the agent in closed loop with its tabular twin at E2's checkpoints, the agent's own Delta under P at each checkpoint, the E3 measures at the end (paired by `aggregate_b.py`), resume with `--resume <run dir>` (docs/e3/DECISIONS.md 2026-09-30 (8)); CPU bench.
 - `submit_kubeflow.py`: the Kubeflow wrapper and local supervisor (`--batch gpu_e30 | gpu_e30b`, `--runs`, `--max-parallel`).

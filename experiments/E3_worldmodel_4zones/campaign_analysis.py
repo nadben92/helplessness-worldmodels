@@ -34,7 +34,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
+from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
@@ -52,10 +54,14 @@ VISIT_CLASSES = ((0, 9), (10, 29), (30, 99), (100, 299), (300, 999), (1000, None
 PROBE_TEST_FRAC, PROBE_SEED = 0.2, 20261007
 
 
+@lru_cache(maxsize=1)
+def _run_mini():
+    return load_experiment_module("E3_worldmodel_4zones", "run_mini.py", "campaign_analysis_run_mini")
+
+
 def controllability_of_kernel(P: np.ndarray) -> np.ndarray:
     """Per-state I of a kernel, the one implementation (measures.controllability via run_mini)."""
-    run_mini = load_experiment_module("E3_worldmodel_4zones", "run_mini.py", "campaign_analysis_run_mini")
-    return run_mini.controllability_of_kernel(P)
+    return _run_mini().controllability_of_kernel(P)
 
 
 def class_label(lo: int, hi: int | None) -> str:
@@ -83,13 +89,23 @@ def b_by_visit_class(I_env: np.ndarray, n_env: np.ndarray, I_ref: np.ndarray, n_
     return out
 
 
+def zone_means_all(values: np.ndarray, zone: np.ndarray) -> dict:
+    """Mean over each zone's states, the corridor included (the goal, terminal, left out of it)."""
+    out = {}
+    for cat in (*CATEGORIES, "corridor"):
+        m = zone == cat
+        m[goal_state()] = False
+        out[cat] = float(np.nanmean(values[m])) if np.isfinite(values[m]).any() else float("nan")
+    return out
+
+
 def zone_mean(values: np.ndarray, zone: np.ndarray) -> dict:
     return {cat: float(np.nanmean(values[zone == cat])) if np.isfinite(values[zone == cat]).any() else float("nan") for cat in CATEGORIES}
 
 
 def separation_from_arrays(arrays, zone_of_state: list[str]) -> dict | None:
     """The zones' separation on the measure's per-context posteriors (z only), for runs without the in-run record."""
-    if "real_post_probs" not in arrays.files:
+    if "real_post_probs" not in arrays:
         return None
     probe = load_experiment_module("E3_worldmodel_4zones", "probe.py", "campaign_analysis_probe")
     x = arrays["real_post_probs"].reshape(arrays["real_post_probs"].shape[0], -1)
@@ -110,10 +126,36 @@ class Run:
         self.counts = np.load(self.path / "counts.npz")
         base = (measures_root / self.path.name) if measures_root is not None else (self.path / "measures")
         self.measure_dirs = {int(d.name[3:]): d for d in sorted(base.glob("env*")) if (d / "arrays.npz").exists()}
+        self._measures: dict[int, tuple[dict, dict]] = {}
+        self.twin = dict(np.load(self.path / "twin.npz")) if (self.path / "twin.npz").exists() else None
+        self.switch_env_step = self.results.get("switch_env_step") or switch_from_log(self.path / "console.log")
+        if self.measure_dirs:
+            res, arr = self.measure(max(self.measure_dirs))
+            self.zone_of_state = np.array(res["zone_of_state"])
+            self.P_true = arr["P_true"]
+            self.truth = state_truth(self.P_true)
 
-    def measure(self, c: int) -> tuple[dict, object]:
-        d = self.measure_dirs[c]
-        return json.loads((d / "results.json").read_text(encoding="utf-8")), np.load(d / "arrays.npz")
+    def measure(self, c: int) -> tuple[dict, dict]:
+        """results.json and arrays.npz of the measures at checkpoint c (loaded once)."""
+        if c not in self._measures:
+            d = self.measure_dirs[c]
+            self._measures[c] = (json.loads((d / "results.json").read_text(encoding="utf-8")), dict(np.load(d / "arrays.npz")))
+        return self._measures[c]
+
+
+def switch_from_log(path: Path) -> int | None:
+    """The switch's environment step from a run's console.log (run_agent: '>>> SWITCH ... environment step N')."""
+    if not path.exists():
+        return None
+    m = re.search(r">>> SWITCH.*?environment step (\d+)", path.read_text(encoding="utf-8", errors="replace"))
+    return int(m.group(1)) if m else None
+
+
+def state_truth(P: np.ndarray) -> dict:
+    """Per state, from the run's own true kernel: I_true (the one implementation), controllable (I_true > 0) and
+    stochastic (some action without a single successor)."""
+    I_true = controllability_of_kernel(P)
+    return {"I_true": I_true, "controllable": I_true > 1e-9, "stochastic": (P.max(axis=-1) < 1.0 - 1e-12).any(axis=-1)}
 
 
 def checkpoint_pair(exp: Run, ref: Run, c: int) -> dict:
@@ -142,9 +184,12 @@ def checkpoint_pair(exp: Run, ref: Run, c: int) -> dict:
                                   "wm_minus_true_ref": v(rc_r["I_s_by_zone"][cat]["mean"]) - true_r[cat],
                                   "twin_minus_true_env": v(twin_e[cat]["I_hat"]) - true_e[cat],
                                   "twin_minus_true_ref": v(twin_r[cat]["I_hat"]) - true_r[cat]} for cat in CATEGORIES}
-    a_e = zone_mean(action_independent_weight(arr_e["real_p_hat"], arr_e["P_true"]), zone)
-    a_r = zone_mean(action_independent_weight(arr_r["real_p_hat"], arr_r["P_true"]), zone)
-    out["alpha"] = {cat: {"env": a_e[cat], "ref": a_r[cat], "difference": a_e[cat] - a_r[cat]} for cat in CATEGORIES}
+    a_e = zone_means_all(action_independent_weight(arr_e["real_p_hat"], arr_e["P_true"]), zone)
+    a_r = zone_means_all(action_independent_weight(arr_r["real_p_hat"], arr_r["P_true"]), zone)
+    out["alpha"] = {cat: {"env": a_e[cat], "ref": a_r[cat], "difference": a_e[cat] - a_r[cat]} for cat in ZONES}
+    # b on I_s with the corridor (its states' mean, the goal left out; the four zones: the measures' own zone means)
+    corridor = zone_means_all(arr_e["real_I_s"], zone)["corridor"] - zone_means_all(arr_r["real_I_s"], zone)["corridor"]
+    out["b_I_s_all"] = {**out["b_I_s"], "corridor": corridor}
     sep = {}
     for role, run, arr, res in (("experimental", exp, arr_e, res_e), ("reference", ref, arr_r, res_r)):
         g = run.records[c].get("goal_diagnostics", {})
@@ -156,8 +201,243 @@ def checkpoint_pair(exp: Run, ref: Run, c: int) -> dict:
     return out
 
 
-def analyse(paths: list[Path], measures_root: Path | None = None, e30_control: dict | None = None) -> dict:
+# --- propagation (docs/e3/DECISIONS.md, 2026-10-13 (31), D): definitions recorded before any campaign value ---------------
+ZONES = (*CATEGORIES, "corridor")
+CONTROLLABLE_ZONES = ("controllable_noisy", "controllable_deterministic", "corridor")  # controllable in both runs of a pair
+DISTANCE_MAIN_ZONE = "controllable_deterministic"
+N_GRID_EQUAL_VISITS = 8
+L1_VISIT_BINS = ((0, 0), (1, 2), (3, 5), (6, 10), (11, 30), (31, 100), (101, 300), (301, None))
+LOW_N, LOW_N_MIN_PAIRS = 10, 5
+GRID_SHAPE = (12, 12)
+
+
+def goal_state() -> int:
+    return int(e3_env.goal_state())
+
+
+def zone_mask(run: Run, zone: str) -> np.ndarray:
+    """The zone's states, the goal (terminal: no transition out of it) left out of the per-state analyses."""
+    m = run.zone_of_state == zone
+    m[goal_state()] = False
+    return m
+
+
+def _curve(n: np.ndarray, I: np.ndarray, c: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """One state's (log10 n, I_s, log10 checkpoint) over the measured checkpoints, n >= 1 only, ties in n averaged."""
+    ok = (n >= 1) & np.isfinite(I)
+    x, y, t = np.log10(n[ok].astype(float)), I[ok], np.log10(c[ok].astype(float))
+    ux = np.unique(x)
+    return ux, np.array([y[x == u].mean() for u in ux]), np.array([t[x == u].mean() for u in ux])
+
+
+def visit_series(run: Run) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Measured checkpoints, n(s) = min_a N[s, a] and I_s(s) at each: (K,), (K, S), (K, S)."""
+    cs = np.array(sorted(run.measure_dirs))
+    n = np.array([min_action_visits(run.counts[f"N_{c}"]) for c in cs])
+    I = np.array([run.measure(int(c))[1]["real_I_s"] for c in cs])
+    return cs, n, I
+
+
+def equal_visits_pair(exp: Run, ref: Run, n_grid: int = N_GRID_EQUAL_VISITS) -> dict:
+    """D3: per state of the controllable zones, I_s interpolated linearly in log10 n between the measured checkpoints, in
+    each run; on n_grid log-spaced visit counts within the range both runs cover, d(s, n) = I_env(s, n) - I_ref(s, n)
+    and dtau(s, n) = log10 c_env(s, n) - log10 c_ref(s, n), the training time (checkpoint, interpolated the same way)
+    at which each run reached n. Per zone, least squares d = b0 + b1 dtau + b2 (log10 n - mean): b0 is b at equal visits
+    and equal training time. The points of one state are not independent: no standard error here, the seeds are the
+    replicates."""
+    ce, ne, Ie = visit_series(exp)
+    cr, nr, Ir = visit_series(ref)
+    out = {}
+    for zone in CONTROLLABLE_ZONES:
+        rows, excluded = [], 0
+        for s in np.flatnonzero(zone_mask(exp, zone)):
+            xe, ye, te = _curve(ne[:, s], Ie[:, s], ce)
+            xr, yr, tr = _curve(nr[:, s], Ir[:, s], cr)
+            if xe.size < 2 or xr.size < 2 or not min(xe[-1], xr[-1]) > max(xe[0], xr[0]):
+                excluded += 1
+                continue
+            g = np.linspace(max(xe[0], xr[0]), min(xe[-1], xr[-1]), n_grid)
+            d = np.interp(g, xe, ye) - np.interp(g, xr, yr)
+            dtau = np.interp(g, xe, te) - np.interp(g, xr, tr)
+            rows += [(s, gi, di, ti) for gi, di, ti in zip(g, d, dtau)]
+        z = {"n_states": len({r[0] for r in rows}), "n_states_excluded": excluded, "n_points": len(rows),
+             "b0": float("nan"), "b1_dtau": float("nan"), "b2_logn": float("nan"), "mean_d": float("nan")}
+        if len(rows) >= 4:
+            arr = np.array(rows, dtype=float)
+            X = np.column_stack([np.ones(len(arr)), arr[:, 3], arr[:, 1] - arr[:, 1].mean()])
+            beta, *_ = np.linalg.lstsq(X, arr[:, 2], rcond=None)
+            z.update(b0=float(beta[0]), b1_dtau=float(beta[1]), b2_logn=float(beta[2]), mean_d=float(arr[:, 2].mean()),
+                     log10_n_range=[float(arr[:, 1].min()), float(arr[:, 1].max())])
+        out[zone] = z
+    return out
+
+
+def distance_to_uncontrollable(exp: Run) -> np.ndarray:
+    """delta(s): torus (4-neighbour, Manhattan) distance from s to the nearest state of an uncontrollable zone of the
+    experimental environment (its own true kernel); the same geometry serves the reference's states."""
+    from helplessness.measures.rsa import torus_distances
+
+    pos = np.array([divmod(s, GRID_SHAPE[1]) for s in range(GRID_SHAPE[0] * GRID_SHAPE[1])])
+    d = torus_distances(pos, GRID_SHAPE)
+    unc = ~exp.truth["controllable"]
+    unc[goal_state()] = False  # the goal is absorbing (I_true 0), not an uncontrollable zone
+    return d[:, unc].min(axis=1)
+
+
+def _spearman(x: np.ndarray, y: np.ndarray) -> float:
+    from scipy.stats import spearmanr
+
+    ok = np.isfinite(x) & np.isfinite(y)
+    if ok.sum() < 3 or np.unique(x[ok]).size < 2 or np.unique(y[ok]).size < 2:
+        return float("nan")
+    return float(spearmanr(x[ok], y[ok]).statistic)
+
+
+def distance_profile_pair(exp: Run, ref: Run, c: int, delta: np.ndarray) -> dict:
+    """D5 at checkpoint c: per controllable zone, Spearman rho of |b(s)| = |I_env(s) - I_ref(s)| with delta(s), and of
+    each run's |I_s(s) - I_true(s)| with delta(s); mean |b| by distance."""
+    Ie, Ir = exp.measure(c)[1]["real_I_s"], ref.measure(c)[1]["real_I_s"]
+    out = {}
+    for zone in CONTROLLABLE_ZONES:
+        m = zone_mask(exp, zone)
+        b = np.abs(Ie[m] - Ir[m])
+        e_env, e_ref = np.abs(Ie[m] - exp.truth["I_true"][m]), np.abs(Ir[m] - ref.truth["I_true"][m])
+        dm = delta[m]
+        out[zone] = {"rho_abs_b": _spearman(dm, b), "rho_env_error": _spearman(dm, e_env), "rho_ref_error": _spearman(dm, e_ref),
+                     "mean_abs_b_by_distance": {int(k): float(b[dm == k].mean()) for k in np.unique(dm)},
+                     "n_states_by_distance": {int(k): int((dm == k).sum()) for k in np.unique(dm)}}
+    return out
+
+
+def _bin_label(lo: int, hi: int | None) -> str:
+    return f"{lo}+" if hi is None else (f"{lo}" if lo == hi else f"{lo}-{hi}")
+
+
+def generalisation_run(run: Run, c: int) -> dict:
+    """D6 at checkpoint c, one run: per (s, a) pair, L1 of the world model's kernel (real contexts, pooled) and of the
+    twin's (T_hat at c) against the run's true kernel, by n(s, a) = N[s, a] at c; per zone and visit bin, the medians and
+    the median of the paired difference L1_WM - L1_twin; and over the pairs with n <= LOW_N, the median difference."""
+    if run.twin is None or f"T_hat_{c}" not in run.twin:
+        return {"available": False}
+    P = run.P_true
+    l1_wm = np.abs(run.measure(c)[1]["real_p_hat"] - P).sum(-1)
+    l1_tw = np.abs(run.twin[f"T_hat_{c}"].astype(float) - P).sum(-1)
+    n = run.counts[f"N_{c}"].sum(-1)
+    out = {"available": True, "zones": {}}
+    for zone in ZONES:
+        m = zone_mask(run, zone)[:, None] & np.isfinite(l1_wm)
+        z = {"bins": {}}
+        for lo, hi in L1_VISIT_BINS:
+            sel = m & (n >= lo) & ((n <= hi) if hi is not None else True)
+            k = _bin_label(lo, hi)
+            z["bins"][k] = {"n_pairs": int(sel.sum()),
+                            **({"l1_wm": float(np.median(l1_wm[sel])), "l1_twin": float(np.median(l1_tw[sel])),
+                                "diff": float(np.median(l1_wm[sel] - l1_tw[sel]))} if sel.any() else {})}
+        low = m & (n <= LOW_N)
+        z["low_n"] = {"n_pairs": int(low.sum()), "diff": float(np.median(l1_wm[low] - l1_tw[low])) if low.sum() >= LOW_N_MIN_PAIRS else float("nan")}
+        out["zones"][zone] = z
+    return out
+
+
+def generalisation_verdict(diffs: list[float]) -> str:
+    """D6's rule over the seeds' median differences at low n (one condition, one zone, one checkpoint)."""
+    d = np.asarray(diffs, dtype=float)
+    if d.size == 0 or not np.isfinite(d).all():
+        return "not testable (fewer than 5 pairs with n <= 10 in some run)"
+    if (d < 0).all():
+        return "generalises (L1_WM < L1_twin at low n in every seed)"
+    if (d >= 0).all():
+        return "does not generalise (L1_WM >= L1_twin at low n in every seed)"
+    return "mixed"
+
+
+def seeds_ci(values: list[float]) -> dict:
+    """Mean over the seeds and its 95 % Student-t interval; with the bound of a null result (the largest |end|)."""
+    v = np.asarray([x for x in values if x is not None and np.isfinite(x)], dtype=float)
+    if v.size == 0:
+        return {"n": 0, "mean": float("nan"), "ci95": [float("nan"), float("nan")], "bound": float("nan"), "values": []}
+    ci = aggregate_b.mean_ci95(v)
+    lo, hi = ci["ci95"]
+    return {**ci, "bound": float(max(abs(lo), abs(hi))) if np.isfinite(lo) else float("nan"), "values": v.tolist(),
+            "excludes_0": bool(np.isfinite(lo) and (lo > 0 or hi < 0))}
+
+
+def distance_shape_verdict(rho_b: dict, rho_env: dict, rho_ref: dict) -> str:
+    """D5's rule at one checkpoint, from the seeds' summaries (seeds_ci) of the three Spearman rhos."""
+    if not all(np.isfinite(x["ci95"][0]) for x in (rho_b, rho_env, rho_ref)):
+        return "undetermined (fewer than 2 seeds with a defined rho)"
+    if rho_b["ci95"][1] < 0 and rho_env["ci95"][1] < 0 and rho_ref["ci95"][0] <= 0 <= rho_ref["ci95"][1]:
+        return "propagation shape present"
+    if rho_b["ci95"][0] <= 0 <= rho_b["ci95"][1]:
+        return "absent (rho(abs b, distance) compatible with 0)"
+    return "undetermined"
+
+
+def propagation(pairs: list[tuple[Run, Run]]) -> dict:
+    """D2 to D6 over the campaign's pairs: per pair, then over the seeds at the checkpoints measured in every pair."""
+    per_pair, common = [], None
+    for exp, ref in pairs:
+        cs = sorted(set(exp.measure_dirs) & set(ref.measure_dirs))
+        common = set(cs) if common is None else common & set(cs)
+        delta = distance_to_uncontrollable(exp)
+        per_pair.append({"seed": exp.seed, "zone_class": exp.zone_class, "checkpoints": cs,
+                         "equal_visits": equal_visits_pair(exp, ref),
+                         "distance": {c: distance_profile_pair(exp, ref, c, delta) for c in cs},
+                         "generalisation": {c: {"experimental": generalisation_run(exp, c), "reference": generalisation_run(ref, c)} for c in cs},
+                         "b_by_state": {c: (exp.measure(c)[1]["real_I_s"] - ref.measure(c)[1]["real_I_s"]).tolist() for c in cs},
+                         "distance_to_uncontrollable": delta.tolist()})
+    common = sorted(common or [])
+    out = {"pairs": per_pair, "common_checkpoints": common, "seeds": {}}
+    s = out["seeds"]
+    s["equal_visits_b0"] = {z: seeds_ci([p["equal_visits"][z]["b0"] for p in per_pair]) for z in CONTROLLABLE_ZONES}
+    s["equal_visits_b1_dtau"] = {z: seeds_ci([p["equal_visits"][z]["b1_dtau"] for p in per_pair]) for z in CONTROLLABLE_ZONES}
+    s["distance"] = {}
+    for c in common:
+        s["distance"][c] = {}
+        for z in CONTROLLABLE_ZONES:
+            rb, re_, rr = (seeds_ci([p["distance"][c][z][k] for p in per_pair]) for k in ("rho_abs_b", "rho_env_error", "rho_ref_error"))
+            s["distance"][c][z] = {"rho_abs_b": rb, "rho_env_error": re_, "rho_ref_error": rr, "verdict": distance_shape_verdict(rb, re_, rr)}
+    s["generalisation"] = {}
+    for c in common:
+        s["generalisation"][c] = {}
+        for cond in ("experimental", "reference"):
+            g = [p["generalisation"][c][cond] for p in per_pair]
+            if not all(x["available"] for x in g):
+                s["generalisation"][c][cond] = {z: "twin kernels not available" for z in ZONES}
+                continue
+            s["generalisation"][c][cond] = {z: {"verdict": generalisation_verdict([x["zones"][z]["low_n"]["diff"] for x in g]),
+                                                "diffs": [x["zones"][z]["low_n"]["diff"] for x in g],
+                                                "n_pairs": [x["zones"][z]["low_n"]["n_pairs"] for x in g]} for z in ZONES}
+    return out
+
+
+def seeds_over_checkpoints(secondary: list[dict]) -> dict:
+    """D2 and D4 over the seeds at the checkpoints measured in every pair: b by zone (I_s; the corridor from the
+    per-state values) and alpha_env - alpha_ref, mean and 95 % interval; the expectation's reading at the budget."""
+    common = sorted(set.intersection(*[{c["env_step"] for c in p["checkpoints"]} for p in secondary])) if secondary else []
+    out = {"common_checkpoints": common, "b_I_s": {}, "alpha_difference": {}}
+    for c in common:
+        rows = [next(x for x in p["checkpoints"] if x["env_step"] == c) for p in secondary]
+        out["b_I_s"][c] = {z: seeds_ci([r["b_I_s_all"][z] for r in rows]) for z in ZONES}
+        out["alpha_difference"][c] = {z: seeds_ci([r["alpha"][z]["difference"] for r in rows]) for z in ZONES}
+    if BUDGET_ENV_STEPS in common:
+        exp = {}
+        for z in CONTROLLABLE_ZONES:
+            b, a = out["b_I_s"][BUDGET_ENV_STEPS][z], out["alpha_difference"][BUDGET_ENV_STEPS].get(z)
+            exp[z] = {"b": "compatible with 0" if not b["excludes_0"] else "NOT compatible with 0", "b_bound": b["bound"],
+                      "alpha_difference": ("not defined" if a is None else "compatible with 0" if not a["excludes_0"] else "NOT compatible with 0"),
+                      "alpha_bound": None if a is None else a["bound"],
+                      "early_checkpoints_excluding_0": [c for c in common if c < BUDGET_ENV_STEPS and out["b_I_s"][c][z]["excludes_0"]]}
+        out["expectation_at_budget"] = exp
+    return out
+
+
+def analyse(paths: list[Path], measures_root: Path | None = None, e30_control: dict | None = None,
+            pairs_out: list | None = None) -> dict:
+    """Main, secondary and propagation analyses; pairs_out, if a list, receives the loaded (experimental, reference)
+    Run pairs (for the report's other stages)."""
     runs = [Run(p, measures_root) for p in paths]
+    pair_runs: list[tuple[Run, Run]] = []
     pairs: dict[tuple, dict] = {}
     for r in runs:
         slot = pairs.setdefault((r.config, r.seed), {})
@@ -177,7 +457,13 @@ def analyse(paths: list[Path], measures_root: Path | None = None, e30_control: d
         common = sorted(set(exp.measure_dirs) & set(ref.measure_dirs))
         out["secondary"].append({"config": config, "seed": seed, "zone_class": exp.zone_class,
                                  "checkpoints": [checkpoint_pair(exp, ref, c) for c in common]})
+        pair_runs.append((exp, ref))
+    if pairs_out is not None:
+        pairs_out.extend(pair_runs)
+    out["propagation"] = propagation(pair_runs) if pair_runs else None
+    out["over_seeds"] = seeds_over_checkpoints(out["secondary"])
     return out
+
 
 
 def _f(x) -> str:

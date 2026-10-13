@@ -61,7 +61,8 @@ def test_campaign_analysis_on_a_tiny_pair(tmp_path):
     (pair,) = res["secondary"]
     assert pair["checkpoints"] and pair["checkpoints"][-1]["env_step"] == 300
     for c in pair["checkpoints"]:
-        assert set(c["b_I_s"]) == set(ca.CATEGORIES) and set(c["alpha"]) == set(ca.CATEGORIES)
+        assert set(c["b_I_s"]) == set(ca.CATEGORIES) and set(c["alpha"]) == set(ca.ZONES) == set(c["b_I_s_all"])  # corridor: (31)
+        assert res["propagation"] is not None and "over_seeds" in res
         for cat in ca.CATEGORIES:
             d = c["difference_of_differences"][cat]
             assert np.isclose(d["did"], d["wm_minus_twin_env"] - d["wm_minus_twin_ref"], equal_nan=True)

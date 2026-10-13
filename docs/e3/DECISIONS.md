@@ -3928,3 +3928,140 @@ On the pilot's archives (x1), CN, did = [I_WM - I_twin]_env - [I_WM - I_twin]_re
   4 runs ~42 h; the pilot jobs ~6 h: 8-9 full measurements and 14 goal diagnostics each).
 - Handoff: three archives per run, new or pilot (records and final measures, checkpoint measures, weights and replay):
   ~52 MB per run, ~420 MB in total, every archive under 90 MB.
+
+## 2026-10-13 (31) -- the analysis pipeline of gpu_campaign: definitions, expected shapes and rules recorded before any campaign value
+
+Recorded while gpu_campaign runs: **handoff/gpu_campaign is not in this repository at this commit and no value of the
+campaign has been read.** The pipeline was tested on the pilot's archives (gpu_pilot_cl runs, gpu_pilot_remeasure
+measures at x1, twin kernels recomputed by run_agent.twin_at_checkpoint) and on a tiny environment / reference pair;
+only that the code runs was checked, no value was read for this entry. Everything below is descriptive (N = 4); a null
+result is reported as a bound (the largest end of the 95 % interval), never as an absence. Items marked **[to validate]**
+are the implementer's proposals on what is measured or how: they stand unless the user changes them before the data.
+
+One command (`campaign_report.py --handoff handoff/gpu_campaign`): integrity, extraction, analyses, RSA, figures,
+tables, and a results section in English (RESULTS_SECTION.md; `--append-report docs/E3_worldmodel_4zones.md` appends
+it between markers, refused outside the handoff mode). `--runs-dir` (development) marks every output "not the
+campaign's handoff".
+
+### A. Integrity (campaign_integrity.py; engineering)
+
+For each of the 8 jobs (seeds 1, 6 new; seeds 0, 5 the pilot measured as campaign seeds): started, exit code 0,
+meta.yaml status done, results.json, 300,000 environment steps; its three archives; inside them: the code hash
+d84dec84... (RUN_GPU.md) and, for the pilot jobs, the pilot's training code 3a71c745... ((30)); checkpoints.jsonl
+covering E2's grid to 300,000 with the campaign's goal diagnostics (goal_draws, Q gaps, V by zone, separation) at every
+checkpoint; counts.npz and twin.npz at every checkpoint; the full measures at every checkpoint after the switch and only
+there; the weights at every checkpoint, agent_final.pt and replay_final.npz; both conditions of each seed. **Any failure
+refuses the whole handoff** (nothing extracted, nothing analysed). Interruptions (meta.yaml resumed_at, "RESUMING" in the
+log, a `## Interruptions` section of handoff.md) are reported, not refused (a resume with the user's agreement is
+allowed, RUN_GPU.md 4b). The pilot jobs' final replay at 290,000 is flagged in the integrity table.
+
+### B. Learning and behaviour (campaign_learning.py; descriptive, no rule)
+
+Per run, zone (UD, CN, UN, CD, corridor) and checkpoint. At every checkpoint: the twin's L1 against P (mean over the
+zone's (s, a)); success over the last 100 episodes and over the interval since the previous checkpoint (95 % Wilson),
+episode length (last 100); the agent's Delta under P by zone (real contexts; the four zones as recorded -- the corridor
+is not recorded by the run); the prior's mass on the goal for the 4 pairs into it and their median (10,000 draws); the Q
+gap (into the goal - best other) at the 4 states next to the goal against the tolerance 0.0751; V by zone. At every
+measured checkpoint: C-a, C-c, C-b by zone (aggregate_b's definitions, the corridor added); the prior's mean mass on the
+true successor over the zone's deterministic (s, a) pairs (real-context kernel).
+**The goal state is left out of every per-state analysis and of the corridor's zone mean** (terminal: no transition out
+of it, I_true = 0); the four quadrant zones keep the measures' own zone means.
+
+### C. Measurement error in the noisy zones (descriptive)
+
+excess = I_s - I_true (zone means, I_true from the run's own kernel) in CN and UN, per run and measured checkpoint; over
+the seeds, at the checkpoints measured in every pair: mean and sd of the excess per condition, mean and sd of b, and
+**the resolution an extension to the noisy zones would have, defined as the half-width of b's 95 % Student-t interval
+over the N seeds, t(0.975, N - 1) sd(b) / sqrt(N)** [to validate]; the hybrid-code rule's verdict of (29).
+
+### D. Propagation (campaign_analysis.py)
+
+D1, D2: the main analysis of (29) and b by zone at every checkpoint, unchanged; the corridor added (its states' mean).
+Over the seeds, at the checkpoints measured in every pair: mean and 95 % t interval of b and of alpha_env - alpha_ref.
+**Only alpha_env - alpha_ref is interpreted as a propagation; alpha itself is not.**
+
+D3, b at equal visits [to validate]. States of the zones controllable in both runs (CN, CD, corridor; goal out). For each
+run and state, over its measured checkpoints c: n(s, c) = min_a N_c[s, a] and I_s(s, c); I_s and log10 c interpolated
+linearly in log10 n (n >= 1; checkpoints with the same n averaged). On 8 log-spaced n within the range both runs cover
+(a state without overlap is excluded and counted): d(s, n) = I_env(s, n) - I_ref(s, n), dtau(s, n) = log10 c_env(s, n) -
+log10 c_ref(s, n) (the training time at which each run reached n visits). Per pair and zone, least squares
+d = b0 + b1 dtau + b2 (log10 n - mean): **b0 is b at equal visits and equal training time**, b1 the part due to the
+difference in training time. The points of one state are not independent: the seeds are the replicates (mean and 95 % t
+interval of b0, b1 over the 4 seeds).
+
+D5, b against the position. delta(s): torus (Manhattan) distance from s to the nearest state of an uncontrollable zone of
+the environment (UD or UN), the same geometry for the reference's states. Per pair and checkpoint, over a zone's states:
+Spearman rho of |b(s)| with delta(s), and of each run's |I_s(s) - I_true(s)| with delta(s); mean |b| by distance. Main
+zone CD; CN and corridor secondary. **Expected shape of a propagation by position (recorded before): |b| larger near
+the boundary, decreasing with the distance, in the environment only, rather early after the switch.** Rule at a
+checkpoint, over the seeds [thresholds to validate]: shape **present** if the 95 % t intervals of rho(|b|, delta) and of
+rho(env error, delta) both lie below 0 while that of rho(ref error, delta) contains 0; **absent** if the interval of
+rho(|b|, delta) contains 0; otherwise undetermined. "Rather early" is read from the checkpoints where it is present.
+
+D6, useful generalisation [to validate]. **"Per context" is read as per (s, a) pair, the world model's kernel pooled
+over the state's real contexts** (the per-context kernels are not kept: light arrays, (29); they could be recomputed on a
+GPU from the weights). Per run and measured checkpoint, L1 of the world model's kernel and of the twin's T_hat_c against
+P, by n(s, a) = N_c[s, a] (bins 0, 1-2, 3-5, 6-10, 11-30, 31-100, 101-300, 301+): medians and the median paired
+difference L1_WM - L1_twin. Rule per zone, condition and checkpoint, on the median difference over the pairs with
+n <= 10: **the model generalises if it is negative in every seed**, does not if >= 0 in every seed, mixed otherwise; not
+testable if a run has fewer than 5 such pairs (expected at the late checkpoints).
+
+**Expectation (recorded before the computation):** in the controllable zones, b ~ 0 and alpha_env - alpha_ref ~ 0 at
+the budget ("compatible with 0": the 95 % t interval over the seeds contains 0; the bound is then reported); a
+transient early effect is possible (the earlier checkpoints whose interval excludes 0 are listed).
+
+### E. Convergence of the deterministic zones: the budget of the next runs (rule fixed before any computation)
+
+Candidates: the checkpoints measured in all 8 runs, before 300,000. A candidate c is retained if, in every run:
+(a) **the agent has finished learning ((27) a), at c and at every later candidate**: median goal mass >= 0.9; the success
+over the interval after the checkpoint compatible with the last interval's (251,189 -> 300,000; 95 % Wilson intervals
+overlap); the agent's Delta < 1.0 in every zone;
+(b) **I_s of UD, CD and the corridor does not move beyond the measurement noise**: for each zone Z, every difference
+between consecutive candidates from c to 300,000, and the cumulative difference I_s(300,000) - I_s(c), is below
+T_Z = k sqrt(2) sigma_Z.
+- sigma_Z: the sd of a zone's I_s due to the contexts at x4 ((28) task a, the pilot's final weights): **one value per
+  zone, the root mean square over the 4 pilot runs** -- UD 0.0020, CD 0.0021 bit -- for all 8 runs (the per-run values
+  have ~25 % relative error and the new runs were not measured). **The corridor was never measured: CD's sigma scaled
+  by sqrt(25 / 43), its 43 non-terminal states against CD's 25 (sd of a zone mean ~ 1 / sqrt(states)): 0.0016 bit**
+  [to validate: an assumption].
+- **Correction for multiple comparisons (Bonferroni; the criterion of (27) had none):** k = Phi^-1(1 - 0.05 / (2 m)),
+  m = 8 runs x 3 zones x the number of differences tested for c (consecutive ones plus the cumulative one). Under no
+  change and Gaussian noise of sd sigma_Z per measurement, the probability that some difference exceeds its threshold
+  is at most 5 %. (With 2 x sd and no correction, (27)'s threshold was 1.41 sd of a difference: ~16 % false "change" per
+  comparison, so a stable model failed it almost surely.) The cumulative difference guards against a slow drift that
+  passes every step.
+The first retained candidate is the budget of the following runs (deterministic zones only); **none: the budget stays at
+300,000.** Flagged: the pilot's 300,000 measure rests on the replay at 290,000.
+
+### F. RSA of the latent (src/helplessness/measures/rsa.py, generic; experiments/E3_worldmodel_4zones/rsa_latents.py)
+
+Generic module, arrays in and out, no environment or agent import (CLAUDE.md), for E3 and the next steps (two-zone
+models on permuted themes and positions; links between the latent's organisation and behavioural phenotypes).
+- Contexts: the real contexts of the replay as of the checkpoint (window 64, burn-in 8, **200 per state** -- the measures'
+  x4 protocol, at no extra cost: the windows' unroll dominates), own measurement slot 16 keyed by the checkpoint; per
+  context h_t and the posterior probabilities q(z_t | h_t, x_t).
+- Points: every state but the goal, and every zone (UD, CN, UN, CD, corridor: the mean of its states' means; position:
+  the zone's circular centre on the torus).
+- Distances: L2 on the mean h; **Jensen-Shannon on z = the sum over the 8 categorical variables of the JS divergence
+  between the points' mean distributions (bits)** [to validate].
+- Theoretical matrices: torus Manhattan distance (position); different theme (zone background colour); different
+  controllability; different stochasticity (both from the run's own true kernel). The zone is not a predictor (in E3
+  its matrix is the theme's), only the within-group label of the ratios; in the reference controllability is constant
+  (left out of its regression and reported).
+- Regression per latent, checkpoint and run: z-scored off-diagonal entries, standardised weights, R^2, each matrix's
+  unique share (R^2 lost without it); the split-half reliability of the model matrix (Spearman-Brown), the ceiling of R^2.
+  At the zone level (5 points, 10 pairs) the regression is reported, not interpreted.
+- Scalars: the confusion ratios -- mean distance between states of controllable and uncontrollable zones over the mean
+  distance between distinct states of one zone (the four quadrant zones; also CD vs UD and CN vs UN); in the reference
+  the same zones by appearance (a control: appearance only). Over the seeds: env, ref and env - ref.
+- Visualisation: classical MDS of the states' mean latents, coloured by zone, theme and controllability.
+- Reading: descriptive in E3, no rule.
+- Cost on this CPU (4 threads, win64 network, measured on gpu_e30b_win64 seed 0's final weights with its 100,000-step
+  replay): ~18 s per checkpoint at 200 contexts per state (17 s at 50).
+
+### G. Engineering (implementer)
+
+- `tests/e3/test_e3_run_gpu_doc.py`: the equality between RUN_GPU.md's hash and the checkout is no longer required
+  while RUN_GPU.md records the launched gpu_campaign's code (d84dec84...): the analysis code added since changes the
+  checkout's hash, and RUN_GPU.md stays the record of what runs. To be restored with the next batch's runbook.
+- campaign_analysis: alpha and b now include the corridor (b_I_s_all); the measures are loaded once per checkpoint.
