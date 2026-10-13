@@ -4092,3 +4092,6 @@ Still before any value of the campaign (handoff/gpu_campaign not in the reposito
    records the launched gpu_campaign's code (d84dec84...), the equality between its hash and the checkout's is not
    required. **Instruction: restore the requirement with the next batch's runbook** (the next RUN_GPU.md states the
    hash of the code it launches, and the test checks it again).
+   The complete test suite (run after this entry: 923 passed, 1 failed) showed a second instance of the same
+   requirement, tests/e3/test_e3_preflight_measures.py::test_code_hash_is_run_gpu_md_s: the same rule applied to it
+   (skipped while RUN_GPU.md states d84dec84...), to be restored with the first.
