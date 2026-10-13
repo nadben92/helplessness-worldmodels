@@ -92,6 +92,18 @@ def rsa_over_seeds(rsa_out: dict) -> dict:
                 e = [q(by[(s, "experimental")][c], kind) for s in seeds]
                 r = [q(by[(s, "reference")][c], kind) for s in seeds]
                 out[c][lat][kind] = {"env": ca.seeds_ci(e), "ref": ca.seeds_ci(r), "difference": ca.seeds_ci([a - b for a, b in zip(e, r)])}
+            # the partition of the explained variance and the predictors' collinearity, per condition (means over seeds)
+            out[c][lat]["partition"] = {}
+            for cond in ("experimental", "reference"):
+                regs = [by[(s, cond)][c]["states"]["latents"][lat]["regression"] for s in seeds]
+                names = sorted({k for g in regs for k in g.get("unique_r2", {})})
+                out[c][lat]["partition"][cond] = {
+                    "unique": {k: float(np.mean([g["unique_r2"].get(k, np.nan) for g in regs])) for k in names},
+                    "shared": float(np.mean([g["variance_partition"]["shared"] for g in regs])),
+                    "vif": {k: float(np.max([g["vif"].get(k, np.nan) for g in regs])) for k in names},
+                    "correlations": {k: float(np.mean([g["predictor_correlations"][k] for g in regs]))
+                                     for k in sorted({k for g in regs for k in g.get("predictor_correlations", {})})},
+                    "removed": sorted({k for s in seeds for k in by[(s, cond)][c]["states"].get("removed_predictors", {})})}
     return out
 
 
@@ -132,6 +144,8 @@ def write_tables(res: dict, lr: dict, rsa_seeds: dict, tables: Path) -> None:
         for c, lats in rsa_seeds.items():
             for lat, qs in lats.items():
                 for k, v in qs.items():
+                    if k == "partition":  # in the section and analysis.json
+                        continue
                     w.writerow([c, lat, k, v["env"]["mean"], v["ref"]["mean"], v["difference"]["mean"], *v["difference"]["ci95"]])
 
 
@@ -186,14 +200,15 @@ def section(res: dict, lr: dict, rsa_out: dict | None, rsa_seeds: dict, integrit
             L.append(f"| {ZONE_SHORT[z]} | {_ci(s['equal_visits_b0'][z])} | {_ci(s['equal_visits_b1_dtau'][z])} | {used} |")
     L += ["", f"**b against the distance to the nearest uncontrollable zone** (Spearman rho over the zone's states; main zone CD). "
           "Expected shape of a propagation by position, recorded before: |b| larger near the boundary, decreasing with the distance, "
-          "in the environment only, rather early after the switch.", "",
+          "in the environment only, rather early after the switch. The thresholds (95 % t intervals over 4 seeds) are descriptive.", "",
           "| checkpoint | zone | rho(abs b, distance) | rho(env error) | rho(ref error) | verdict |", "|---|---|---|---|---|---|"]
     for c, zs in s.get("distance", {}).items():
         for z in ca.CONTROLLABLE_ZONES:
             v = zs[z]
             L.append(f"| {c:,} | {ZONE_SHORT[z]}{' (main)' if z == ca.DISTANCE_MAIN_ZONE else ''} | {_ci(v['rho_abs_b'], 3)} | "
                      f"{_ci(v['rho_env_error'], 3)} | {_ci(v['rho_ref_error'], 3)} | {v['verdict']} |")
-    L += ["", "**Useful generalisation** (median L1_WM - L1_twin against P over the pairs with n <= 10; rule: negative in every seed):", "",
+    L += ["", "**Useful generalisation** (median L1_WM - L1_twin against P over the pairs with n <= 10; rule: negative in every seed). "
+          "Descriptive: \"negative in all 4 seeds\" is a sign test at p = 1/16 (one-sided).", "",
           "| checkpoint | condition | " + " | ".join(ZONE_SHORT[z] for z in ca.ZONES) + " |", "|---|---|" + "---|" * len(ca.ZONES)]
     for c, conds in s.get("generalisation", {}).items():
         for cond, zs in conds.items():
@@ -254,8 +269,23 @@ def section(res: dict, lr: dict, rsa_out: dict | None, rsa_seeds: dict, integrit
                     L.append(f"| {c:,} | {lat} | {_f(q['r2']['env']['mean'], 3)} / {_f(q['r2']['ref']['mean'], 3)} | {_f(q['unique_controllability']['env']['mean'], 3)} | "
                              f"{_f(q['controllable_vs_uncontrollable']['env']['mean'], 3)} / {_f(q['controllable_vs_uncontrollable']['ref']['mean'], 3)}, "
                              f"{_ci(q['controllable_vs_uncontrollable']['difference'], 3)} | {_ci(q['CD_vs_UD']['difference'], 3)} | {_ci(q['CN_vs_UN']['difference'], 3)} |")
-            L += ["", "In the reference every zone is controllable: its controllability matrix is constant (left out of its regression), and its "
-                  "confusion ratios contrast appearances only (the control)."]
+            L += ["", "**Partition of the explained variance and collinearity of the predictors** (state level; unique share of each "
+                  "theoretical matrix, shared share, largest variance inflation factor over the seeds, mean correlations between "
+                  "predictors). No regression weight is read in isolation. In E3 theme, position and zone are confounded (each theme "
+                  "occupies one fixed region of the torus): E3 cannot separate theme from position -- the object of the next step "
+                  "(two-zone models on permuted themes and positions).", "",
+                  "| checkpoint | latent | run | unique shares | shared | VIF (max) | predictor correlations | removed (constant) |",
+                  "|---|---|---|---|---|---|---|---|"]
+            for c, lats in rsa_seeds.items():
+                for lat, q in lats.items():
+                    for cond, pt in q["partition"].items():
+                        L.append(f"| {c:,} | {lat} | {cond} | " + ", ".join(f"{k} {_f(v, 3)}" for k, v in pt["unique"].items()) + f" | {_f(pt['shared'], 3)} | "
+                                 + ", ".join(f"{k} {v:.1f}" for k, v in pt["vif"].items()) + " | "
+                                 + ", ".join(f"{k} {_f(v, 2)}" for k, v in pt["correlations"].items()) + f" | {', '.join(pt['removed']) or '-'} |")
+            L += ["", "In the reference every zone is controllable: its controllability predictor is constant and removed explicitly "
+                  "before the regression (DECISIONS (32)); its confusion ratios contrast appearances only (the control). The distance on z "
+                  "is the sum over the 8 categorical variables of the per-variable Jensen-Shannon divergences, not the JS divergence of "
+                  "the joint distribution."]
     L += ["", "### Figures", ""] + [f"- `{p.relative_to(work).as_posix()}`" for p in figures]
     L += ["", f"Tables: `{(work / 'tables').as_posix()}`; full output: `{(work / 'analysis.json').as_posix()}`; per-pair detail: "
           f"`{(work / 'CAMPAIGN_ANALYSIS.md').as_posix()}`.", "", MARK_END]

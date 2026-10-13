@@ -4065,3 +4065,30 @@ models on permuted themes and positions; links between the latent's organisation
   while RUN_GPU.md records the launched gpu_campaign's code (d84dec84...): the analysis code added since changes the
   checkout's hash, and RUN_GPU.md stays the record of what runs. To be restored with the next batch's runbook.
 - campaign_analysis: alpha and b now include the corridor (b_I_s_all); the measures are loaded once per checkpoint.
+
+## 2026-10-13 (32) -- the [to validate] items of (31) decided (user); RSA collinearity; the runbook test (before any campaign value)
+
+Still before any value of the campaign (handoff/gpu_campaign not in the repository).
+
+1. **Corridor noise, sigma_CD x sqrt(25 / 43): accepted as an approximation** (the states' context noise assumed
+   independent). Recorded: it makes the convergence criterion of (31) E stricter (a smaller threshold), hence prudent.
+2. **One sigma per zone, the root mean square over the pilot's 4 runs: accepted.**
+3. **"Per context" = per (s, a) pair, the kernel pooled over the state's real contexts: accepted.**
+4. **The thresholds of (31) D5 and D6: accepted as descriptive.** The results section states that "negative in all 4
+   seeds" is equivalent to a (one-sided) sign test at p = 1/16.
+5. **JS on z = the sum over the 8 variables of the per-variable JS divergences: accepted**, stated in the section as
+   not the JS divergence of the joint distribution.
+6. **RSA predictors: accepted, with two additions (implemented):**
+   - the regression reports the predictors' collinearity (pairwise correlations of the theoretical matrices, variance
+     inflation factors) and a partition of the explained variance (each predictor's unique share, the shared share, the
+     unexplained share); the section reports them and **no weight is read in isolation**. **In E3 theme, position and
+     zone are confounded (each theme occupies one fixed region of the torus): E3 cannot separate theme from position
+     -- the object of the next step** (two-zone models on permuted themes and positions);
+   - in the reference runs the "same controllability" predictor is constant: **removed explicitly before the
+     regression** (rsa_latents.predictors_for, recorded as removed_predictors in each output), no longer left to the
+     regression's guard; tested (a constant predictor is reported and not estimated; the tiny reference run's outputs
+     have controllability removed and absent from its regression).
+7. **The relaxation of tests/e3/test_e3_run_gpu_doc.py ((31) G) is recorded as a user decision**: while RUN_GPU.md
+   records the launched gpu_campaign's code (d84dec84...), the equality between its hash and the checkout's is not
+   required. **Instruction: restore the requirement with the next batch's runbook** (the next RUN_GPU.md states the
+   hash of the code it launches, and the test checks it again).

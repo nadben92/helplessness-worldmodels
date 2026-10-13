@@ -117,3 +117,28 @@ def test_analyse_points_end_to_end():
         assert out["latents"][name]["ratios"]["c_vs_u"]["ratio"] > 3
         assert np.isnan(out["matrices"][f"{name}_mds"][0]).all()
     assert out["contexts_per_point"]["min"] == 30 and out["point_means"]["z"].shape == (36, 2, 4)
+
+
+def test_collinearity_and_variance_partition():
+    """Two nearly identical predictors: large VIFs, small unique shares, most of R^2 shared; the partition adds up."""
+    rng = np.random.default_rng(5)
+    pos = rng.integers(0, 12, size=(30, 2))
+    D = rsa.torus_distances(pos, (12, 12))
+    D2 = D + rng.normal(0, 0.05, D.shape)
+    D2 = 0.5 * (D2 + D2.T)
+    np.fill_diagonal(D2, 0.0)
+    other = rsa.label_distances(rng.integers(0, 3, size=30))
+    res = rsa.rsa_regression(D + 2 * other, {"a": D, "a_copy": D2, "other": other})
+    assert res["vif"]["a"] > 50 and res["vif"]["a_copy"] > 50 and res["vif"]["other"] < 2
+    assert res["predictor_correlations"]["a~a_copy"] > 0.99
+    part = res["variance_partition"]
+    assert np.isclose(sum(part["unique"].values()) + part["shared"] + part["unexplained"], 1.0)
+    assert part["unique"]["a"] < 0.01 and part["shared"] > 0.1
+
+
+def test_a_constant_predictor_is_reported_not_estimated():
+    pos = np.array([divmod(s, 6) for s in range(36)])
+    res = rsa.rsa_regression(rsa.torus_distances(pos, (6, 6)), {"position": rsa.torus_distances(pos, (6, 6)),
+                                                               "controllability": rsa.label_distances(["c"] * 36)})
+    assert res["constant_predictors"] == ["controllability"] and "controllability" not in res["vif"]
+    assert set(res["variance_partition"]["unique"]) == {"position"}

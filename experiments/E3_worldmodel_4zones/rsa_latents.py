@@ -63,7 +63,17 @@ def point_attributes(world, P: np.ndarray) -> dict:
             "position": np.array([divmod(s, GRID_SHAPE[1]) for s in range(run_mini.N_STATES)], dtype=float)}
 
 
-def zone_level(state_out: dict, attrs: dict, keep: np.ndarray) -> dict:
+def predictors_for(attrs: dict, keep: np.ndarray) -> tuple[list[str], list[str]]:
+    """The predictors of PREDICTORS that vary over the kept states, and those removed because constant -- in a reference
+    run every zone is controllable: its controllability predictor is removed explicitly (DECISIONS (32)), not left to the
+    regression's own guard."""
+    used, removed = [], []
+    for k in PREDICTORS:
+        (used if len(set(np.asarray(attrs[k])[keep])) > 1 else removed).append(k)
+    return used, removed
+
+
+def zone_level(state_out: dict, attrs: dict, keep: np.ndarray, predictors: list[str]) -> dict:
     """The zones as points: each latent the mean of its states' means (the goal left out), the position the zone's
     centre on the torus, the attributes those of its states (constant within a zone, checked)."""
     zones = sorted(set(np.asarray(attrs["zone"])[keep]))
@@ -82,7 +92,7 @@ def zone_level(state_out: dict, attrs: dict, keep: np.ndarray) -> dict:
         za[key] = vals
     pos = np.stack([rsa.torus_centre(attrs["position"][keep & (zarr == z)], GRID_SHAPE) for z in zones])
     out = rsa.analyse_point_means(latents, {k: za[k] for k in ("theme", "controllability", "stochasticity", "zone")}, pos, GRID_SHAPE,
-                                  ratios=None, predictors=list(PREDICTORS))
+                                  ratios=None, predictors=predictors)
     out["points"] = zones
     out["note"] = f"{len(zones)} points, {len(zones) * (len(zones) - 1) // 2} pairs: the regression is near saturation, reported, not interpreted"
     return out
@@ -102,10 +112,14 @@ def rsa_of_contexts(ctx: dict, world, P: np.ndarray) -> dict:
     attrs = point_attributes(world, P)
     keep = np.ones(run_mini.N_STATES, dtype=bool)
     keep[run_mini.e3_env.goal_state()] = False
+    used, removed = predictors_for(attrs, keep)
     state = rsa.analyse_points({"h": ctx["h"], "z": ctx["z"]}, ctx["states"], run_mini.N_STATES,
                                {k: attrs[k] for k in ("theme", "controllability", "stochasticity", "zone")}, attrs["position"],
-                               GRID_SHAPE, ctx["rng"], ratios=RATIOS, mask=keep, predictors=list(PREDICTORS))
-    return {"states": state, "zones": zone_level(state, attrs, keep), "attributes": {k: v for k, v in attrs.items() if k != "position"}}
+                               GRID_SHAPE, ctx["rng"], ratios=RATIOS, mask=keep, predictors=used)
+    state["removed_predictors"] = {k: "constant over the run's states" for k in removed}
+    zones = zone_level(state, attrs, keep, used)
+    zones["removed_predictors"] = state["removed_predictors"]
+    return {"states": state, "zones": zones, "attributes": {k: v for k, v in attrs.items() if k != "position"}}
 
 
 def load_checkpoint(run_dir: Path, c: int, cfg: dict, device) -> tuple:

@@ -176,6 +176,16 @@ def rsa_regression(model: np.ndarray, predictors: dict[str, np.ndarray], mask: n
         out["unique_r2"][nm] = out["r2"] - _r2(yz, np.delete(X, k, axis=1))
     if out["rank"] < len(names):
         out["collinear"] = True  # weights not unique: read the unique shares and correlations, not the weights
+    # collinearity of the predictors and the partition of the explained variance: no weight is read in isolation
+    out["predictor_correlations"] = {f"{a}~{b}": float(np.corrcoef(X[:, i], X[:, j])[0, 1])
+                                     for i, a in enumerate(names) for j, b in enumerate(names) if i < j}
+    out["vif"] = {}
+    for k, nm in enumerate(names):
+        r2_k = _r2(X[:, k] - X[:, k].mean(), np.delete(X, k, axis=1)) if len(names) > 1 else 0.0
+        out["vif"][nm] = float(1.0 / (1.0 - r2_k)) if r2_k < 1.0 - 1e-12 else float("inf")
+    unique_total = float(sum(out["unique_r2"].values()))
+    out["variance_partition"] = {"unique": dict(out["unique_r2"]), "shared": out["r2"] - unique_total,
+                                 "unexplained": 1.0 - out["r2"]}
     return out
 
 

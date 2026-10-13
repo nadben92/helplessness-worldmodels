@@ -256,6 +256,13 @@ def test_one_command_report_on_the_tiny_pair(tmp_path, tiny_rules):
     summary = json.loads(rsa_files[0].read_text())
     assert summary["slot"] == rsa_latents.SLOT_RSA and set(summary["states"]["latents"]) == {"h", "z"}
     assert summary["states"]["latents"]["h"]["regression"]["n_points"] <= 143
+    for f in rsa_files:  # the reference's controllability predictor: removed explicitly, absent from its regression
+        s = json.loads(f.read_text())
+        reg = s["states"]["latents"]["z"]["regression"]
+        if s["condition"] == "reference":
+            assert "controllability" in s["states"]["removed_predictors"] and "controllability" not in reg["unique_r2"]
+        assert {"vif", "variance_partition", "predictor_correlations"} <= set(reg)
+    assert "Partition of the explained variance" in text and "p = 1/16" in text and "not the JS divergence of the joint" in text
     appended = report.read_text(encoding="utf-8")
     assert appended.startswith("# E3\n\nexisting text") and appended.count(cr.MARK_START) == 1
     cr.append_report(report, text)  # a second append replaces the section
