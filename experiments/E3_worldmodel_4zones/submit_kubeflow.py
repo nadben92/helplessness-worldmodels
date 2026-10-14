@@ -16,6 +16,9 @@ import subprocess
 import sys
 import time
 
+from helplessness.cluster.kubeflow import runtime_patch as _runtime_patch
+from helplessness.cluster.kubeflow import supervise  # moved to the library on 2026-10-14, re-exported here
+
 IMAGE = "ghcr.io/ucl-arc-unified-ai/kubeflow-trainer-images-torch:v0.0.1"
 SCRIPT = "experiments/E3_worldmodel_4zones"
 SPEC_CONFIG = "configs/e3/gpu_e30.yaml"
@@ -264,76 +267,6 @@ def commands(phase: str, python: str, output: Path, resume: str = "", runs: list
             for name in select_runs(runs, batch)]
 
 
-def supervise(jobs: list[tuple[str, list[str]]], repo: Path, output: Path, max_parallel: int | None = None) -> int:
-    """Run the jobs, at most max_parallel at a time (default: all at once),
-    in order, starting the next queued job when one finishes; wait for all
-    of them and persist each exit code, including scientific failures. A
-    job never started (supervisor interrupted) is recorded with exit_code
-    null and not_started true."""
-    if max_parallel is not None and max_parallel < 1:
-        raise ValueError(f"max_parallel must be >= 1, got {max_parallel}")
-    limit = len(jobs) if max_parallel is None else max_parallel
-    output.mkdir(parents=True, exist_ok=False)
-    (output / "supervisor.json").write_text(json.dumps({"max_parallel": limit, "jobs": [name for name, _ in jobs]}, indent=2) + "\n",
-                                            encoding="utf-8")
-    processes: dict[str, subprocess.Popen] = {}
-    queue = list(jobs)
-    status: dict[str, dict] = {name: {"command": command, "log": str(output / f"{name}.log"), "exit_code": None}
-                               for name, command in jobs}
-
-    def save() -> None:
-        temporary = output / "status.json.tmp"
-        temporary.write_text(json.dumps(status, indent=2) + "\n", encoding="utf-8")
-        temporary.replace(output / "status.json")
-
-    def interrupted(signum: int, frame: object) -> None:
-        raise SystemExit(128 + signum)
-
-    def running() -> int:
-        return sum(status[name]["exit_code"] is None for name in processes)
-
-    previous = signal.signal(signal.SIGTERM, interrupted)
-    save()
-    try:
-        with ExitStack() as stack:
-            try:
-                while queue or running():
-                    while queue and running() < limit:
-                        name, command = queue.pop(0)
-                        log = stack.enter_context((output / f"{name}.log").open("w", encoding="utf-8"))
-                        processes[name] = subprocess.Popen(command, cwd=repo, stdout=log, stderr=subprocess.STDOUT)
-                        status[name].update(pid=processes[name].pid, started_at=datetime.now(timezone.utc).isoformat())
-                        save()
-                        print(f"started {name}: pid={processes[name].pid}, log={status[name]['log']} "
-                              f"({running()}/{limit} running, {len(queue)} queued)", flush=True)
-                    for name, process in processes.items():
-                        code = process.poll()
-                        if code is not None and status[name]["exit_code"] is None:
-                            status[name].update(exit_code=code, finished_at=datetime.now(timezone.utc).isoformat())
-                            save()
-                            print(f"finished {name}: exit_code={code}", flush=True)
-                    if queue or running():
-                        time.sleep(1)
-            finally:
-                for process in processes.values():
-                    if process.poll() is None:
-                        process.terminate()
-                for name, process in processes.items():
-                    try:
-                        code = process.wait(timeout=20)
-                    except subprocess.TimeoutExpired:
-                        process.kill()
-                        code = process.wait()
-                    if status[name]["exit_code"] is None:
-                        status[name].update(exit_code=code, finished_at=datetime.now(timezone.utc).isoformat())
-                for name, _ in queue:
-                    status[name]["not_started"] = True
-                save()
-    finally:
-        signal.signal(signal.SIGTERM, previous)
-    return int(any(item["exit_code"] != 0 for item in status.values()))
-
-
 def _run_e3(repo_dir: str, phase: str, output: str, token_dir: str, resume: str, runs: str = "", max_parallel: int = 0,
             batch: str = "gpu_e30", cpus: int = 3) -> None:
     """Serialized by CustomTrainer: imports and constants must be self-contained.
@@ -385,17 +318,9 @@ def _run_e3(repo_dir: str, phase: str, output: str, token_dir: str, resume: str,
 
 
 def runtime_patch(volume: str, mount: str, secret: str | None) -> dict:
-    """Build only the volume patch permitted by the cluster admission policy."""
-    volumes = [{"name": "scratch", "persistentVolumeClaim": {"claimName": volume}}]
-    mounts = [{"name": "scratch", "mountPath": mount}]
-    if secret:
-        volumes.append({"name": "wandb-token", "secret": {"secretName": secret}})
-        mounts.append({"name": "wandb-token", "mountPath": "/etc/e3-wandb", "readOnly": True})
-    return {"template": {"spec": {"replicatedJobs": [
-        {"name": "node", "template": {"spec": {"template": {"spec": {
-            "volumes": volumes, "containers": [{"name": "node", "volumeMounts": mounts}],
-        }}}}}
-    ]}}}
+    """Build only the volume patch permitted by the cluster admission policy
+    (helplessness.cluster.kubeflow.runtime_patch, with E3's token mount point)."""
+    return _runtime_patch(volume, mount, secret, token_mount="/etc/e3-wandb")
 
 
 def main(argv: list[str] | None = None) -> int:
