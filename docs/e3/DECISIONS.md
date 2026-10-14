@@ -4107,3 +4107,33 @@ corrected to follow it** (rsa_latents.RATIOS, attribute appearance_group; test: 
 non-empty in the reference too). Recorded as a correction made after seeing a result. The environment's ratio changes
 too (the corridor no longer counts in the controllable group). The CD vs UD and CN vs UN ratios, the regressions and every
 other quantity are unaffected. The pipeline is run again in full; only the second run is reported.
+
+## 2026-10-14 (34) -- reading correction on the early CN transient (user); seed 1 exploratory diagnostic: reading rule recorded before computing (post hoc)
+
+### Correction of the reading of the campaign report (user)
+
+The early transient in CN (b = +0.136 [+0.091, +0.180] at 39,811; alpha_env - alpha_ref negative at 25,119 and 39,811)
+was reported as "the transient early effect anticipated". **Corrected: it goes in the direction opposite to a
+propagation of uncontrollability (which would give b < 0); it does not correspond to the anticipated effect.** With b
+at equal visits ~ 0 in CN (b0 = -0.000 [-0.198, +0.197]), the transient is compatible with a visitation effect (CN more
+visited and better learnt early in the environment), not with an effect of the representation. The visits of CN per
+seed, environment and reference, at 25,119 and 39,811 are reported with this entry's diagnostic. No rule and no recorded
+result is modified.
+
+### Seed 1 (environment), CD: exploratory, post hoc diagnostic (read only)
+
+Recorded as **exploratory and post hoc**: seed 1's b(CD) (-0.27 at 300,000) has been seen. The reading rule (user;
+the operational thresholds in brackets are the implementer's, set here before computing anything of the diagnostic):
+- **"helplessness" signature**: in seed 1's CD, alpha (the action-independent component,
+  measures.kernel_probe.action_independent_weight) clearly larger than in seed 1's reference and than in the other
+  seeds' environments [at 300,000: alpha(seed 1 env, CD) minus the largest of alpha(seed 1 ref, CD) and alpha(seed s env,
+  CD) for s = 0, 5, 6 > 0.05], **and** errors concentrated near the boundary with an uncontrollable zone [Spearman rho,
+  over CD's 25 states at 300,000, between the error |I_s(s) - I_true(s)| and the distance delta(s) of (31) D5 <= -0.3];
+- **"failed learning" signature**: alpha comparable to the other seeds [the difference above <= 0.05], **and** errors
+  either spread without relation to the boundary [|rho(error, delta)| < 0.3] or concentrated on little-visited states
+  [rho(error, n(s)) <= -0.3, n(s) the visits of the state's least-visited action at 300,000];
+- otherwise: **undetermined**.
+Reported besides, without rule: alpha in CD per checkpoint (seed 1 env, the other seeds' environments, seed 1's
+reference); maps of I_s and of the prior's mass on the true successor per CD state; the same errors (and 1 - mass on the
+true successor) against delta and against n(s); CD's learning curve; seed 1's RSA confusion ratios.
+
