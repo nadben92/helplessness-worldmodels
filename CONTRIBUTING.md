@@ -40,9 +40,9 @@ plotting code, experiments/<name>/<NN_phase>/.
 Copy the shape of an existing one: `run.py` (or `run.py` + a couple of
 sibling scripts), a `config.yaml` with every parameter that varies, and a
 `README.md` stating what was tested and what came out (fill in the second
-half after running it, not before). See `docs/` for the one-file-per-
-experiment status tracker (E0..E6) -- update the relevant file when an
-experiment's status changes.
+half after running it, not before). See `docs/EXPERIMENTS.md`, the
+central tracker (E0..E7), and the one-file-per-experiment docs -- update
+both when an experiment's status changes.
 
 ## Adding an environment variant
 

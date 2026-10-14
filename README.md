@@ -14,24 +14,28 @@ a richer environment with heterogeneous, zone-level controllability, to a
 neural world model on the same environment rendered as pixels, ending in
 causal intervention on the world model's latent representation.
 
-See `CLAUDE.md` for the code-level conventions and invariants, and `docs/`
-for what each experiment (E0 through E6) tests and its current status.
+See `CLAUDE.md` for the code-level conventions and invariants, and
+`docs/EXPERIMENTS.md` for every experiment (E0 through E7): its status,
+objective, entry point and report.
 
 ## Experiments
 
-The seven experiments form one chain. Each step checks that the
-measurement still works before the next step changes the agent or the
-environment. Status as of 2026-09-28.
+The experiments form one chain. Each step checks that the measurement
+still works before the next step changes the agent or the environment.
+E0-E3 are finished and frozen; the project was reframed on 2026-10-14
+(E4-E7 below, deterministic dynamics only; the previous E4-E6 plan is in
+`docs/archive/plan_2026-09/`). Status as of 2026-10-14.
 
 | | Experiment | Agent | Environment | Status |
 |---|---|---|---|---|
 | E0 | Offline, 5x5 | tabular | 5x5 gridworld, global noise `p` | done |
 | E1 | Offline validation, 4 zones | tabular (offline) | 12x12 torus, 4 zones | done |
-| E2 | Online validation, 4 zones | tabular (online) | same as E1 | sweep done |
-| E3 | World model, 4 zones | RSSM world model | same as E1, rendered as pixels | in progress |
-| E4 | Generalization pilot | world model | 1 contrasted zone pair + derived control | not started |
-| E5 | Generalization campaign | world model | 2 contrasted pairs + 2 derived controls | not started |
-| E6 | Latent perturbations | E5's trained world models | E5's environments | not started |
+| E2 | Online validation, 4 zones | tabular (online) | same as E1 | done |
+| E3 | World model, 4 zones | RSSM world model | same as E1, rendered as pixels | done |
+| E4 | Generalisation gradient | world model | 2 deterministic zones (controllable / uncontrollable) + derived reference; zero-data probes | not started |
+| E5 | Manipulating the belief through training | world model | E4's, with varied training histories | not started |
+| E6 | Behavioural phenotypes and latent organisation | E4/E5's agents | fully controllable test battery | not started |
+| E7 | Direct manipulation of the latent | E4-E6's world models | E4's probes, E6's battery | not started |
 
 **E0 -- proof of concept (5x5 gridworld).** Does perceived
 controllability, read from the tabular agent's `T_hat`, causally drive
@@ -71,31 +75,30 @@ does the world model's learned dynamics encode controllability, measured
 as `I(a; z'|context)` in latent space, and does it match the tabular twin
 on the same data? The experiment also checks whether that code is driven
 by *position* or by *appearance* (the `alpha_app` index, from
-counterfactual re-renders). That diagnostic decides whether E4/E5 can run
-at all. Done so far: phases 0-3, the probabilities-phase fix for
-posterior collapse, a long CPU diagnostic run (`mini_long`), the theme
-sensitivity study, and a main measure taken in real contexts. The first
-GPU runs (E3-0) are prepared. The agent policy (phase 5) is not built
-yet. Details: `docs/E3_worldmodel_4zones.md`, `docs/e3/`.
+counterfactual re-renders). Finished: phases 0-5 (closed-loop agent
+included), the GPU batches and the final campaign, analysed. Details:
+`docs/E3_worldmodel_4zones.md` (results section), `paper/reports/e3_report.tex`,
+decisions in `docs/e3/DECISIONS.md`.
 
-**E4 -- generalization pilot.** A pilot for E5. One contrasted pair of
-zones (e.g. controllable vs uncontrollable, same appearance family) plus
-its control, derived automatically by `derive_control`. Does a
-controllability belief learned in one zone carry over to zones that
-*look* similar?
+**E4 -- generalisation gradient.** Two deterministic zones (one
+controllable, one uncontrollable, on a diagonal) and the derived reference.
+Zero-data probes on fully controllable test environments, changing the
+theme of one quadrant along RGB axes at three positions: is the belief of
+controllability carried by position, appearance, both, or neither?
+`docs/E4_generalization_gradient.md`.
 
-**E5 -- generalization campaign.** The full version: two contrasted pairs
-and two derived controls, crossing dynamics and appearance freely. This
-crossing is the reason the two are decoupled in the framework. The
-question: does the controllability axis found in E3/E4 generalize across
-appearance families, and along what geometry does the belief spread?
+**E5 -- manipulating the belief through training.** Prior exposure to
+control, similar themes across opposite controllabilities, latent
+capacity, measured with E4's probes. `docs/E5_belief_training.md`.
 
-**E6 -- causal test (latent perturbations).** Steer E5's trained world
-models along the controllability axis found in their latent space, and
-check whether this reproduces E0's phenotype (worse returns,
-perseveration, trap avoidance). This is the neural version of E0's dial
-and structure injection, and it reuses `interventions/` unchanged. E6 is
-the step that shows the latent information is *used*, not just decodable.
+**E6 -- behavioural phenotypes and latent organisation.** A test battery
+in a fully controllable environment with norms from the reference agents,
+RSA on the latent, and the link between latent geometry and phenotype.
+`docs/E6_phenotypes_latent.md`.
+
+**E7 -- direct manipulation of the latent.** For example, interpolating
+zone codes, applied both to the belief (E4's probes) and to E6's
+phenotypes: the final causal test. `docs/E7_latent_manipulation.md`.
 
 ## Repository structure
 
@@ -113,13 +116,20 @@ src/helplessness/
                  transition_distribution().
   measures/      I(a;s'|s) -- one implementation, used everywhere.
   interventions/ Causal manipulation of a transition belief.
+  streams/, twin/, probing/, cluster/
+                 Promoted from E2/E3 on 2026-10-14: random streams, the
+                 tabular twin, the torch probes, the GPU cluster tooling
+                 (see CLAUDE.md); envs/layouts/ holds the 4-zone layouts.
   planning/, evaluation/, config.py, runs.py
 configs/         Shared YAML blocks (zones, themes, dynamics presets) for
                  experiments to compose, some of them frozen (see CLAUDE.md).
 experiments/     One directory per experiment; orchestration only.
-docs/            One file per experiment: what it tests, its config, its status.
+docs/            EXPERIMENTS.md (the tracker), one file per experiment, e3/ (E3's
+                 decisions and reports), archive/ (abandoned plans).
 results/         Run outputs -- see "where results land" below.
-reports/         Write-ups and figures. Start with week1_offline_report.md.
+reports/         Frozen outputs of E0 and E3 (see reports/README.md).
+paper/           LaTeX paper and reports, figure and number scripts.
+archive/         Retired material (notebooks/).
 tests/           Mirrors src/.
 ```
 
@@ -133,8 +143,7 @@ pytest
 E0 (offline, 5x5 -- done):
 
 ```bash
-python scripts/regenerate_agents.py   # trains and saves the tabular agents
-make sweep swaps intervention rescue  # or: cd experiments/E0_offline_5x5/<phase> && python run.py --config config.yaml
+cd experiments/E0_offline_5x5/<phase> && python run.py --config config.yaml   # see experiments/E0_offline_5x5/README.md
 ```
 
 E1, E2, E3: see `experiments/E1_offline_4zones/README.md`,
@@ -156,4 +165,6 @@ tensors (`results/agents/`) are regenerable, not versioned.
 E1 onwards: `results/<experiment_id>/<run_name>/`, one self-contained
 directory per run (`config.yaml`, `meta.yaml`, metrics, `checkpoints/`,
 `artifacts/`) -- see `CLAUDE.md`, "results and run naming", for the exact
-convention and what `run_name` encodes.
+convention and what `run_name` encodes. From E4 on, what a GPU batch
+returns goes to an orphan branch `results/<batch>`; weights and buffers stay
+on the cluster (`docs/RESULTS_CONVENTION.md`).

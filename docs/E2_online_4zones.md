@@ -1,9 +1,13 @@
 # E2 — Online validation, 4 zones
 
-**Status: not started.** The agent/loop/recovery-protocol library exists
-and is tested (`helplessness.agents.online`), validated on E0's 5x5
-environment as a prototype (`experiments/E0_offline_5x5/05_online_prototype/`)
--- not yet run on the real environment.
+**Status: done (frozen, tag `e2-final`).** Pilot (3 seeds) and sweep
+(4 conditions x 20 seeds) run and analysed: the null model of the
+propagation of b under the agent's own epsilon-greedy policy, against a
+matched-counts control. Protocol as run: `experiments/E2_online_4zones/README.md`;
+results: `experiments/E2_online_4zones/RESULTS.md` and `paper/sections/e2.tex`.
+The sections below are the plan written before the run, kept as written;
+where they differ from the protocol actually run, the two files above are
+the reference.
 
 ## What it tests
 

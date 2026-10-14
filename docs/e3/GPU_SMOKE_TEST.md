@@ -7,7 +7,7 @@ everything is on the GPU, and that memory use and the first curves are
 plausible. **Bit-for-bit equality with the CPU is not expected**: the
 random draws and the floating-point reductions differ between devices.
 
-Taken from the GPU readiness audit (`audit_gpu.md`, §5), updated after the
+Taken from the GPU readiness audit (`docs/e3/AUDIT_GPU_2026-09-25.md`, §5; at the repo root as `audit_gpu.md` until 2026-10-14), updated after the
 device support was added (docs/e3/DECISIONS.md, 2026-09-25).
 
 ## Step 0 — Install
