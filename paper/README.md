@@ -177,3 +177,9 @@ read-only, under `results/E3_worldmodel_4zones/`; `figures/e3_sources.py`):
   `\eThreeCampaign...` numbers and by `fig_e3_rsa_partition.py`. The numbers
   stated only in `docs/E3_worldmodel_4zones.md` (results section) or in
   `docs/e3/DECISIONS.md` are written as they are, with `% src:` and `% num-ok`.
+  One exception to the included campaign figures: the maps of \Is{} by state
+  (`fig_e3_campaign_maps.py`) read each run's measured `real_I_s` from
+  `results/E3_worldmodel_4zones/campaign/runs/` (git-ignored) and move it to
+  its zone type's canonical quadrant before the mean (E2's
+  `canonical_rc_for_state`), because the pipeline's `maps_*.png` average the
+  seeds in grid coordinates, across two rotations.

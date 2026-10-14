@@ -926,14 +926,16 @@ Figure~\ref{fig:campaign-maps}): \eThreeCampaignBUDMean{} [\eThreeCampaignBUDLow
 for $-\logtwo \eThreeNActions$ in theory, and \eThreeCampaignBUNMean{} [\eThreeCampaignBUNLow, \eThreeCampaignBUNHigh]
 in UN, for $-$\eThreeTrueICN.
 
-% src: docs/e3/campaign_figures/maps_300000.png
+% src: results/E3_worldmodel_4zones/campaign/runs (each run's measures/env300000: real_I_s, zone_of_state)
+% src: paper/figures/fig_e3_campaign_maps.py
 \begin{figure}[t]
   \centering
-  \includegraphics[width=\linewidth]{../../docs/e3/campaign_figures/maps_300000.png}
+  \includegraphics{fig_e3_campaign_maps.pdf}
   \caption{\Is{} by state at \eThreeBudget{} environment steps, mean over the 4 seeds: environment (left), reference % num-ok
-    (middle) and their difference $\bhat(s)$ (right). The maps are drawn in the grid's own coordinates and average
-    seeds whose zone types occupy different quadrants (E2's counterbalancing), so a quadrant block is not a single zone
-    type; the cross between the blocks is the corridor. Lines: zone boundaries.}
+    (middle) and their difference $\bhat(s)$ (right). The seeds place the zone types in different quadrants (E2's
+    counterbalancing), so each run's value is first moved to its zone type's canonical quadrant (UD top left, CN top
+    right, CD bottom left, UN bottom right; the position within the quadrant is kept), then averaged; the cross between
+    the quadrants is the corridor, which never moves, with the goal at the top-left corner. Lines: zone boundaries.}
   \label{fig:campaign-maps}
 \end{figure}
 
