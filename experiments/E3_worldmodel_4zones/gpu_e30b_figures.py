@@ -1,5 +1,6 @@
 """Figures of the gpu_e30b analysis (read-only on the extracted runs). Usage, from the repo root:
-python reports/gpu_e30b_figures.py   ->  reports/figures/gpu_e30b_trajectories.png, gpu_e30b_b_by_zone.png
+python experiments/E3_worldmodel_4zones/gpu_e30b_figures.py   ->  reports/figures/gpu_e30b_trajectories.png, gpu_e30b_b_by_zone.png
+(in reports/ until 2026-10-14; moved here, output path adjusted to the new depth, logic unchanged)
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ an = importlib.util.module_from_spec(spec)
 sys.modules["gpu_e30b_analysis"] = an
 spec.loader.exec_module(an)
 
-OUT = Path(__file__).resolve().parent / "figures"
+OUT = Path(__file__).resolve().parents[2] / "reports" / "figures"
 OUT.mkdir(exist_ok=True)
 COLOR = {"win64": "#1f5fa8", "win16": "#d9730d"}  # colour-blind safe pair: window length
 STYLE = {"exp": "-", "ref": "--"}  # environment / reference

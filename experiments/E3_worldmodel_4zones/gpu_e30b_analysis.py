@@ -2,7 +2,8 @@
 (results/E3_worldmodel_4zones/*gpu_e30b*): no measure is recomputed, nothing is trained. Everything
 printed comes from each run's results.json, arrays.npz, diagnostics.jsonl and console.log.
 
-Usage, from the repo root:  python reports/gpu_e30b_analysis.py [section ...]
+Usage, from the repo root:  python experiments/E3_worldmodel_4zones/gpu_e30b_analysis.py [section ...]
+(in reports/ until 2026-10-14; moved here, paths adjusted to the new depth, logic unchanged)
 sections: table calib is traj sep consistency   (default: all)
 """
 
@@ -20,7 +21,7 @@ import yaml
 from helplessness.experiment_loader import load_experiment_module
 from helplessness.measures.controllability import controllability_per_state
 
-ROOT = Path(__file__).resolve().parents[1] / "results" / "E3_worldmodel_4zones"
+ROOT = Path(__file__).resolve().parents[2] / "results" / "E3_worldmodel_4zones"
 agg = load_experiment_module("E3_worldmodel_4zones", "aggregate_b.py", "analysis_aggregate_b")
 CATS = list(agg.CATEGORIES)
 SHORT = {"uncontrollable_deterministic": "ud", "controllable_noisy": "cn", "uncontrollable_noisy": "un", "controllable_deterministic": "cd"}
