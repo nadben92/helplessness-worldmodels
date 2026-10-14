@@ -116,10 +116,11 @@ src/helplessness/
                  transition_distribution().
   measures/      I(a;s'|s) -- one implementation, used everywhere.
   interventions/ Causal manipulation of a transition belief.
-  streams/, twin/, probing/, cluster/
+  streams/, twin/, probing/, pipeline/, cluster/
                  Promoted from E2/E3 on 2026-10-14: random streams, the
-                 tabular twin, the torch probes, the GPU cluster tooling
-                 (see CLAUDE.md); envs/layouts/ holds the 4-zone layouts.
+                 tabular twin, the torch probes, the world-model run
+                 pipeline, the GPU cluster tooling (see CLAUDE.md);
+                 envs/layouts/ holds the 4-zone layouts.
   planning/, evaluation/, config.py, runs.py
 configs/         Shared YAML blocks (zones, themes, dynamics presets) for
                  experiments to compose, some of them frozen (see CLAUDE.md).

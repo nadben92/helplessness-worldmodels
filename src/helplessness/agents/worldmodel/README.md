@@ -1,11 +1,15 @@
 # World-model agent (E3+)
 
-**Status (Phase 2 in progress):** `rssm.py` (encoder, decoder, GRU core,
-categorical latent with straight-through sampling and unimix,
-`latent_hook` extension point), `losses.py` (masked reconstruction, exact
-KL dyn/rep), `replay.py` (episode buffer, model/label batch split), and
-`loop.py` (fixed-epsilon data collection + world-model training step)
-exist. No agent (policy, goal head, critic) yet -- that is Phase 5.
+**Status: complete for E3 (finished, tag `e3-final`).** `rssm.py` (encoder,
+decoder, GRU core, categorical latent with straight-through sampling and
+unimix, `latent_hook` extension point), `losses.py` (masked reconstruction,
+exact KL dyn/rep), `replay.py` (episode buffer, model/label batch split),
+`loop.py` (data collection, world-model training step, separation switch),
+`acceleration.py`, and the closed-loop agent of E3's Phase 5 (`agent.py`,
+`heads.py`, `policy.py`, `imagination.py`, `closed_loop.py`). E4-E7 extend
+it with new modules or options whose default reproduces E3's behaviour
+exactly. The run pipeline built on it lives in `helplessness.pipeline`,
+the torch-side measurement probes in `helplessness.probing`.
 
 Whether the eventual agent class implements
 `helplessness.agents.base.Agent.transition_distribution(s, a)` directly,
