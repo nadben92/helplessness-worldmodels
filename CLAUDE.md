@@ -113,3 +113,11 @@ What must never be duplicated
 - **The paired-control transformation.** One function (`envs.dynamics.pairing.derive_control`), applied to a config, never a second hand-authored environment.
 - **Config blocks marked frozen** (`helplessness.config.FROZEN_BLOCKS`, currently `zones.reference` and `themes.test_pool`). An experiment's own config may only extend or override the non-frozen parts; `compose()` raises `FrozenConfigError` rather than silently merging over a frozen path.
 - **Plotting/analysis logic that already exists.** Behavioural metrics live in `measures/behavioural.py`; if a new experiment's plotting script needs a metric already computed there, import it, don't recompute it inline.
+
+Paper
+
+`paper/` holds the LaTeX sources of the paper and the scripts that generate its figures (`paper/figures/fig_*.py`) and numbers (`paper/numbers/gen_numbers.py` -> `paper/numbers.tex`). Build and conventions: `paper/README.md`.
+
+- **The prose in `paper/sections/` belongs to the author.** Never write, rewrite or rephrase it unless explicitly asked to. Infrastructure work (figure/number scripts, macros, build, checks) may touch section files only for `% src:` comments, figure inclusions and macros, never for the text itself.
+- **Audit mode** (when asked to audit the paper): check every claim in `paper/sections/` against the code, the configs and the results, and list each discrepancy (file:line, the claim, what the source actually says, the source path). Do not correct the text.
+- Every number in the text comes from a `numbers.tex` macro, and every figure comes from a `fig_*.py` script that reads results read-only and reuses the experiments' own analysis functions. Never invent a value, a data point or a bibliography entry: a missing source is an explicit error, never a fallback.

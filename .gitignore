@@ -61,3 +61,28 @@ logs/*
 logs/kubeflow/*
 !logs/kubeflow/E3_GPU_2026-09-28_light.tgz
 !logs/kubeflow/bridge_full.tgz
+
+# Paper (paper/): LaTeX build products. paper/figures/out/ and
+# paper/numbers.tex stay versioned, so the paper compiles without the raw
+# results and the diff of numbers.tex shows what changed between runs.
+paper/**/*.aux
+paper/**/*.bbl
+paper/**/*.blg
+paper/**/*.fdb_latexmk
+paper/**/*.fls
+paper/**/*.log
+paper/**/*.out
+paper/**/*.toc
+paper/**/*.lof
+paper/**/*.lot
+paper/**/*.tdo
+paper/**/*.synctex.gz
+paper/main.pdf
+
+# E3 handoff archives extracted for the E3 report (paper/reports/; see paper/README.md):
+# copies of what handoff/ already versions, never tracked twice.
+results/E3_worldmodel_4zones/*gpu_pilot_closed_loop*/
+results/E3_worldmodel_4zones/gpu_pilot_remeasure/
+results/E3_worldmodel_4zones/gpu_pilot_noise/
+paper/reports/*.pdf
+results/E3_worldmodel_4zones/gpu_campaign/

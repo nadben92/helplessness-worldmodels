@@ -1,0 +1,87 @@
+% Notation macros. One macro per symbol; the comment gives its name in the
+% code (src/helplessness, experiments/E2_online_4zones/twin.py).
+% Every macro is wrapped in \ensuremath, so it works in and out of math mode.
+
+% Controllability I(a;s'|s), measures.controllability.controllability_from_tensor.
+\newcommand{\MI}[3]{\ensuremath{I(#1;#2\mid #3)}}
+% I_hat: controllability of the belief T_hat.
+\newcommand{\Ihat}{\ensuremath{\hat{I}}}
+% I_ref: controllability of the count-matched reference (not the analytic value).
+\newcommand{\Iref}{\ensuremath{\hat{I}_{\mathrm{ref}}}}
+% I_star: controllability of the true kernel P.
+\newcommand{\Istar}{\ensuremath{I^{*}}}
+% b = I_hat - I_ref.
+\newcommand{\bhat}{\ensuremath{\hat{b}}}
+% Believed transition kernel.
+\newcommand{\That}{\ensuremath{\hat{T}}}
+% True transition kernel.
+\newcommand{\Ptrue}{\ensuremath{P}}
+% Reference-environment kernel.
+\newcommand{\Pref}{\ensuremath{P_{\mathrm{ref}}}}
+% delta = V_star - V^{pi_hat}, the belief's policy evaluated under P.
+\newcommand{\regret}{\ensuremath{\Delta}}
+% l1: per-pair L1 error between T_hat and P.
+\newcommand{\Lone}{\ensuremath{L_{1}}}
+% Optimal value under P.
+\newcommand{\Vstar}{\ensuremath{V^{*}}}
+% Value under P of the policy derived from T_hat.
+\newcommand{\Vpihat}{\ensuremath{V^{\hat{\pi}}}}
+% Base-2 logarithm (written as a macro: its 2 is notation, not a number).
+\newcommand{\logtwo}{\log_{2}}
+% The null hypothesis of a test (written as a macro: its 0 is notation, not a number).
+\newcommand{\Hnull}{\ensuremath{H_{0}}}
+% R: the reward on arrival at the goal (E1's calibrated parameter).
+\newcommand{\Rgoal}{\ensuremath{R}}
+% Visit counts N(s,a).
+\newcommand{\counts}{\ensuremath{N}}
+% Paired online - matched difference of a quantity, e.g. \gap{\bhat}.
+\newcommand{\gap}[1]{\ensuremath{#1^{\mathrm{on}} - #1^{\mathrm{m}}}}
+
+% Reserved for E3.
+% I_s: controllability of the decoded s-space kernel (E3 main measure).
+\newcommand{\Is}{\ensuremath{\hat{I}_{s}}}
+% I_z: controllability in latent space (E3 secondary measure).
+\newcommand{\Iz}{\ensuremath{\hat{I}_{z}}}
+
+% --- E3 (world model) ---------------------------------------------------------
+% The name of E3's offline calibration condition (written as a macro: its 0 is a name, not a number).
+% Robust: \nobreakdash breaks in moving arguments (captions, section titles).
+\DeclareRobustCommand{\EThreeZero}{E3\nobreakdash-0}
+% h_0: the RSSM's learned initial deterministic state (the canonical probe's context).
+\newcommand{\hzero}{\ensuremath{h_{0}}}
+% I_s projected on the 5 reachable successors (secondary measure).
+\newcommand{\Isproj}{\ensuremath{\hat{I}_{s}^{\mathrm{proj}}}}
+% alpha_app: position / appearance index of diagnostic D1.
+\newcommand{\alphaapp}{\ensuremath{\alpha_{\mathrm{app}}}}
+% alpha: weight of an action-independent component in the predicted kernel
+% (campaign analysis; distinct from alpha_app and from E2's Dirichlet alpha).
+\newcommand{\alphaind}{\ensuremath{\alpha}}
+% K_s: decoded prior draws per (s, a) for the s-space kernel.
+\newcommand{\Ks}{\ensuremath{K_{s}}}
+% L1 errors of criterion C-b: world model and tabular twin, against P.
+\newcommand{\LoneWM}{\ensuremath{L_{1}^{\mathrm{WM}}}}
+\newcommand{\LoneB}{\ensuremath{L_{1}^{B}}}
+% Off-support mass of a predicted kernel.
+\newcommand{\offmass}{\ensuremath{m_{\mathrm{off}}}}
+% p_goal: the goal head's probability that a latent state is the goal.
+\newcommand{\pgoal}{\ensuremath{p_{\mathrm{goal}}}}
+% KL weights: beta_dyn trains the prior only, beta_rep pulls the posterior.
+\newcommand{\betadyn}{\ensuremath{\beta_{\mathrm{dyn}}}}
+\newcommand{\betarep}{\ensuremath{\beta_{\mathrm{rep}}}}
+% Jensen-Shannon divergence.
+\newcommand{\JS}{\ensuremath{\mathrm{JS}}}
+% The critic's value estimate.
+\newcommand{\Vhat}{\ensuremath{\hat{V}}}
+% The tabular twin (condition B).
+\newcommand{\twin}{\ensuremath{B}}
+% Names of the calibration criteria and diagnostics.
+\DeclareRobustCommand{\Ca}{C\nobreakdash-a}
+\DeclareRobustCommand{\Cb}{C\nobreakdash-b}
+\DeclareRobustCommand{\Cc}{C\nobreakdash-c}
+\newcommand{\DOne}{D1}
+\newcommand{\DTwo}{D2}
+
+% --- Pending values ------------------------------------------------------------
+% A number or figure that depends on a batch not run yet (the E3 final campaign).
+% Its argument (the macro or figure name) is not shown; numbers.tex writes it.
+\newcommand{\pending}[1]{\textcolor{orange}{\textbf{[pending]}}}
