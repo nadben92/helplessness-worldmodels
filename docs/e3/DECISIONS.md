@@ -4193,3 +4193,12 @@ seed 20261014. Gap of a run = the mean of its points' residuals; the others' dis
 mean residuals. "Within the dispersion" with model B: seed 1's mean residual <= the others' max; "persists": above it.]
 After this test, E3's analysis is closed (user); the results section is written.
 
+### Result of (36) (rule applied as recorded; diagnose_visit_timing.py)
+
+1,550 points (8 runs; the pilot runs' 300,000 points left out). Model B: alpha = 1.395 - 0.667 log10 n - 0.172 t (t per
+100,000 steps); b2 95 % cluster-bootstrap interval [-0.207, -0.134]: **negative** (later visits, smaller alpha), the
+opposite of the hypothesis. Seed 1 environment's mean residual: +0.160 without the timing term, +0.180 with it, against
+the other runs' [-0.085, +0.026] and [-0.091, +0.013]. **Verdict: the gap persists -- proper to the model, no explanation
+identified.** E3's analysis is closed; the results section is appended to docs/E3_worldmodel_4zones.md (key figures in
+docs/e3/campaign_figures/).
+
