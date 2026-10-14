@@ -4,7 +4,9 @@
   - a results file of an E3 run or diagnostic (results/E3_worldmodel_4zones/..., reports/...), through the readers of
     paper/figures/e3_sources.py and, where a quantity needs computing, the experiment's own functions
     (aggregate_b, measures.controllability, measures.kernel_probe);
-  - the final campaign (pending=True): PendingSource until it is extracted (e3_sources.CAMPAIGN_ROOT).
+  - the final campaign (gpu_campaign): the values its own pipeline computed
+    (experiments/E3_worldmodel_4zones/campaign_report.py), read from the copy of its analysis.json versioned in
+    docs/e3/campaign_tables/ -- read as they are, never recomputed here.
 Numbers stated only in docs/e3/DECISIONS.md, or only in the notes, are not generated: they are written in the report
 as they are, with their % src: and % num-ok.
 """
@@ -17,7 +19,7 @@ from functools import lru_cache
 import numpy as np
 import yaml
 
-from registry import REPO_ROOT, Number, PendingSource, SourceError
+from registry import REPO_ROOT, Number, SourceError
 
 sys.path.insert(0, str(REPO_ROOT / "paper" / "figures"))
 import e3_sources as src  # noqa: E402
@@ -198,19 +200,38 @@ def pilot_meta_tie_tol() -> float:
                  for r in src.pilot_runs()], "tie_tol_abs")
 
 
-# --- final campaign (pending) ----------------------------------------------------------------------------------------
+# --- final campaign (gpu_campaign): values computed by its pipeline, read as they are --------------------------------
+
+CAMPAIGN_JSON = "docs/e3/campaign_tables/analysis.json"
+
 
 @lru_cache(maxsize=None)
-def campaign_b() -> dict:
-    """{zone: mean_ci95 of b on I_s over the campaign's pairs at the budget} (main analysis)."""
-    if not src.CAMPAIGN_ROOT.is_dir():
-        raise PendingSource(f"{src.CAMPAIGN_ROOT} does not exist")
-    analysis, aggregate_b = src.e3_module("campaign_analysis.py"), src.e3_module("aggregate_b.py")
-    result = analysis.analyse(src.campaign_runs(), None, aggregate_b.load_e30_control())
-    if result["main"]["final_env_steps"] != [analysis.BUDGET_ENV_STEPS]:
-        raise SourceError(f"campaign runs end at {result['main']['final_env_steps']}, not at the budget")
-    pairs = result["main"]["aggregate_b"]["pairs"]
-    return {z: aggregate_b.mean_ci95([p["I_s"][z]["b"] for p in pairs]) for z in src.ZONES}
+def campaign_analysis() -> dict:
+    """The "analysis" block of the campaign's analysis.json (campaign_report.py, second run after (33))."""
+    import json
+    path = REPO_ROOT / CAMPAIGN_JSON
+    if not path.is_file():
+        raise SourceError(f"Missing source file: {CAMPAIGN_JSON}")
+    analysis = json.loads(path.read_text(encoding="utf-8"))["analysis"]
+    if analysis["main"]["final_env_steps"] != [300000]:
+        raise SourceError(f"{CAMPAIGN_JSON}: runs end at {analysis['main']['final_env_steps']}, not at 300,000")
+    return analysis
+
+
+def over_seeds(quantity: str, checkpoint: int, zone: str, field: str):
+    """over_seeds.<quantity>.<checkpoint>.<zone>.<field> (mean, bound, or ci95 low / high)."""
+    try:
+        entry = campaign_analysis()["over_seeds"][quantity][str(checkpoint)][zone]
+    except KeyError as e:
+        raise SourceError(f"{CAMPAIGN_JSON}: no over_seeds.{quantity}.{checkpoint}.{zone} ({e})")
+    if field in ("low", "high"):
+        return entry["ci95"][0 if field == "low" else 1]
+    return entry[field]
+
+
+def equal_visits_b0(zone: str, field: str):
+    entry = campaign_analysis()["propagation"]["seeds"]["equal_visits_b0"][zone]
+    return entry["ci95"][0 if field == "low" else 1] if field in ("low", "high") else entry[field]
 
 
 # --- declarations ----------------------------------------------------------------------------------------------------
@@ -365,13 +386,29 @@ NUMBERS = [
            "agent_delta.real_contexts.delta_by_zone", lambda: max(pilot_final_deltas()), 2),
 ]
 
-# The final campaign's main result, by zone: b on I_s at the budget, mean over the seeds and 95 % Student-t interval.
-for _zone in src.ZONES:
-    _abbr = src.ZONE_ABBR[_zone]
-    for _part, _get in (("Mean", lambda z=_zone: campaign_b()[z]["mean"]),
-                        ("Low", lambda z=_zone: campaign_b()[z]["ci95"][0]),
-                        ("High", lambda z=_zone: campaign_b()[z]["ci95"][1])):
+# The final campaign: b on I_s and alpha_env - alpha_ref by zone (mean over the 4 seeds, 95 % Student-t interval, bound
+# of a null) as computed by its pipeline (analysis.json over_seeds), at the budget and at the early checkpoint 39,811;
+# b at equal visits (propagation.seeds.equal_visits_b0).
+CAMPAIGN_ZONES = {**{z: src.ZONE_ABBR[z] for z in src.ZONES}, "corridor": "Corridor"}
+CONTROLLABLE = ("controllable_noisy", "controllable_deterministic", "corridor")
+for _zone, _abbr in CAMPAIGN_ZONES.items():
+    for _part in ("Mean", "Low", "High"):
         NUMBERS.append(Number(f"eThreeCampaignB{_abbr}{_part}",
-                              f"{E3_RES}/gpu_campaign/ (campaign_analysis.analyse main pairs; aggregate_b.mean_ci95) :: "
-                              f"b(I_s) at the budget, {_abbr}, {_part.lower()}",
-                              _get, 3, signed=True, pending=True))
+                              f"{CAMPAIGN_JSON} :: over_seeds.b_I_s.300000.{_zone} ({_part.lower()})",
+                              (lambda z=_zone, f=_part.lower(): over_seeds("b_I_s", 300000, z, f)), 3, signed=True))
+for _zone in CONTROLLABLE:
+    _abbr = CAMPAIGN_ZONES[_zone]
+    NUMBERS.append(Number(f"eThreeCampaignBound{_abbr}", f"{CAMPAIGN_JSON} :: over_seeds.b_I_s.300000.{_zone}.bound",
+                          (lambda z=_zone: over_seeds("b_I_s", 300000, z, "bound")), 2))
+    for _part in ("Mean", "Low", "High"):
+        NUMBERS.append(Number(f"eThreeCampaignDAlpha{_abbr}{_part}",
+                              f"{CAMPAIGN_JSON} :: over_seeds.alpha_difference.300000.{_zone} ({_part.lower()})",
+                              (lambda z=_zone, f=_part.lower(): over_seeds("alpha_difference", 300000, z, f)), 3,
+                              signed=True))
+for _part in ("Mean", "Low", "High"):
+    NUMBERS.append(Number(f"eThreeCampaignBCNEarly{_part}",
+                          f"{CAMPAIGN_JSON} :: over_seeds.b_I_s.39811.controllable_noisy ({_part.lower()})",
+                          (lambda f=_part.lower(): over_seeds("b_I_s", 39811, "controllable_noisy", f)), 3, signed=True))
+    NUMBERS.append(Number(f"eThreeCampaignBZeroCN{_part}",
+                          f"{CAMPAIGN_JSON} :: propagation.seeds.equal_visits_b0.controllable_noisy ({_part.lower()})",
+                          (lambda f=_part.lower(): equal_visits_b0("controllable_noisy", f)), 3, signed=True))

@@ -191,30 +191,72 @@
 \newcommand{\eThreePilotDeltaMin}{0.00}
 % src: results/E3_worldmodel_4zones/*gpu_pilot_closed_loop__seed{00,05}*/checkpoints.jsonl :: max over runs and zones of the last record's agent_delta.real_contexts.delta_by_zone
 \newcommand{\eThreePilotDeltaMax}{0.75}
-% src: results/E3_worldmodel_4zones/gpu_campaign/ (campaign_analysis.analyse main pairs; aggregate_b.mean_ci95) :: b(I_s) at the budget, UD, mean  [PENDING: the final campaign]
-\newcommand{\eThreeCampaignBUDMean}{\pending{eThreeCampaignBUDMean}}
-% src: results/E3_worldmodel_4zones/gpu_campaign/ (campaign_analysis.analyse main pairs; aggregate_b.mean_ci95) :: b(I_s) at the budget, UD, low  [PENDING: the final campaign]
-\newcommand{\eThreeCampaignBUDLow}{\pending{eThreeCampaignBUDLow}}
-% src: results/E3_worldmodel_4zones/gpu_campaign/ (campaign_analysis.analyse main pairs; aggregate_b.mean_ci95) :: b(I_s) at the budget, UD, high  [PENDING: the final campaign]
-\newcommand{\eThreeCampaignBUDHigh}{\pending{eThreeCampaignBUDHigh}}
-% src: results/E3_worldmodel_4zones/gpu_campaign/ (campaign_analysis.analyse main pairs; aggregate_b.mean_ci95) :: b(I_s) at the budget, CN, mean  [PENDING: the final campaign]
-\newcommand{\eThreeCampaignBCNMean}{\pending{eThreeCampaignBCNMean}}
-% src: results/E3_worldmodel_4zones/gpu_campaign/ (campaign_analysis.analyse main pairs; aggregate_b.mean_ci95) :: b(I_s) at the budget, CN, low  [PENDING: the final campaign]
-\newcommand{\eThreeCampaignBCNLow}{\pending{eThreeCampaignBCNLow}}
-% src: results/E3_worldmodel_4zones/gpu_campaign/ (campaign_analysis.analyse main pairs; aggregate_b.mean_ci95) :: b(I_s) at the budget, CN, high  [PENDING: the final campaign]
-\newcommand{\eThreeCampaignBCNHigh}{\pending{eThreeCampaignBCNHigh}}
-% src: results/E3_worldmodel_4zones/gpu_campaign/ (campaign_analysis.analyse main pairs; aggregate_b.mean_ci95) :: b(I_s) at the budget, UN, mean  [PENDING: the final campaign]
-\newcommand{\eThreeCampaignBUNMean}{\pending{eThreeCampaignBUNMean}}
-% src: results/E3_worldmodel_4zones/gpu_campaign/ (campaign_analysis.analyse main pairs; aggregate_b.mean_ci95) :: b(I_s) at the budget, UN, low  [PENDING: the final campaign]
-\newcommand{\eThreeCampaignBUNLow}{\pending{eThreeCampaignBUNLow}}
-% src: results/E3_worldmodel_4zones/gpu_campaign/ (campaign_analysis.analyse main pairs; aggregate_b.mean_ci95) :: b(I_s) at the budget, UN, high  [PENDING: the final campaign]
-\newcommand{\eThreeCampaignBUNHigh}{\pending{eThreeCampaignBUNHigh}}
-% src: results/E3_worldmodel_4zones/gpu_campaign/ (campaign_analysis.analyse main pairs; aggregate_b.mean_ci95) :: b(I_s) at the budget, CD, mean  [PENDING: the final campaign]
-\newcommand{\eThreeCampaignBCDMean}{\pending{eThreeCampaignBCDMean}}
-% src: results/E3_worldmodel_4zones/gpu_campaign/ (campaign_analysis.analyse main pairs; aggregate_b.mean_ci95) :: b(I_s) at the budget, CD, low  [PENDING: the final campaign]
-\newcommand{\eThreeCampaignBCDLow}{\pending{eThreeCampaignBCDLow}}
-% src: results/E3_worldmodel_4zones/gpu_campaign/ (campaign_analysis.analyse main pairs; aggregate_b.mean_ci95) :: b(I_s) at the budget, CD, high  [PENDING: the final campaign]
-\newcommand{\eThreeCampaignBCDHigh}{\pending{eThreeCampaignBCDHigh}}
+% src: docs/e3/campaign_tables/analysis.json :: over_seeds.b_I_s.300000.uncontrollable_deterministic (mean)
+\newcommand{\eThreeCampaignBUDMean}{\ensuremath{-2.258}}
+% src: docs/e3/campaign_tables/analysis.json :: over_seeds.b_I_s.300000.uncontrollable_deterministic (low)
+\newcommand{\eThreeCampaignBUDLow}{\ensuremath{-2.289}}
+% src: docs/e3/campaign_tables/analysis.json :: over_seeds.b_I_s.300000.uncontrollable_deterministic (high)
+\newcommand{\eThreeCampaignBUDHigh}{\ensuremath{-2.228}}
+% src: docs/e3/campaign_tables/analysis.json :: over_seeds.b_I_s.300000.controllable_noisy (mean)
+\newcommand{\eThreeCampaignBCNMean}{\ensuremath{-0.011}}
+% src: docs/e3/campaign_tables/analysis.json :: over_seeds.b_I_s.300000.controllable_noisy (low)
+\newcommand{\eThreeCampaignBCNLow}{\ensuremath{-0.205}}
+% src: docs/e3/campaign_tables/analysis.json :: over_seeds.b_I_s.300000.controllable_noisy (high)
+\newcommand{\eThreeCampaignBCNHigh}{\ensuremath{+0.183}}
+% src: docs/e3/campaign_tables/analysis.json :: over_seeds.b_I_s.300000.uncontrollable_noisy (mean)
+\newcommand{\eThreeCampaignBUNMean}{\ensuremath{-1.779}}
+% src: docs/e3/campaign_tables/analysis.json :: over_seeds.b_I_s.300000.uncontrollable_noisy (low)
+\newcommand{\eThreeCampaignBUNLow}{\ensuremath{-1.951}}
+% src: docs/e3/campaign_tables/analysis.json :: over_seeds.b_I_s.300000.uncontrollable_noisy (high)
+\newcommand{\eThreeCampaignBUNHigh}{\ensuremath{-1.607}}
+% src: docs/e3/campaign_tables/analysis.json :: over_seeds.b_I_s.300000.controllable_deterministic (mean)
+\newcommand{\eThreeCampaignBCDMean}{\ensuremath{-0.038}}
+% src: docs/e3/campaign_tables/analysis.json :: over_seeds.b_I_s.300000.controllable_deterministic (low)
+\newcommand{\eThreeCampaignBCDLow}{\ensuremath{-0.295}}
+% src: docs/e3/campaign_tables/analysis.json :: over_seeds.b_I_s.300000.controllable_deterministic (high)
+\newcommand{\eThreeCampaignBCDHigh}{\ensuremath{+0.218}}
+% src: docs/e3/campaign_tables/analysis.json :: over_seeds.b_I_s.300000.corridor (mean)
+\newcommand{\eThreeCampaignBCorridorMean}{\ensuremath{-0.050}}
+% src: docs/e3/campaign_tables/analysis.json :: over_seeds.b_I_s.300000.corridor (low)
+\newcommand{\eThreeCampaignBCorridorLow}{\ensuremath{-0.208}}
+% src: docs/e3/campaign_tables/analysis.json :: over_seeds.b_I_s.300000.corridor (high)
+\newcommand{\eThreeCampaignBCorridorHigh}{\ensuremath{+0.108}}
+% src: docs/e3/campaign_tables/analysis.json :: over_seeds.b_I_s.300000.controllable_noisy.bound
+\newcommand{\eThreeCampaignBoundCN}{0.21}
+% src: docs/e3/campaign_tables/analysis.json :: over_seeds.alpha_difference.300000.controllable_noisy (mean)
+\newcommand{\eThreeCampaignDAlphaCNMean}{\ensuremath{-0.003}}
+% src: docs/e3/campaign_tables/analysis.json :: over_seeds.alpha_difference.300000.controllable_noisy (low)
+\newcommand{\eThreeCampaignDAlphaCNLow}{\ensuremath{-0.086}}
+% src: docs/e3/campaign_tables/analysis.json :: over_seeds.alpha_difference.300000.controllable_noisy (high)
+\newcommand{\eThreeCampaignDAlphaCNHigh}{\ensuremath{+0.080}}
+% src: docs/e3/campaign_tables/analysis.json :: over_seeds.b_I_s.300000.controllable_deterministic.bound
+\newcommand{\eThreeCampaignBoundCD}{0.29}
+% src: docs/e3/campaign_tables/analysis.json :: over_seeds.alpha_difference.300000.controllable_deterministic (mean)
+\newcommand{\eThreeCampaignDAlphaCDMean}{\ensuremath{+0.011}}
+% src: docs/e3/campaign_tables/analysis.json :: over_seeds.alpha_difference.300000.controllable_deterministic (low)
+\newcommand{\eThreeCampaignDAlphaCDLow}{\ensuremath{-0.077}}
+% src: docs/e3/campaign_tables/analysis.json :: over_seeds.alpha_difference.300000.controllable_deterministic (high)
+\newcommand{\eThreeCampaignDAlphaCDHigh}{\ensuremath{+0.100}}
+% src: docs/e3/campaign_tables/analysis.json :: over_seeds.b_I_s.300000.corridor.bound
+\newcommand{\eThreeCampaignBoundCorridor}{0.21}
+% src: docs/e3/campaign_tables/analysis.json :: over_seeds.alpha_difference.300000.corridor (mean)
+\newcommand{\eThreeCampaignDAlphaCorridorMean}{\ensuremath{+0.022}}
+% src: docs/e3/campaign_tables/analysis.json :: over_seeds.alpha_difference.300000.corridor (low)
+\newcommand{\eThreeCampaignDAlphaCorridorLow}{\ensuremath{-0.042}}
+% src: docs/e3/campaign_tables/analysis.json :: over_seeds.alpha_difference.300000.corridor (high)
+\newcommand{\eThreeCampaignDAlphaCorridorHigh}{\ensuremath{+0.087}}
+% src: docs/e3/campaign_tables/analysis.json :: over_seeds.b_I_s.39811.controllable_noisy (mean)
+\newcommand{\eThreeCampaignBCNEarlyMean}{\ensuremath{+0.135}}
+% src: docs/e3/campaign_tables/analysis.json :: propagation.seeds.equal_visits_b0.controllable_noisy (mean)
+\newcommand{\eThreeCampaignBZeroCNMean}{0.000}
+% src: docs/e3/campaign_tables/analysis.json :: over_seeds.b_I_s.39811.controllable_noisy (low)
+\newcommand{\eThreeCampaignBCNEarlyLow}{\ensuremath{+0.091}}
+% src: docs/e3/campaign_tables/analysis.json :: propagation.seeds.equal_visits_b0.controllable_noisy (low)
+\newcommand{\eThreeCampaignBZeroCNLow}{\ensuremath{-0.198}}
+% src: docs/e3/campaign_tables/analysis.json :: over_seeds.b_I_s.39811.controllable_noisy (high)
+\newcommand{\eThreeCampaignBCNEarlyHigh}{\ensuremath{+0.180}}
+% src: docs/e3/campaign_tables/analysis.json :: propagation.seeds.equal_visits_b0.controllable_noisy (high)
+\newcommand{\eThreeCampaignBZeroCNHigh}{\ensuremath{+0.197}}
 % src: configs/zones/e1_4zones.yaml :: grid_shape (square)
 \newcommand{\eOneGridSize}{12}
 % src: configs/zones/e1_4zones.yaml :: blocks.*.rows / cols (side of every block)

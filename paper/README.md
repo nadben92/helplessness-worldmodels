@@ -82,11 +82,10 @@ check_sources.py
   with its `% src:` and `% num-ok`; a number with a config key or a results
   file is a macro.
 - **`\pending{...}`** (macros.tex) prints an orange [pending] for a value or
-  a figure of a batch that has not run yet (the E3 final campaign).
+  a figure of a batch that has not run yet (none at present).
   `gen_numbers.py` writes it for a `Number(..., pending=True)` whose source is
   absent, and lists it; a figure script reports itself pending by exiting
-  with `e3_sources.PENDING_EXIT`, and the report's `\pendingfigure{name}`
-  shows the box until `figures/out/<name>.pdf` exists. A source that is
+  with `e3_sources.PENDING_EXIT`, which `build.py` reports instead of failing. A source that is
   present but inconsistent always stops the build.
 - **`\todo{...}`** (todonotes) marks something still to do.
   `check_sources.py` lists every remaining one.
@@ -169,39 +168,12 @@ read-only, under `results/E3_worldmodel_4zones/`; `figures/e3_sources.py`):
   into `results/E3_worldmodel_4zones/gpu_pilot_remeasure/`;
   `handoff/gpu_pilot_noise/*.recomputed.tgz` into
   `results/E3_worldmodel_4zones/gpu_pilot_noise/`;
-- the final campaign: `results/E3_worldmodel_4zones/gpu_campaign/`, pending
-  until it is extracted (below).
-
-The campaign figure scripts can be tried on other runs without touching the
-report: `python paper/figures/fig_e3_campaign_b.py --runs <run dirs>
---measures-root <dir> --out-dir <a scratch dir>` (refused with
-`--out-dir paper/figures/out`).
-
-### When the final campaign arrives
-
-1. Get `handoff/gpu_campaign/` (the supervisor commits it to main).
-2. Extract the run and measure archives (not the weights, not the logs) into
-   `results/E3_worldmodel_4zones/gpu_campaign/`, dropping their
-   `results/E3_worldmodel_4zones/` prefix. A separate directory is required:
-   the pilot's runs come back under the same names as the extracted pilot
-   directories, with more measures. From the repo root, in PowerShell:
-
-   ```powershell
-   New-Item -ItemType Directory -Force results/E3_worldmodel_4zones/gpu_campaign
-   Get-ChildItem handoff/gpu_campaign/*.tgz |
-     Where-Object { $_.Name -ne 'logs.tgz' -and $_.Name -notlike '*.weights.tgz' } |
-     ForEach-Object { tar -xzf $_.FullName --strip-components=2 -C results/E3_worldmodel_4zones/gpu_campaign }
-   ```
-
-   The directory is git-ignored. It must then hold 8 run directories (seeds
-   0, 1, 5, 6; environment and reference), each with `results.json`,
-   `arrays.npz`, `checkpoints.jsonl`, `counts.npz` and `measures/env<NNNNNN>/`.
-3. `python paper/build.py --report e3`: the five `fig_e3_campaign_*.py`
-   scripts and the twelve `\eThreeCampaignB...` numbers are computed
-   (through `experiments/E3_worldmodel_4zones/campaign_analysis.py`); a
-   missing or inconsistent file stops the build with its name.
-4. `python paper/check_sources.py`, then read the diff of `numbers.tex`.
-5. Section "Results of the final campaign" still holds no text: the analysis
-   is written from the author's notes, in another session. The `\pending{}`
-   entries left in that section (the hybrid-code rule's verdicts, the
-   aberration control, V and Q near the goal) are filled then.
+- the final campaign: the outputs of its own pipeline
+  (`experiments/E3_worldmodel_4zones/campaign_report.py`), versioned in the
+  repository and read as they are, never recomputed: the figures in
+  `docs/e3/campaign_figures/` (included directly) and the values in
+  `docs/e3/campaign_tables/analysis.json` (a copy of
+  `results/E3_worldmodel_4zones/campaign/analysis.json`), read by the
+  `\eThreeCampaign...` numbers and by `fig_e3_rsa_partition.py`. The numbers
+  stated only in `docs/E3_worldmodel_4zones.md` (results section) or in
+  `docs/e3/DECISIONS.md` are written as they are, with `% src:` and `% num-ok`.
