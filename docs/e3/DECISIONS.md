@@ -4095,3 +4095,15 @@ Still before any value of the campaign (handoff/gpu_campaign not in the reposito
    The complete test suite (run after this entry: 923 passed, 1 failed) showed a second instance of the same
    requirement, tests/e3/test_e3_preflight_measures.py::test_code_hash_is_run_gpu_md_s: the same rule applied to it
    (skipped while RUN_GPU.md states d84dec84...), to be restored with the first.
+
+## 2026-10-14 (33) -- correction made AFTER a result: the RSA confusion ratio did not follow the definition of (31) F
+
+First run of campaign_report.py on handoff/gpu_campaign (integrity passed; pipeline complete). In its results the
+reference's confusion ratio was NaN at every checkpoint. Cause, an implementation error: the ratio grouped the states by
+the run's own controllability (corridor included; in the reference every state is controllable, so the "uncontrollable"
+group was empty), whereas (31) F defines it on **the four quadrant zones grouped by appearance** (CN, CD vs UD, UN; the
+corridor in neither group), the same zones in the reference (the control). **The definition is unchanged; the code is
+corrected to follow it** (rsa_latents.RATIOS, attribute appearance_group; test: the ratio is finite and both groups are
+non-empty in the reference too). Recorded as a correction made after seeing a result. The environment's ratio changes
+too (the corridor no longer counts in the controllable group). The CD vs UD and CN vs UN ratios, the regressions and every
+other quantity are unaffected. The pipeline is run again in full; only the second run is reported.

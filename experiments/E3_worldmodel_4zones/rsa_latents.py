@@ -45,7 +45,10 @@ CONTROLLABLE, UNCONTROLLABLE = "controllable", "uncontrollable"
 # the theoretical matrices besides the position; the zone is not one (in E3 it is the theme: identical matrices), only the
 # within-group label of the ratios
 PREDICTORS = ("theme", "controllability", "stochasticity")
-RATIOS = {"controllable_vs_uncontrollable": ("controllability", CONTROLLABLE, UNCONTROLLABLE, "zone"),
+# the confusion ratio of (31) F: the four quadrant zones grouped by APPEARANCE (their category's name), so that the reference
+# contrasts the same zones (appearance only); the corridor belongs to neither group. Corrected 2026-10-14 (33): the first
+# run grouped by the run's own controllability (corridor included; empty group in the reference).
+RATIOS = {"controllable_vs_uncontrollable": ("appearance_group", CONTROLLABLE, UNCONTROLLABLE, "zone"),
           "CD_vs_UD": ("zone", "controllable_deterministic", "uncontrollable_deterministic", "zone"),
           "CN_vs_UN": ("zone", "controllable_noisy", "uncontrollable_noisy", "zone")}
 
@@ -60,6 +63,8 @@ def point_attributes(world, P: np.ndarray) -> dict:
             "theme": ["rgb" + ",".join(map(str, world.themes.color_for_category(z))) for z in zones],
             "controllability": [CONTROLLABLE if i > 1e-9 else UNCONTROLLABLE for i in I_true],
             "stochasticity": ["noisy" if (P[s].max(-1) < 1.0 - 1e-12).any() else "deterministic" for s in range(run_mini.N_STATES)],
+            "appearance_group": [UNCONTROLLABLE if z.startswith("uncontrollable") else CONTROLLABLE if z.startswith("controllable") else z
+                                 for z in zones],
             "position": np.array([divmod(s, GRID_SHAPE[1]) for s in range(run_mini.N_STATES)], dtype=float)}
 
 
@@ -114,7 +119,7 @@ def rsa_of_contexts(ctx: dict, world, P: np.ndarray) -> dict:
     keep[run_mini.e3_env.goal_state()] = False
     used, removed = predictors_for(attrs, keep)
     state = rsa.analyse_points({"h": ctx["h"], "z": ctx["z"]}, ctx["states"], run_mini.N_STATES,
-                               {k: attrs[k] for k in ("theme", "controllability", "stochasticity", "zone")}, attrs["position"],
+                               {k: attrs[k] for k in ("theme", "controllability", "stochasticity", "zone", "appearance_group")}, attrs["position"],
                                GRID_SHAPE, ctx["rng"], ratios=RATIOS, mask=keep, predictors=used)
     state["removed_predictors"] = {k: "constant over the run's states" for k in removed}
     zones = zone_level(state, attrs, keep, used)

@@ -262,6 +262,8 @@ def test_one_command_report_on_the_tiny_pair(tmp_path, tiny_rules):
         if s["condition"] == "reference":
             assert "controllability" in s["states"]["removed_predictors"] and "controllability" not in reg["unique_r2"]
         assert {"vif", "variance_partition", "predictor_correlations"} <= set(reg)
+        ratio = s["states"]["latents"]["z"]["ratios"]["controllable_vs_uncontrollable"]  # by appearance, in both runs (33)
+        assert ratio["n_a"] > 0 and ratio["n_b"] > 0 and np.isfinite(ratio["ratio"])
     assert "Partition of the explained variance" in text and "p = 1/16" in text and "not the JS divergence of the joint" in text
     appended = report.read_text(encoding="utf-8")
     assert appended.startswith("# E3\n\nexisting text") and appended.count(cr.MARK_START) == 1
