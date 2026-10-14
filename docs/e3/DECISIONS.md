@@ -4170,3 +4170,26 @@ otherwise undetermined. The mass on the true successor is reported in the same w
 Reported besides: the share of the visits to CD and to CN over seed 1 environment's first ~25,000 steps (the counts at the
 checkpoint 25,119), against the other runs.
 
+## 2026-10-14 (36) -- seed 1, the timing of the visits: exploratory test, rule recorded before computing; E3's analysis then closed
+
+Hypothesis (user): at an equal number of visits, late visits teach less than early ones (loss of plasticity, primacy);
+seed 1 environment's CD visits come later than in the other runs. Read only, exploratory.
+**Rule (user; operational definitions in brackets: implementer, set here before computing):** regression of alpha per
+CD state (all 8 runs, all measured checkpoints) on log(visits) and on the mean training step at which those visits
+took place.
+- If the coefficient of the visits' timing is positive (later visits, larger alpha) with an interval excluding 0, **and**
+  seed 1 environment's gap falls within the other runs' dispersion once the term is included: **the gap is attributed to
+  the timing of the visits**;
+- if the gap persists despite the term: **it stays proper to the model, with no explanation identified**;
+- otherwise: **undetermined**.
+[Points: (run, CD state but the goal, measured checkpoint c) with n(s, c) >= 1. Visits: the transitions out of s in the
+run's replay (replay_final.npz; the action stored at observation i is the one taken from it -- checked: it reproduces the
+counts N at 300,000 but for the replay's last transition); log(visits) = log10 n(s, c), n the visits of the state's
+least-visited action (as in (31) and (35)); the timing t(s, c) = the mean environment step (proportional to the training
+step: ratio 0.6) of all the transitions out of s up to c, in units of 100,000 steps. The pilot runs' replay stops at
+290,000: their 300,000 points are left out. Ordinary least squares on all the points pooled, alpha = b0 + b1 log10 n +
+b2 t (model A: b2 omitted). Interval of b2: 95 % percentile bootstrap over the (run, state) clusters, 2,000 resamples,
+seed 20261014. Gap of a run = the mean of its points' residuals; the others' dispersion = [min, max] of the other 7 runs'
+mean residuals. "Within the dispersion" with model B: seed 1's mean residual <= the others' max; "persists": above it.]
+After this test, E3's analysis is closed (user); the results section is written.
+
