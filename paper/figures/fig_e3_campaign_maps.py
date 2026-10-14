@@ -14,6 +14,7 @@ zone_of_state; arrays.npz: real_I_s), the 8 runs the campaign pipeline analysed.
 
 from __future__ import annotations
 
+import matplotlib.pyplot as plt
 import numpy as np
 
 import common
@@ -54,7 +55,11 @@ def canonical_mean(runs: list[dict], ad, e3_env) -> np.ndarray:
             count[canon] += 1
     if (count == 0).any():
         raise SystemExit("some canonical cell received no value")
-    return acc / count
+    mean = acc / count
+    # The goal is terminal (no transition out of it): the measure still returns a value there, which the campaign's
+    # analyses leave out (campaign_analysis.zone_mask); left out here too, drawn as an empty cell. It never moves.
+    mean[divmod(int(e3_env.goal_state()), ad.N_COLS)] = np.nan
+    return mean
 
 
 def outline(ax, zone_grid: np.ndarray) -> None:
@@ -77,12 +82,16 @@ def main() -> None:
 
     common.apply_style()
     fig, axes = common.figure(width_fraction=1.0, aspect=0.36, ncols=3)
-    vmax = float(max(env.max(), ref.max()))
-    dmax = float(np.abs(env - ref).max())
+    vmax = float(max(np.nanmax(env), np.nanmax(ref)))
+    dmax = float(np.nanmax(np.abs(env - ref)))
     panels = ((env, "environment", "Blues", 0.0, vmax), (ref, "reference", "Blues", 0.0, vmax),
               (env - ref, r"$\hat b(s)$ = env $-$ ref", "RdBu_r", -dmax, dmax))
     for ax, (data, title, cmap, lo, hi) in zip(axes, panels):
+        cmap = plt.get_cmap(cmap).copy()
+        cmap.set_bad("white")  # the goal
         im = ax.imshow(data, cmap=cmap, vmin=lo, vmax=hi)
+        ax.text(*divmod(int(e3_env.goal_state()), ad.N_COLS)[::-1], "G", ha="center", va="center",
+                fontsize=common.SMALL_FONT_SIZE - 2)
         outline(ax, zone_grid)
         ax.set_title(title, fontsize=common.SMALL_FONT_SIZE)
         ax.set_xticks([])
