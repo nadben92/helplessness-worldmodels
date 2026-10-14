@@ -202,6 +202,8 @@ LOSS_TERMS = ("total", "recon", "recon_patch", "kl_dyn", "kl_rep")
 MECHANICS_FLOOR = 0.5  # below this template-match accuracy, downstream indicators are not evaluable
 NOT_EVALUABLE = "non évaluable (mécanique en échec)"
 NOT_MEASURED = "non mesuré"
+
+
 # ---------------------------------------------------------------------
 # verdict rules (pure functions -- tested in tests/e3/test_e3_mini_report.py)
 # ---------------------------------------------------------------------
@@ -314,17 +316,8 @@ def load_mini_config(path: str | Path | None = None) -> dict:
 
 
 # ---------------------------------------------------------------------
-# environment, data, twin
-# ---------------------------------------------------------------------
-
-
-# ---------------------------------------------------------------------
-# measurements
-# ---------------------------------------------------------------------
-
-
-# ---------------------------------------------------------------------
-# checkpoints, resume
+# environment, data, twin; measurements; checkpoints, resume: moved to helplessness.pipeline
+# (world.py, measure.py, checkpoints.py; runtime.py for the runtime part above) on 2026-10-14
 # ---------------------------------------------------------------------
 
 
