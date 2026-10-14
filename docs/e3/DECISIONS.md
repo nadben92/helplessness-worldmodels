@@ -4137,3 +4137,36 @@ Reported besides, without rule: alpha in CD per checkpoint (seed 1 env, the othe
 reference); maps of I_s and of the prior's mass on the true successor per CD state; the same errors (and 1 - mass on the
 true successor) against delta and against n(s); CD's learning curve; seed 1's RSA confusion ratios.
 
+## 2026-10-14 (35) -- after the seed 1 diagnostic: CN transient, a design flaw of (34)'s rule, complementary test (rule recorded before computing)
+
+### Recorded (user)
+
+- **The visits confirm that the early CN transient is a visitation effect**: at 25,119 and 39,811, CN's share of the
+  visits is higher in the environment than in the reference in 3 of 4 seeds (seed 1: 0.27 and 0.29 against 0.10 and
+  0.11), consistent with b0 ~ 0 at equal visits ((34)).
+- **(34)'s rule had a design flaw, recorded as such, after the result**: it assumed that an unfinished learning would
+  give a normal alpha, whereas every run's curve shows that a high alpha is the normal signature of early learning (an
+  action-independent prediction before the effect of the actions is learnt). **alpha compared at the same checkpoint
+  therefore does not distinguish a delay of learning from a belief of helplessness.** (34)'s verdict ("undetermined")
+  stays recorded as it was obtained.
+
+### Complementary test, exploratory, read only (rule: user; operational definitions in brackets: implementer, set here before computing)
+
+For the 8 runs, in CD, at every measured checkpoint: alpha and the prior's mass on the true successor against n(s), the
+visits of the state's least-visited action -- per state, then as zone means (the zone's mean alpha and mass against its
+mean log10 n). Rule on alpha:
+- **seed 1 (environment) lies on the same relation as the other runs (within their dispersion): its gap is a learning
+  delay due to the visits**;
+- **at equal visits its alpha stays above the other runs' dispersion: an effect proper to this model**;
+- otherwise undetermined.
+[Per state: points (state, checkpoint) of CD with n >= 1, binned in log2 n (bins [2^k, 2^(k+1))). In a bin, each run's
+mean alpha; the other runs' dispersion is the [min, max] of the 7 other runs' bin means. A bin qualifies if seed 1 env
+has >= 3 points in it and at least 4 other runs have >= 3 points each. **Delay** if seed 1's bin mean lies within
+[min, max] in every qualifying bin; **proper effect** if it lies above max in at least half of the qualifying bins and in
+at least 2; otherwise undetermined. Zone means (secondary, the same rule): at each of seed 1's checkpoints, the other runs'
+zone-mean alpha interpolated linearly in mean log10 n (only runs whose observed range covers that n, at least 4); delay
+if seed 1 lies within their [min, max] at every such point, proper effect if above max at at least half of them (>= 2),
+otherwise undetermined. The mass on the true successor is reported in the same way, without rule.]
+Reported besides: the share of the visits to CD and to CN over seed 1 environment's first ~25,000 steps (the counts at the
+checkpoint 25,119), against the other runs.
+
