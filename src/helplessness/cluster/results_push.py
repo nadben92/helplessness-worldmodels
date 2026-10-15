@@ -11,8 +11,8 @@ Credentials: never written in the code nor in any file the push creates. The tok
 secret, the cluster's admission policy passes credentials as files) or an environment variable, and handed to git
 through a temporary GIT_ASKPASS script that reads it from the environment of the git process only; it never appears
 on a command line nor in a log. Network errors are retried (`retries` times, `wait` seconds apart); a push rejected
-because another run of the batch pushed first is retried after a rebase (each run writes its own directory, so the
-rebase never conflicts).
+because another run of the batch pushed first is retried from a fresh fetch of the branch, committing again on top of
+its new head (each run writes its own directory, so nothing ever conflicts).
 """
 
 from __future__ import annotations

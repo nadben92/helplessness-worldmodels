@@ -40,7 +40,18 @@ Weights (`*.pt`), replay buffers (`replay*.npz`), `arrays.npz`, `checkpoints/`, 
 `wandb/`. They stay under the cluster's results root (`/scratch/...`); `handoff.json` lists each with its
 absolute path on the cluster and its SHA-256, so a later measurement can check it reads the same bytes.
 
-## Producing it
+## Producing it, automatically (E4 on)
+
+Each run pushes its own light results when it ends, success or failure (`run_e4.py --push-batch <batch>`, through
+`helplessness.cluster.results_push`): under `results/<experiment_id>/<batch>/<run name>/`, its light files
+(`config.yaml`, `meta.yaml`, `results.json`, `metrics.csv`, `checkpoints.jsonl`, ...), `console.log.gz`,
+`run_status.json` (status, error, traceback) and `heavy_files.json` (the run's weights, buffers and arrays left on the
+volume, with absolute path, SHA-256 and size). At the end of the batch, the supervisor pushes `status.json` and a
+`handoff.json` gathering every run's status and heavy files. Pushes retry on network errors, and when another run
+of the batch pushed first they commit again on top of the branch's new head. The token comes from a Kubernetes secret mounted as a file (`RESULTS_PUSH_TOKEN`), handed to
+git through GIT_ASKPASS; it never appears in the code, the job spec, a command line or a log.
+
+## Producing it by hand (E3's handoffs)
 
 `helplessness.cluster.handoff.write_results_layout` builds the tree above from a supervisor directory and the
 run directories. E3's `make_handoff.py` exposes it as `--results-layout <dir>` (off by default: without it,

@@ -16,11 +16,12 @@ src/helplessness/                 the shared, importable library
     legacy/gridworld.py  E0's 5x5 environment. Frozen.
     zones.py             Zone, ZoneLayout, the reference zone.
     dynamics/            DynamicsSpec registry (4 types) + pairing (derive_control) + factory (YAML -> object).
-    appearance/          AppearanceSpec, themes, CIELAB theme sampling.
+    appearance/          AppearanceSpec, themes, CIELAB theme sampling, theme_axes.py (E4's colour axes).
     observation/         ObservationBackend: index (tabular) / pixel (world model).
     rewards/             GoalReward, ZeroReward.
     layouts/             Zone layouts built from configs/zones/: four_zones.py (E1/E2, with the counterbalancing
-                         permutation), four_zones_pixel.py (E3: pixels, themes, seed -> rotation -> block class).
+                         permutation), four_zones_pixel.py (E3: pixels, themes, seed -> rotation -> block class),
+                         two_zones.py (E4: UD and CD on a diagonal, slots as appearance categories).
     torus_env.py         TorusZonedEnv: the base environment from E1 on.
   agents/
     base.py              Agent ABC (transition_distribution only) + materialize_transition_tensor.
@@ -35,10 +36,14 @@ src/helplessness/                 the shared, importable library
   evaluation/            rollout.py, tiebreak.py, offline_support.py (E0's offline plumbing).
   streams/               Independent random streams by SeedSequence.spawn: tabular.py (E2), worldmodel.py (E3).
   twin/                  The tabular twin: counts in, the full tabular measurement chain out (E2, reused by E3).
-  probing/               Torch-side measurement of a world model (forward passes through a frozen RSSM -> arrays).
-  pipeline/              E3's world-model run pipeline: runtime.py, world.py, measure.py, checkpoints.py.
-  cluster/               GPU cluster tooling: kubeflow.py (supervisor, runtime patch), handoff.py (handoff and the
-                         results-branch layout), wandb_logger.py.
+  probing/               Torch-side measurement of a world model (forward passes through a frozen RSSM -> arrays):
+                         probe.py (E3), fixed_trajectory.py (I_s along fixed walks, E4), walks.py (the walks, numpy),
+                         theme_probes.py (E4's probe set).
+  pipeline/              The world-model run pipeline: runtime.py, world.py, measure.py, checkpoints.py (E3's run_mini),
+                         agent_run.py (E3's closed-loop run; ClosedLoopHooks for another world, E4 on), two_zones.py
+                         (the world of a two-zone environment).
+  cluster/               GPU cluster tooling: kubeflow.py (supervisor, runtime patches), handoff.py (handoff and the
+                         results-branch layout), results_push.py (automatic push to results/<batch>), wandb_logger.py.
   config.py              Dataclass configs (E0) + compose()/FROZEN_BLOCKS (E1+).
   runs.py                Results-naming convention, run metadata, code provenance.
   experiment_loader.py   load_experiment_module: loads a module of a finished experiment by path (legacy only).
@@ -50,7 +55,8 @@ experiments/             One directory per experiment: orchestration only (runne
   E1_offline_4zones/                                                                     FINISHED, frozen.
   E2_online_4zones/                                                                      FINISHED, frozen.
   E3_worldmodel_4zones/                                                                  FINISHED, frozen.
-  E4_generalization_gradient/, E5_belief_training/, E6_phenotypes_latent/, E7_latent_manipulation/
+  E4_generalization_gradient/   code ready (branch e4); launch: RUN_GPU.md.
+  E5_belief_training/, E6_phenotypes_latent/, E7_latent_manipulation/
 docs/                    EXPERIMENTS.md (the central tracker), one file per experiment, RESULTS_CONVENTION.md,
                          e3/ (E3's decisions, spec status, phase reports), archive/ (abandoned plans).
 results/                 Run outputs (see "results" below). Heavy artefacts are never versioned.
@@ -68,7 +74,8 @@ mark their final state, and `pre-reorg` the state before the 2026-10-14 reorgani
 - Their logic never changes: no change of computation, default value, seed, stream order or config. They may be
   moved and their imports updated; a module promoted to the library leaves a re-export shim at its old place
   (`experiments/E2_online_4zones/env.py`, `rng.py`, `twin.py`, `matched_control.py`; `experiments/E3_worldmodel_4zones/env.py`,
-  `rng_streams.py`, `probe.py`, `wandb_logger.py`; `run_mini.py` re-exports what moved to `pipeline/`). Shims are
+  `rng_streams.py`, `probe.py`, `wandb_logger.py`; `run_mini.py` re-exports what moved to `pipeline/`, `run_agent.py`
+  what moved to `pipeline/agent_run.py`). Shims are
   never removed and never edited except to follow a move.
 - A genuine bug in a finished experiment is flagged before it is fixed, never folded into unrelated work.
 - `configs/e3/*.yaml`, `configs/zones/e1_4zones.yaml` and every finished experiment's config are never edited.
