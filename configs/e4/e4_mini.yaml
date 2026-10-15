@@ -1,0 +1,55 @@
+# E4's CPU smoke configuration (end-to-end check, tests): configs/e4/e4.yaml with E3's tiny bench values
+# (tests/e3/test_e3_closed_loop.py::tiny_config): a 3x4 latent, 600 environment steps, few walks and draws.
+# Its numbers mean nothing; it only exercises every stage.
+model: {n_vars: 3, n_classes: 4, h_dim: 16, embed_dim: 16, base_depth: 4, unimix: 0.01}
+render: {k: 6, grid_lines: false, cielab_min_dist: 30.0, cielab_marker_min_dist: 30.0}
+budget: {total_steps: 560, prefill_steps: 40}
+collection: {start_distribution: uniform_non_terminal}
+train:
+  batch_size: 4
+  seq_len: 8
+  replay_ratio: 1
+  lr: 0.001
+  lr_after_switch: 0.0001
+  adam_eps: 1.0e-08
+  clip_norm: null
+  w_patch: 10.0
+  beta_dyn: 0.5
+  beta_rep: 0.1
+  free_bits: 0.0
+  free_bits_mode: per_step
+  rep_warmup_steps: null
+  latent_estimator: {kind: warmup_probs_until_separated, switch_js_threshold: -1.0, switch_consecutive: 2, switch_eval_every: 5, switch_min_steps: 10, switch_max_steps: 60,
+    switch_n_pairs: 64, collapse_js_threshold: -.inf, collapse_consecutive: 5}
+agent: {epsilon: 0.1, k_act: 4, k_imag: 2, horizon: 3, lam: 0.95, slow_tau: 0.02, tie_fraction: 0.5, tie_tol_min: 1.0e-06, hidden_dim: 16, critic_lr: 3.0e-05,
+  critic_clip_norm: 100.0, goal_lr: 0.0001, adam_eps: 1.0e-08}
+episode: {goal_reward: 50.0, step_reward: -1.0, max_steps: 36, gamma: 0.9}
+# run_one reads this block; E4's hooks replace E3's tabular twin, so nothing of it is computed.
+twin: {alpha: 1.0, save_kernels: false}
+measure:
+  final: false
+  kernel_margin_threshold: 0.001
+  max_images_per_forward: 2048
+  real_context: {window_len: 16, burn_in: 8, max_per_state: 3, kernel_draws: 8, kernel_draws_training: 256}
+  is_bootstrap: 200
+checkpoints:
+  grid: [200, 400, 600]
+  resume_every: 100
+  save_final_replay: true
+log: {monitor_every: 100, behaviour_window: 20}
+runtime: {num_threads: 2, device: cpu, deterministic: true}
+e4:
+  themes: configs/e4/themes.yaml
+  configurations:
+    p1-a-d1: {pair: pair1, inc: a, diagonal: 1, seed: 1}
+    p1-b-d1: {pair: pair1, inc: b, diagonal: 1, seed: 2}
+    p1-a-d2: {pair: pair1, inc: a, diagonal: 2, seed: 3}
+    p1-b-d2: {pair: pair1, inc: b, diagonal: 2, seed: 4}
+    p2-a-d1: {pair: pair2, inc: a, diagonal: 1, seed: 5}
+    p2-b-d1: {pair: pair2, inc: b, diagonal: 1, seed: 6}
+    p2-a-d2: {pair: pair2, inc: a, diagonal: 2, seed: 7}
+    p2-b-d2: {pair: pair2, inc: b, diagonal: 2, seed: 8}
+  walks: {n_pre: 32, n_in: 25, n_walks: 12, m: 5, seed: 2026, chunk: 64}
+  probe: {draws: 4}
+  checkpoint: {real_context_max_per_state: 2, real_context_draws: 4, n_walks: 6}
+  final_protocol_control: true

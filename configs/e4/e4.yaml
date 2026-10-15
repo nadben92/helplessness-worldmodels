@@ -1,0 +1,61 @@
+# E4 -- generalisation gradient (docs/E4_generalization_gradient.md): the training configuration of every run.
+# model, render, budget, collection, train and agent are configs/e3/gpu_campaign.yaml's blocks, unchanged (E3's
+# training procedure and its 300,000 environment steps); episode = experiments/E3_worldmodel_4zones/config.yaml's.
+# budget.total_steps is the PLANNED budget: beta_rep's ramp after the switch is 20% of the planned gradient steps left
+# (train.rep_warmup_steps: null, as E3), so a shorter run that must equal a checkpoint of this one keeps this value and
+# stops early with --max-env-steps (experiments/E4_generalization_gradient/README.md, "budget").
+# checkpoints.grid: E2's grid up to 100,000 steps, then every 25,000 steps (and E2's 158,489 and 251,189) to 300,000;
+# the weights are saved at every one of them.
+model: {n_vars: 8, n_classes: 8, h_dim: 64, embed_dim: 64, base_depth: 8, unimix: 0.01}
+render: {k: 6, grid_lines: false, cielab_min_dist: 30.0, cielab_marker_min_dist: 30.0}
+budget: {total_steps: 299744, prefill_steps: 256}
+collection: {start_distribution: uniform_non_terminal}
+train:
+  batch_size: 16
+  seq_len: 64
+  replay_ratio: 0.6
+  lr: 0.001
+  lr_after_switch: 0.0001
+  adam_eps: 1.0e-08
+  clip_norm: null
+  w_patch: 10.0
+  beta_dyn: 0.5
+  beta_rep: 0.1
+  free_bits: 0.0
+  free_bits_mode: per_step
+  rep_warmup_steps: null
+  latent_estimator: {kind: warmup_probs_until_separated, switch_js_threshold: 3.0, switch_consecutive: 5, switch_eval_every: 50, switch_min_steps: 500,
+    switch_max_steps: 25000, switch_n_pairs: 64, collapse_js_threshold: 1.0, collapse_consecutive: 5}
+agent: {epsilon: 0.1, k_act: 16, k_imag: 4, horizon: 15, lam: 0.95, slow_tau: 0.02, tie_fraction: 0.5, tie_tol_min: 1.0e-06, hidden_dim: 128, critic_lr: 3.0e-05,
+  critic_clip_norm: 100.0, goal_lr: 0.0001, adam_eps: 1.0e-08}
+episode: {goal_reward: 50.0, step_reward: -1.0, max_steps: 36, gamma: 0.9}
+# run_one reads this block; E4's hooks replace E3's tabular twin, so nothing of it is computed.
+twin: {alpha: 1.0, save_kernels: false}
+measure:
+  final: false
+  kernel_margin_threshold: 0.001
+  max_images_per_forward: 2048
+  real_context: {window_len: null, burn_in: 8, max_per_state: 200, kernel_draws: 1358, kernel_draws_training: 256}
+  is_bootstrap: 200
+checkpoints:
+  grid: [1000, 1585, 2512, 3981, 6310, 10000, 15849, 25119, 39811, 63096, 100000, 125000, 150000, 158489, 175000, 200000, 225000, 250000, 251189, 275000,
+    300000]
+  resume_every: 10000
+  save_final_replay: true
+log: {monitor_every: 1000, behaviour_window: 100}
+runtime: {num_threads: 1, device: cuda, deterministic: true}
+e4:
+  themes: configs/e4/themes.yaml
+  configurations:
+    p1-a-d1: {pair: pair1, inc: a, diagonal: 1, seed: 1}
+    p1-b-d1: {pair: pair1, inc: b, diagonal: 1, seed: 2}
+    p1-a-d2: {pair: pair1, inc: a, diagonal: 2, seed: 3}
+    p1-b-d2: {pair: pair1, inc: b, diagonal: 2, seed: 4}
+    p2-a-d1: {pair: pair2, inc: a, diagonal: 1, seed: 5}
+    p2-b-d1: {pair: pair2, inc: b, diagonal: 1, seed: 6}
+    p2-a-d2: {pair: pair2, inc: a, diagonal: 2, seed: 7}
+    p2-b-d2: {pair: pair2, inc: b, diagonal: 2, seed: 8}
+  walks: {n_pre: 32, n_in: 25, n_walks: 300, m: 5, seed: 2026, chunk: 64}
+  probe: {draws: 16}
+  checkpoint: {real_context_max_per_state: 20, real_context_draws: 64, n_walks: 100}
+  final_protocol_control: true
