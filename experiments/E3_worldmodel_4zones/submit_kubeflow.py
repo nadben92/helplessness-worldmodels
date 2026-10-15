@@ -16,6 +16,10 @@ import subprocess
 import sys
 import time
 
+_SRC = Path(__file__).resolve().parents[2] / "src"
+if str(_SRC) not in sys.path:  # the notebook's Python runs this script without the package installed
+    sys.path.insert(0, str(_SRC))
+
 from helplessness.cluster.kubeflow import runtime_patch as _runtime_patch
 from helplessness.cluster.kubeflow import supervise  # moved to the library on 2026-10-14, re-exported here
 
