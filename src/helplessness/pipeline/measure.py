@@ -56,6 +56,10 @@ ACC_LABELS = {
 SLOT_SEPARATION, SLOT_DIAG, SLOT_IZS, SLOT_ZONLY, SLOT_D1_REAL, SLOT_FAILURE, SLOT_FINAL, SLOT_D1_CANONICAL = 1, 2, 3, 4, 6, 7, 8, 9
 SLOT_HONLY = 11  # the h-only probe (2026-09-30); slot 10 is action_in_latent.py's
 SLOT_PER_CONTEXT = 12  # the per-context I_s check (2026-09-30, also is_pooling_check.py)
+# results.json leaves out the per-state arrays (they are in arrays.npz); load_run_report puts them back.
+ARRAY_FIELDS = {"I_z": "I_z", "I_z_se": "I_z_se", "I_z_real": "real_I_z", "I_z_real_se": "real_I_z_se",
+                "I_z_real_sd": "real_I_z_sd", "n_contexts": "real_n_contexts",
+                "I_s_real": "real_I_s", "I_s_real_se": "real_I_s_se", "I_s_real_bias": "real_I_s_bias"}
 
 
 def zone_mean_mc_se(se_per_state: np.ndarray) -> float:

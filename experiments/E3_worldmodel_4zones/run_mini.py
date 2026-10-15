@@ -190,6 +190,9 @@ from helplessness.pipeline.checkpoints import (  # moved to the library on 2026-
     world_record,
     load_run_data,
 )
+from helplessness.pipeline.measure import (  # moved to the library on 2026-10-14, re-exported here
+    ARRAY_FIELDS,
+)
 
 START_DISTRIBUTIONS = ("uniform_non_terminal",)
 
@@ -642,12 +645,6 @@ def run_one_seed(cfg: dict, seed: int, run_dir: Path, device: torch.device, max_
                    run_dir, artifact=wandb_artifact)
     log(f"run done; results in {run_dir}")
     return report
-
-
-# results.json leaves out the per-state arrays (they are in arrays.npz); load_run_report puts them back.
-ARRAY_FIELDS = {"I_z": "I_z", "I_z_se": "I_z_se", "I_z_real": "real_I_z", "I_z_real_se": "real_I_z_se",
-                "I_z_real_sd": "real_I_z_sd", "n_contexts": "real_n_contexts",
-                "I_s_real": "real_I_s", "I_s_real_se": "real_I_s_se", "I_s_real_bias": "real_I_s_bias"}
 
 
 def load_run_report(run_dir: Path) -> dict:
