@@ -102,3 +102,19 @@ def runtime_patch(volume: str, mount: str, secret: str | None, token_mount: str)
             "volumes": volumes, "containers": [{"name": "node", "volumeMounts": mounts}],
         }}}}}
     ]}}}
+
+
+def runtime_patch_secrets(volume: str, mount: str, secrets: dict[str, str]) -> dict:
+    """runtime_patch with any number of secrets (added 2026-10-15 for E4: the W&B key and the results-push token):
+    secrets maps a Kubernetes secret's name to the directory where it is mounted, read-only, in the container. The
+    cluster's admission policy accepts volumes, not environment patches, so credentials always arrive as files."""
+    volumes = [{"name": "scratch", "persistentVolumeClaim": {"claimName": volume}}]
+    mounts = [{"name": "scratch", "mountPath": mount}]
+    for i, (secret, path) in enumerate(sorted(secrets.items())):
+        volumes.append({"name": f"secret-{i}", "secret": {"secretName": secret}})
+        mounts.append({"name": f"secret-{i}", "mountPath": path, "readOnly": True})
+    return {"template": {"spec": {"replicatedJobs": [
+        {"name": "node", "template": {"spec": {"template": {"spec": {
+            "volumes": volumes, "containers": [{"name": "node", "volumeMounts": mounts}],
+        }}}}}
+    ]}}}
