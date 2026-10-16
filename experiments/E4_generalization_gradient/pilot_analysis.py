@@ -20,6 +20,14 @@
   probes       from measure_probes.py outputs (--probes, one directory per configuration): the extreme probes (training
                image: UD and CD; theme only: T_inc at the neutral slot; position only: the corridor's colour at the UD
                slot) and the full grid (b at entry against the distance to T_inc, by axis and position, with figures).
+  sufficiency  from measure_probes.py outputs saved with --save-steps: the standard error of b at entry against the
+               number of walks used (bootstrap resampling of the walks, the same walks for both models), by (image, zone)
+               and overall; the smallest number of walks whose median standard error is below --se-target, to set
+               e4.walks.n_walks for wave 2.
+
+Inputs: --runs / --probes directories, or --export <dir>, the extracted archive of export_batch.py (its run and probe
+directories are found under <dir>/results/E4_generalization_gradient/); forgetting takes --export with --configuration.
+Checkpoints without diagnostics (later batches, run_e4.py --diagnostics-at) are skipped.
 
 Usage, from the repo root:
   python experiments/E4_generalization_gradient/pilot_analysis.py convergence --runs <run dir> ... --out <dir>
@@ -28,6 +36,8 @@ Usage, from the repo root:
   python experiments/E4_generalization_gradient/pilot_analysis.py forgetting --configuration p1-a-d1 --checkpoint B \\
       --experimental-run <dir> --reference-run <dir> --out <dir>
   python experiments/E4_generalization_gradient/pilot_analysis.py probes --probes <dir> ... --out <dir>
+  python experiments/E4_generalization_gradient/pilot_analysis.py sufficiency --probes <dir> ... --out <dir>
+  (any of them with --export <extracted archive> instead of --runs / --probes / the run directories)
 """
 
 from __future__ import annotations
@@ -59,13 +69,30 @@ def _plt():
     return plt
 
 
+def export_dirs(root: Path) -> tuple[list[Path], list[Path]]:
+    """The run and probe directories of an extracted export_batch.py archive."""
+    base = root / "results" / e4_setup.EXPERIMENT_ID
+    runs = sorted(d for d in base.glob("*__pair-*") if (d / "config.yaml").is_file())
+    probes = sorted(d for d in base.glob("probes__*") if (d / "images.csv").is_file())
+    return runs, probes
+
+
+def find_in_export(root: Path, config_id: str, condition: str) -> Path:
+    role = "experimental" if condition == "experimental" else "control"
+    found = [d for d in export_dirs(root)[0] if f"__2zones-{config_id}__pair-{role}__" in d.name]
+    if not found:
+        raise SystemExit(f"no {condition} run of {config_id} in {root}")
+    return found[-1]
+
+
 def load_runs(run_dirs: list[Path]) -> dict:
-    """configuration -> condition -> {"dir", "records" (checkpoints.jsonl), "roles"}."""
+    """configuration -> condition -> {"dir", "records" (checkpoints.jsonl, those with diagnostics), "roles"}."""
     runs: dict = {}
     for d in run_dirs:
         cfg = yaml.safe_load((d / "config.yaml").read_text(encoding="utf-8"))
         meta = yaml.safe_load((d / "meta.yaml").read_text(encoding="utf-8"))
         records = [json.loads(line) for line in (d / "checkpoints.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
+        records = [r for r in records if r.get("e4")]
         cid = cfg["e4"]["run_configuration"]
         conf = e4_setup.configuration(cfg, cid)
         runs.setdefault(cid, {})[meta["condition"]] = {"dir": d, "records": records, "roles": conf["roles"], "cfg": cfg}
@@ -187,6 +214,11 @@ def cmd_evolution(args) -> dict:
 def cmd_forgetting(args) -> dict:
     from measure_probes import load_rssm
 
+    if args.export is not None:
+        args.experimental_run = find_in_export(args.export, args.configuration, "experimental")
+        args.reference_run = find_in_export(args.export, args.configuration, "reference")
+    if not (args.experimental_run and args.reference_run):
+        raise SystemExit("forgetting needs --experimental-run and --reference-run, or --export")
     cfg = e4_setup.load_config(args.config)
     conf = e4_setup.configuration(cfg, args.configuration)
     device = torch.device("cpu")
@@ -286,6 +318,63 @@ def cmd_probes(args) -> dict:
     return summary
 
 
+def b_entry_resampled(steps: dict, key: str, counts: np.ndarray, m: int) -> float:
+    """b at entry (by state, then by zone) with every walk weighted by its count in a resample."""
+    k, states, walk = steps[f"{key}_steps_since_entry"], steps[f"{key}_states"].astype(np.int64), steps[f"{key}_walk"].astype(np.int64)
+    sel = (k >= 1) & (k <= m)
+    out = []
+    for name in ("experimental", "reference"):
+        I = steps[f"{key}_{name}_I"].astype(np.float64)
+        ok = sel & np.isfinite(I)
+        w = counts[walk[ok]].astype(np.float64)
+        s = states[ok]
+        tot = np.bincount(s, weights=w * I[ok], minlength=e4_setup.two_zones.N_STATES)
+        n = np.bincount(s, weights=w, minlength=e4_setup.two_zones.N_STATES)
+        out.append(float(np.mean(tot[n > 0] / n[n > 0])) if (n > 0).any() else float("nan"))
+    return out[0] - out[1]
+
+
+def cmd_sufficiency(args) -> dict:
+    rng = np.random.default_rng(0)
+    rows = []
+    for d in args.probes:
+        if not (d / "steps.npz").is_file():
+            raise SystemExit(f"{d}: no steps.npz (measure_probes.py --save-steps)")
+        cfg = e4_setup.load_config(args.config)
+        m = cfg["e4"]["walks"]["m"]
+        steps = dict(np.load(d / "steps.npz"))
+        keys = sorted({k[: k.index("_", 5)] for k in steps if k.endswith("_steps_since_entry")})
+        for key in keys:
+            n_total = int(steps[f"{key}_walk"].max()) + 1
+            full = b_entry_resampled(steps, key, np.ones(n_total), m)
+            for n in [n for n in args.n_walks if n <= n_total]:
+                draws = [b_entry_resampled(steps, key, np.bincount(rng.integers(0, n_total, n), minlength=n_total), m)
+                         for _ in range(args.bootstrap)]
+                rows.append({"probes_dir": d.name, "image_zone": key, "n_walks": n, "b_entry_all_walks": full,
+                             "se": float(np.nanstd(draws, ddof=1))})
+    _write_csv(args.out / "sufficiency.csv", rows)
+    summary = {}
+    for n in sorted({r["n_walks"] for r in rows}):
+        se = [r["se"] for r in rows if r["n_walks"] == n and np.isfinite(r["se"])]
+        summary[n] = {"median_se": float(np.median(se)) if se else float("nan"), "max_se": float(np.max(se)) if se else float("nan"),
+                      "pairs": len(se)}
+    enough = [n for n, s in summary.items() if s["median_se"] <= args.se_target]
+    result = {"se_by_n_walks": summary, "se_target": args.se_target, "recommended_n_walks": min(enough) if enough else None}
+    (args.out / "sufficiency.json").write_text(json.dumps(result, indent=1), encoding="utf-8")
+    plt = _plt()
+    fig, ax = plt.subplots(figsize=(6, 4))
+    ns = sorted(summary)
+    ax.plot(ns, [summary[n]["median_se"] for n in ns], marker="o", label="median over (image, zone)")
+    ax.plot(ns, [summary[n]["max_se"] for n in ns], marker=".", label="max")
+    ax.axhline(args.se_target, color="r", ls="--")
+    ax.set_xlabel("walks")
+    ax.set_ylabel("standard error of b at entry (bits)")
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(args.out / "sufficiency.png", dpi=120)
+    return result
+
+
 def _write_csv(path: Path, rows: list[dict]) -> None:
     if not rows:
         return
@@ -298,11 +387,17 @@ def _write_csv(path: Path, rows: list[dict]) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("convergence", "protocol", "evolution", "forgetting", "probes"):
+    for name in ("convergence", "protocol", "evolution", "forgetting", "probes", "sufficiency"):
         p = sub.add_parser(name)
         p.add_argument("--out", type=Path, required=True)
         p.add_argument("--runs", type=Path, nargs="*", default=[])
         p.add_argument("--probes", type=Path, nargs="*", default=[])
+        p.add_argument("--export", type=Path, default=None, help="an extracted export_batch.py archive")
+    s = sub.choices["sufficiency"]
+    s.add_argument("--config", type=Path, default=e4_setup.DEFAULT_CONFIG)
+    s.add_argument("--n-walks", type=int, nargs="+", default=[25, 50, 100, 150, 200, 300])
+    s.add_argument("--bootstrap", type=int, default=200)
+    s.add_argument("--se-target", type=float, default=0.05)
     c = sub.choices["convergence"]
     c.add_argument("--mass-min", type=float, default=0.97)
     c.add_argument("--b-cd-max", type=float, default=0.1)
@@ -311,17 +406,20 @@ def main(argv: list[str] | None = None) -> int:
     f.add_argument("--config", type=Path, default=e4_setup.DEFAULT_CONFIG)
     f.add_argument("--configuration", required=True)
     f.add_argument("--checkpoint", type=int, required=True)
-    f.add_argument("--experimental-run", type=Path, required=True)
-    f.add_argument("--reference-run", type=Path, required=True)
+    f.add_argument("--experimental-run", type=Path, default=None)
+    f.add_argument("--reference-run", type=Path, default=None)
     f.add_argument("--slot-role", default="ud", choices=("ud", "cd", "neutral", "other"))
     f.add_argument("--n-walks", type=int, default=20)
     f.add_argument("--n-prefixes", type=int, default=3)
     f.add_argument("--draws", type=int, default=8)
     f.add_argument("--tol", type=float, default=0.05)
     args = parser.parse_args(argv)
+    if args.export is not None and args.command != "forgetting":
+        runs, probes = export_dirs(args.export)
+        args.runs, args.probes = args.runs or runs, args.probes or probes
     args.out.mkdir(parents=True, exist_ok=False)
     result = {"convergence": cmd_convergence, "protocol": cmd_protocol, "evolution": cmd_evolution, "forgetting": cmd_forgetting,
-              "probes": cmd_probes}[args.command](args)
+              "probes": cmd_probes, "sufficiency": cmd_sufficiency}[args.command](args)
     print(json.dumps(result, indent=1, default=float)[:4000])
     return 0
 

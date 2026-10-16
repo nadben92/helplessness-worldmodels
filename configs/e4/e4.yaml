@@ -55,7 +55,9 @@ e4:
     p2-b-d1: {pair: pair2, inc: b, diagonal: 1, seed: 6}
     p2-a-d2: {pair: pair2, inc: a, diagonal: 2, seed: 7}
     p2-b-d2: {pair: pair2, inc: b, diagonal: 2, seed: 8}
-  walks: {n_pre: 32, n_in: 25, n_walks: 300, m: 5, seed: 2026, chunk: 64}
+  # n_in: steps in the zone for the extreme probes (training image, theme only, position only) and the evolution in the
+  # zone; n_in_grid: for the rest of the grid (the same walks, cut after their n_in_grid-th step in the zone).
+  walks: {n_pre: 32, n_in: 25, n_in_grid: 10, n_walks: 300, m: 5, seed: 2026, chunk: 64}
   probe: {draws: 16}
   checkpoint: {real_context_max_per_state: 20, real_context_draws: 64, n_walks: 100}
   final_protocol_control: true

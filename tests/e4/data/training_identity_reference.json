@@ -1,0 +1,14 @@
+{
+ "platform": "Windows",
+ "python": "3.14.0",
+ "torch": "2.14.0+cpu",
+ "numpy": "2.5.2",
+ "weights_sha256": {
+  "experimental/100": "e2ba3125809086b9b1219887217f771d94a997ba2f3c214bbb291e4b69ddc366",
+  "experimental/200": "5c70fab828180d0aaab105effce20bdf1189da322675e43ebac01674371fd1d3",
+  "experimental/300": "e62c863ad2c41509b4d8c495bc46a37754ae722169bfce9284904dbc8818a4fb",
+  "reference/100": "d7a515fa018d6da464a6ddf57505be70a956b8edfaba722cfad66ae60f0d8020",
+  "reference/200": "7e47f1f251fba5f9f34cdcfcdd08a9d4d3771efa9cbb03b6ecbf670e9b824b76",
+  "reference/300": "2e2ccba035f87a3d040e164054f7cb459d3fc2fca0afe5f233e9190414cdbbc4"
+ }
+}

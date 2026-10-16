@@ -74,16 +74,25 @@ def _walks(n_pre: int, n_in: int, n_walks: int, seed: int, slot: str) -> dict:
     return walks_mod.generate_walks(P, two_zones.corridor_states(layout), two_zones.region_states(layout)[slot], n_walks, n_pre, n_in, rng)
 
 
-def walks_for_slot(cfg: dict, slot: str, n_walks: int | None = None) -> dict:
-    """The fixed walks into a slot (probing.walks), the same for every image and both models; a smaller n_walks gives
-    the first n_walks of the full set (one generator, walk after walk)."""
+def walks_for_slot(cfg: dict, slot: str, n_walks: int | None = None, n_in: int | None = None) -> dict:
+    """The fixed walks into a slot (probing.walks), the same for every image and both models. A smaller n_walks gives
+    the first n_walks of the full set (one generator, walk after walk); a smaller n_in cuts every walk after its n_in-th
+    state in the zone (the same walks, shorter: e4.walks.n_in_grid for the full grid, e4.walks.n_in for the extreme
+    probes and the evolution in the zone)."""
     w = cfg["e4"]["walks"]
     full = _walks(w["n_pre"], w["n_in"], w["n_walks"], w["seed"], slot)
     n = w["n_walks"] if n_walks is None else n_walks
     if n > w["n_walks"]:
         raise ValueError(f"n_walks {n} > the full set's {w['n_walks']}")
-    keep = slice(0, n)
-    out = {k: v[keep] for k, v in full.items()}
+    out = {k: v[:n].copy() for k, v in full.items()}
+    if n_in is not None and n_in < w["n_in"]:
+        for i in range(n):
+            end = int(np.flatnonzero(out["steps_since_entry"][i] == n_in)[0]) + 1
+            out["actions"][i, end - 1] = -1
+            for key, fill in (("states", -1), ("actions", -1), ("phase", walks_mod.PHASE_PAD), ("steps_since_start", -1),
+                              ("steps_since_entry", 0)):
+                out[key][i, end:] = fill
+            out["length"][i] = end
     T = int(out["length"].max())
     return {k: (v[:, :T] if v.ndim == 2 else v) for k, v in out.items()}
 
