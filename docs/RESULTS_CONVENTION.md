@@ -40,7 +40,14 @@ Weights (`*.pt`), replay buffers (`replay*.npz`), `arrays.npz`, `checkpoints/`, 
 `wandb/`. They stay under the cluster's results root (`/scratch/...`); `handoff.json` lists each with its
 absolute path on the cluster and its SHA-256, so a later measurement can check it reads the same bytes.
 
-## Producing it, automatically (E4 on)
+## E4: an archive per batch; the push is optional
+
+E4 brings a batch back as one archive, made in the notebook by `experiments/E4_generalization_gradient/export_batch.py
+create` (each run's light files, the weights of its final checkpoint, the probe measurements, the supervisor's logs,
+`MANIFEST.json` with every file's size and SHA-256) and checked locally by `export_batch.py verify`; the analyses read the
+extracted directory. The push below is off by default (`submit_kubeflow.py --push-secret` turns it on).
+
+## Producing it, automatically (optional)
 
 Each run pushes its own light results when it ends, success or failure (`run_e4.py --push-batch <batch>`, through
 `helplessness.cluster.results_push`): under `results/<experiment_id>/<batch>/<run name>/`, its light files

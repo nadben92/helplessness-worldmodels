@@ -16,9 +16,10 @@ the walks and the measure (`probing/walks.py`, `probing/fixed_trajectory.py`), E
 | `e4_setup.py` | Shared set-up: config, colours, a configuration's worlds, walks, measurement seeds |
 | `run_e4.py` | One training run (configuration x condition): E3's closed loop with E4's world and checkpoint records |
 | `measure_probes.py` | The zero-data probes of a configuration at a checkpoint (93 images, both models) |
+| `export_batch.py` | One archive per batch (light files, final weights, probes, logs, manifest) and its check |
 | `pilot_analysis.py` | The pilot's analyses: convergence and B, protocol control, evolution in the zone, forgetting, probes |
-| `batches.py` | The four waves |
-| `submit_kubeflow.py` | Submission of a wave to the GPU cluster (supervisor, automatic push of the results) |
+| `batches.py` | The two waves (and the optional diagonal-2 replicas) |
+| `submit_kubeflow.py` | Submission to the GPU cluster: training, resume, probes at a checkpoint (push optional, off) |
 | `render_check.py` | Renders the environments and some probes for a visual check (outside the repo) |
 | `RUN_GPU.md` | Launch instructions for wave 1 |
 
@@ -39,7 +40,8 @@ does not depend on the budget, and the measurements at the checkpoints never tou
 (`tests/e4/test_e4_training.py`, exact equality of the weights):
 
 - a run planned for 300,000 steps and stopped at B (`--max-env-steps B`) has at B exactly the weights of a full run's
-  checkpoint B; waves 2-4 run this way (`batches.py`);
+  checkpoint B; wave 2 runs this way (`batches.py`), with its checkpoint diagnostics only at B and at control
+  checkpoints (`--diagnostics-at`);
 - a run *planned* for B steps is not the same run (its `beta_rep` ramp is shorter).
 
 ## Running
@@ -52,28 +54,23 @@ python experiments/E4_generalization_gradient/measure_probes.py --configuration 
     --experimental-run <dir> --reference-run <dir> [--device cuda]
 ```
 
-A run writes `results/E4_generalization_gradient/<run name>/` (see `run_e4.py`'s docstring); with `--push-batch` its
-light files go to the branch `results/<batch>` at the end (`docs/RESULTS_CONVENTION.md`).
+A run writes `results/E4_generalization_gradient/<run name>/` (see `run_e4.py`'s docstring); `export_batch.py create`
+gathers a batch into one archive (`exports/`), `export_batch.py verify` checks it once extracted, and every analysis reads
+the extracted directory (`--export`). Pushing to a branch `results/<batch>` (`--push-batch`) is optional and off.
 
-Cost of the probes: the full measure of one configuration (96 image x zone pairs, two models, 300 walks, 16 draws per
-action) costs about **7.5 hours on CPU** (8 threads): 280 s per image x zone pair for the two models, measured on 6 pairs
-(2026-10-15) and extrapolated to the 96 -- a full run, stopped after 6 hours, agrees. It was timed with E3's trained
-weights (same architecture), whose prior is diffuse on E4's images (66% of the draws distinct), so it overestimates
-the cost for E4's own models. Most of it is the decoding and the template matching, which run on the GPU on the
-cluster.
+Cost of the probes: I_s is computed only at the steps in the zone of interest (the corridor is filtered, never
+decoded). With n_in = 10 steps in the zone for the grid and 25 for the six extreme pairs (training image x 4 zones, theme
+only, position only), 300 walks, 16 draws per action, one configuration costs about **3.6 hours on CPU** (8 threads; 7.5
+hours with n_in = 25 everywhere): 126 s per grid pair and 293 s per extreme pair for the two models, extrapolated from
+30 walks (2026-10-16), with E3's trained weights of the same architecture -- their prior is diffuse on E4's images, so
+this overestimates E4's own models. On the cluster, decoding and matching run on the GPU (`--phase probes --n-walks 30`
+times it in a tenth of the cost). Local analyses with the weights: forgetting about 2-3 minutes, the extreme probes
+about 30 minutes per configuration, on CPU.
 
 ## Pilot analyses (wave 1, local)
 
-```bash
-A=experiments/E4_generalization_gradient
-R=../results-e4_wave1/results/E4_generalization_gradient/e4_wave1     # the results branch, git worktree
-python $A/pilot_analysis.py convergence --runs $R/*/ --out <dir>      # criterion, B (budget_choice.json), figure
-python $A/pilot_analysis.py protocol --runs $R/*/ --out <dir>         # b fixed walks vs E3's end-of-training b
-python $A/pilot_analysis.py evolution --runs $R/*/ --out <dir>        # b by step since entry
-# with the weights of checkpoint B copied from the volume (results/E4_generalization_gradient/<run>/checkpoints/):
-python $A/measure_probes.py --configuration p1-a-d1 --checkpoint <B> --experimental-run <dir> --reference-run <dir>
-python $A/pilot_analysis.py forgetting --configuration p1-a-d1 --checkpoint <B> --experimental-run <dir> --reference-run <dir> --out <dir>
-python $A/pilot_analysis.py probes --probes <measure_probes output dirs> --out <dir>   # extreme probes and the full grid
-```
-
-Then write B into `batches.py` (`B_AFTER_PILOT`) before launching waves 2-4.
+`RUN_GPU.md`, steps 4-6: export the batch on the cluster, extract the archive locally, `export_batch.py verify`, then
+`pilot_analysis.py convergence | protocol | evolution | forgetting --export <dir>` (B in `budget_choice.json`), the probes
+at B on the cluster (`submit_kubeflow.py --phase probes --checkpoint <B>`), a second export, and
+`pilot_analysis.py probes | sufficiency --export <dir>` (the grid, the extreme probes, the number of walks for wave 2).
+Then write B into `batches.py` (`B_AFTER_PILOT`) before launching wave 2.

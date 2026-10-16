@@ -48,7 +48,7 @@ PHASES = ("train", "resume", "probes")
 
 
 def commands(phase: str, python: str, batch: str, push: dict | None = None, resume: str = "", checkpoint: int | None = None,
-             configurations: list[str] | None = None, device: str = "cuda") -> list[tuple[str, list[str]]]:
+             configurations: list[str] | None = None, device: str = "cuda", n_walks: int | None = None) -> list[tuple[str, list[str]]]:
     """The supervisor's jobs. push: None (default, no push) or {"repo": url, "token_file": path}. device: cuda on the
     cluster; cpu only to try the phases locally (--worker --device cpu)."""
     push_args = [] if push is None else ["--push-batch", batch, "--push-repo", push["repo"], "--push-token-file", push["token_file"]]
@@ -68,7 +68,8 @@ def commands(phase: str, python: str, batch: str, push: dict | None = None, resu
         return [(f"probes_{cid}_env{int(checkpoint):06d}",
                  [python, "-u", f"{SCRIPT}/measure_probes.py", "--config", batches.CONFIG, "--configuration", cid,
                   "--checkpoint", str(int(checkpoint)), "--find-runs", RESULTS_SUBDIR, "--device", device,
-                  "--out-dir", RESULTS_SUBDIR, "--save-steps"]) for cid in chosen]
+                  "--out-dir", RESULTS_SUBDIR, "--save-steps", *([] if n_walks is None else ["--n-walks", str(n_walks)])])
+                for cid in chosen]
     if phase != "train":
         raise ValueError(f"unknown phase {phase!r}")
     stop, diag = batches.max_env_steps(batch), batches.diagnostics_at(batch)
@@ -91,7 +92,7 @@ def batch_run_dirs(repo: Path, batch: str, started_after: str = "") -> list[Path
 
 
 def _run_e4(repo_dir: str, phase: str, output: str, batch: str, push_repo: str = "", token_dir: str = "", resume: str = "",
-            max_parallel: int = 0, checkpoint: int = 0, configurations: str = "") -> None:
+            max_parallel: int = 0, checkpoint: int = 0, configurations: str = "", n_walks: int = 0) -> None:
     """Serialized by CustomTrainer: imports and constants must be self-contained (as E3's _run_e3)."""
     import os
     from pathlib import Path
@@ -123,6 +124,8 @@ def _run_e4(repo_dir: str, phase: str, output: str, batch: str, push_repo: str =
         args += ["--checkpoint", str(checkpoint)]
     if configurations:
         args += ["--configurations", *configurations.split(",")]
+    if n_walks:
+        args += ["--n-walks", str(n_walks)]
     subprocess.run(args, cwd=repo, check=True)
 
 
@@ -130,7 +133,8 @@ def worker(args) -> int:
     started = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     repo, output = Path(args.repo_dir), Path(args.output)
     push = {"repo": args.push_repo, "token_file": args.push_token_file} if args.push_repo else None
-    jobs = commands(args.phase, sys.executable, args.batch, push, args.resume, args.checkpoint, args.configurations, args.device)
+    jobs = commands(args.phase, sys.executable, args.batch, push, args.resume, args.checkpoint, args.configurations, args.device,
+                    args.n_walks)
     max_parallel = args.max_parallel or (batches.PROBES_MAX_PARALLEL if args.phase == "probes" else None)
     code = supervise(jobs, repo, output, max_parallel=max_parallel)
     if push is not None and args.phase != "probes":  # the batch-level status, after every run pushed its own results
@@ -168,6 +172,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repo-dir", required=True, help="the e4 checkout on the persistent volume")
     parser.add_argument("--checkpoint", type=int, default=None, help="phase probes: the environment step of the weights")
     parser.add_argument("--configurations", nargs="+", default=None, help="phase probes: a subset of the batch's configurations")
+    parser.add_argument("--n-walks", type=int, default=None, help="phase probes: the first N walks only (a quick timing)")
     parser.add_argument("--volume", default="scratch-volume")
     parser.add_argument("--mount", default="/scratch")
     parser.add_argument("--memory", default="64Gi")
@@ -191,7 +196,7 @@ def main(argv: list[str] | None = None) -> int:
     repo = Path(args.repo_dir).resolve()
     push = {"repo": "https://<origin>", "token_file": f"{PUSH_TOKEN_DIR}/{PUSH_TOKEN_KEY}"} if args.push_secret else None
     try:
-        commands(args.phase, "python", args.batch, push, args.resume or "x", args.checkpoint, args.configurations)
+        commands(args.phase, "python", args.batch, push, args.resume or "x", args.checkpoint, args.configurations, "cuda", args.n_walks)
     except ValueError as err:
         parser.error(str(err))
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
@@ -199,7 +204,7 @@ def main(argv: list[str] | None = None) -> int:
     patch = runtime_patch_secrets(args.volume, args.mount, {args.push_secret: PUSH_TOKEN_DIR} if args.push_secret else {})
     max_parallel = args.max_parallel or (batches.PROBES_MAX_PARALLEL if args.phase == "probes" else None)
     if args.dry_run:
-        jobs = commands(args.phase, "<venv python>", args.batch, push, args.resume, args.checkpoint, args.configurations)
+        jobs = commands(args.phase, "<venv python>", args.batch, push, args.resume, args.checkpoint, args.configurations, "cuda", args.n_walks)
         print(json.dumps({"batch": args.batch, "phase": args.phase, "cpus": batches.BATCH_CPUS[args.batch], "max_parallel": max_parallel,
                           "push": push is not None, "output": str(output), "jobs": jobs, "runtime_patch": patch}, indent=1))
         return 0
@@ -222,7 +227,7 @@ def main(argv: list[str] | None = None) -> int:
             func_args={"repo_dir": str(repo), "phase": args.phase, "output": str(output), "batch": args.batch,
                        "push_repo": url if push else "", "token_dir": PUSH_TOKEN_DIR if push else "", "resume": args.resume,
                        "max_parallel": max_parallel or 0, "checkpoint": args.checkpoint or 0,
-                       "configurations": ",".join(args.configurations or [])},
+                       "configurations": ",".join(args.configurations or []), "n_walks": args.n_walks or 0},
             resources_per_node={"cpu": str(cpus), "memory": args.memory, "nvidia.com/gpu": "1"},
         ),
     )

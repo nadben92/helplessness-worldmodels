@@ -1,6 +1,6 @@
 # E4 — Generalisation gradient
 
-**Status (2026-10-15): code ready, wave 1 (the pilot) prepared, not launched.** Branch `e4`. Code and usage:
+**Status (2026-10-16): code ready, wave 1 (the pilot) prepared, not launched.** Branch `e4`. Code and usage:
 `experiments/E4_generalization_gradient/README.md`; launch: `experiments/E4_generalization_gradient/RUN_GPU.md`.
 Deterministic dynamics only.
 
@@ -27,20 +27,23 @@ and training procedure (`configs/e3/gpu_campaign.yaml`'s blocks, unchanged).
   neutral slot (probed) is the slot of the other diagonal in UD's row band (nw <-> ne, se <-> sw). E3's class-A
   rotations put the conveyor on diagonal 1, class-B ones on diagonal 2; all four slots are 2 steps from the goal.
 - Finding: with two zones only, the column reflection about the goal maps diagonal 1 onto diagonal 2 exactly -- the
-  diagonal factor changes the image, not the dynamics.
+  diagonal changes the image, not the dynamics. It was therefore removed as a factor of the plan (2026-10-16).
 
 ## Plan
 
-A configuration = colour pair x orientation (which colour is T_inc) x diagonal: 8 configurations, each with its own
-seed shared by its experimental run and its reference (16 runs). Four waves of four runs (`batches.py`), each one pair
-on one diagonal with both orientations:
+A configuration = colour pair x orientation (which colour is T_inc), on diagonal 1: 4 configurations, each with its own
+seed shared by its experimental run and its reference (8 runs), in two waves of four (`batches.py`), each one pair with
+both orientations:
 
-| Wave | Configurations | Budget |
-|---|---|---|
-| 1 (pilot) | `p1-a-d1`, `p1-b-d1` | 300,000 steps |
-| 2 | `p1-a-d2`, `p1-b-d2` | B (after the pilot) |
-| 3 | `p2-a-d1`, `p2-b-d1` | B |
-| 4 | `p2-a-d2`, `p2-b-d2` | B |
+| Wave | Configurations | Budget | Checkpoint diagnostics |
+|---|---|---|---|
+| 1 (pilot) | `p1-a-d1`, `p1-b-d1` | 300,000 steps | every checkpoint (the choice of B) |
+| 2 | `p2-a-d1`, `p2-b-d1` | B (after the pilot) | B and the control checkpoints 10,000 and 100,000 |
+
+The diagonal was a factor of the first plan (8 configurations, 4 waves). It is no longer one: the column reflection
+about the goal exchanges the diagonals exactly, so a diagonal-2 run is the same dynamics with a mirrored image. The
+diagonal-2 configurations stay defined as optional replicas (`batches.REPLICAS`: same configuration, reflected image,
+new seed), outside the default waves.
 
 Checkpoints: E2's grid to 100,000 steps, then every 25,000 steps to 300,000 (and E2's 158,489, 251,189); weights saved at
 every one. The only budget dependence is beta_rep's ramp (20% of the PLANNED gradient steps left after the switch):
@@ -83,7 +86,9 @@ Fixed walks (`probing/walks.py`, saved by seed, the same for every image and bot
 n_pre = 32 steps of uniform actions within the corridor, a shortest corridor path to a border state of the zone of
 interest drawn uniformly, then the zone: the entry state is the 1st step in the zone and the walk takes n_in - 1 = 24
 more uniform actions within it (n_in = 25 states in the zone, steps since entry 1..25); never the goal nor another
-slot; n_walks = 300. Each model filters the walk with frozen weights from its learned initial state; at each step in the
+slot; n_walks = 300 (wave 2's from the pilot's sufficiency analysis). The extreme probes (training image, theme only,
+position only) use the 25 steps; the rest of the grid the same walks cut after 10 steps (n_in_grid), enough for the main
+measure (m = 5). I_s is computed at the steps in the zone only; the corridor steps are filtered, never decoded. Each model filters the walk with frozen weights from its learned initial state; at each step in the
 zone, I_s from the prior (16 draws per action, decoded and matched to the probe environment's state images, E3's rule;
 identical draws decoded once). Main measure: b at entry = mean of I over steps 1..m (m = 5), by state then by zone,
 experimental minus reference; secondary: b by step since entry; states covered reported.
@@ -97,5 +102,6 @@ initial state, evolution in the zone, extreme probes, full grid.
 
 ## Config, code, results
 
-`configs/e4/`; `experiments/E4_generalization_gradient/`; results: one orphan branch `results/<batch>` per wave
-(`docs/RESULTS_CONVENTION.md`), weights on the cluster's volume.
+`configs/e4/`; `experiments/E4_generalization_gradient/`; results: on the cluster's volume, brought back as one archive
+per batch (`export_batch.py`: light files, final weights, probes, logs, manifest); the push to a branch `results/<batch>`
+is optional and off by default.
