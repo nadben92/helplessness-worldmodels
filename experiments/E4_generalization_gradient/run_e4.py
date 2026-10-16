@@ -12,6 +12,8 @@ touching the training streams (own measurement streams, torch.random.fork_rng):
   walks         on the training image in its probe environment (reference dynamics), the fixed walks into each slot
                 (e4.checkpoint.n_walks of them): I_s at entry (mean over the first m steps in the slot, by state then by
                 slot), the curve over steps since entry, the states covered.
+With --diagnostics-at (later batches), these records are taken only at the given steps and the run's last checkpoint
+("e4": null elsewhere); the weights are saved at every checkpoint either way, and the training is the same.
 At the last checkpoint (e4.final_protocol_control): the same two measures with the full settings (E3's
 measure.real_context; e4.walks.n_walks) -- the pilot's protocol control.
 
@@ -111,6 +113,9 @@ def make_hooks(cfg: dict, conf: dict) -> ClosedLoopHooks:
 
     def checkpoint_record(state: dict) -> dict:
         rssm, device, env_step = state["rssm"], state["device"], state["env_step"]
+        only_at = ck.get("at")  # None: every checkpoint (wave 1); else these steps and the run's last checkpoint
+        if only_at is not None and env_step not in only_at and env_step != state["n_env_steps"]:
+            return {"e4": None}
         t0 = time.perf_counter()
         was_training = rssm.training
         rssm.eval()
@@ -142,6 +147,8 @@ def make_hooks(cfg: dict, conf: dict) -> ClosedLoopHooks:
             role_of = {slot: role for role, slot in conf["roles"].items()}
             for r in records:
                 e4 = r["e4"]
+                if e4 is None:  # no diagnostics at this checkpoint (--diagnostics-at)
+                    continue
                 for region in REGIONS:
                     walk = e4["walks"].get(region, {})
                     writer.writerow([r["env_step"], r["grad_step"], region, role_of.get(region, "corridor"), kinds.get(region),
@@ -167,6 +174,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out-dir", type=Path, default=e4_setup.REPO_ROOT / "results")
     parser.add_argument("--max-env-steps", type=int, default=None, help="stops the run early, the planned budget unchanged")
     parser.add_argument("--resume", type=Path, default=None, help="continue the interrupted run in this directory")
+    parser.add_argument("--diagnostics-at", type=int, nargs="+", default=None,
+                        help="checkpoint diagnostics only at these environment steps (and the last checkpoint)")
     parser.add_argument("--push-batch", default=None, help="push the light results to results/<batch> at the end")
     parser.add_argument("--push-repo", default=None, help="the remote's URL (https)")
     parser.add_argument("--push-token-file", default=None, help=f"file holding the token (else ${results_push.TOKEN_ENV})")
@@ -184,6 +193,8 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("--configuration and --condition are required (or --resume)")
         cfg = e4_setup.load_config(args.config)
         cfg["e4"]["run_configuration"] = args.configuration
+        if args.diagnostics_at is not None:
+            cfg["e4"]["checkpoint"]["at"] = sorted(args.diagnostics_at)
         conf = e4_setup.configuration(cfg, args.configuration)
         name = make_run_name(two_zones.GRID_SHAPE, f"{e4_setup.ZONE_PRESET}-{args.configuration}", PAIR_ROLE[args.condition],
                              e4_setup.AGENT_TYPE, conf["seed"])

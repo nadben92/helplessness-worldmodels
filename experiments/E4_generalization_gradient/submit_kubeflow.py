@@ -1,20 +1,26 @@
-"""Submit an E4 batch (batches.WAVES) to UCL ARC Kubeflow: one job, one GPU, the batch's four runs in parallel under
-the library's supervisor (helplessness.cluster.kubeflow.supervise). Each run pushes its light results to the orphan
-branch results/<batch> when it ends (run_e4.py --push-batch; docs/RESULTS_CONVENTION.md), and the supervisor pushes the
-batch's status.json and handoff.json at the end. Weights and buffers stay under <repo-dir>/results/ on the volume.
+"""Submit an E4 batch (batches.BATCHES) to UCL ARC Kubeflow: one job, one GPU, under the library's supervisor
+(helplessness.cluster.kubeflow.supervise), which writes <output>/status.json (every job's command, exit code, start and
+end) and one log per job.
 
-Phases: train (the batch's runs; wave 1 at the full budget, waves 2-4 at B, batches.max_env_steps) and resume (one run
-directory, continued from its checkpoints/resume.pt).
+Phases:
+  train    the batch's four runs in parallel (wave 1 at the full budget; the other batches stop at B,
+           batches.max_env_steps; checkpoint diagnostics as batches.diagnostics_at);
+  resume   one run directory, continued from its checkpoints/resume.pt;
+  probes   measure_probes.py at one checkpoint (--checkpoint <environment step>) for every configuration of the batch,
+           or those given with --configurations: all the probes, on the exposed model and its reference, on the GPU,
+           batches.PROBES_MAX_PARALLEL configurations at a time. Never launched automatically.
 
-The checkout on the volume must be a clone of the branch e4 over https (the push token is an https credential);
-the submission refuses another branch or a modified working tree. Credentials: a Kubernetes secret holding the key
-RESULTS_PUSH_TOKEN (a GitHub token allowed to push to the repository), mounted read-only at PUSH_TOKEN_DIR; never an
-environment variable in the job spec, never a file of the repository.
+Results stay on the volume under <repo-dir>/results/E4_generalization_gradient/ and are brought back by
+export_batch.py (one archive per batch). Optional, off by default: --push-secret <Kubernetes secret holding
+RESULTS_PUSH_TOKEN> makes every run push its light results to the orphan branch results/<batch> when it ends
+(docs/RESULTS_CONVENTION.md); it then needs an https checkout. Without it, no secret, no token and no push are involved.
 
-Usage (cluster login node, from the checkout): see experiments/E4_generalization_gradient/RUN_GPU.md.
-  python experiments/E4_generalization_gradient/submit_kubeflow.py --batch e4_wave1 --repo-dir /scratch/<checkout> \\
-      --push-secret <secret name> [--dry-run]
-  python experiments/E4_generalization_gradient/submit_kubeflow.py --batch e4_wave1 --phase resume --resume <run dir> ...
+The checkout on the volume must be on branch e4 with no modified tracked file (refused otherwise).
+
+Usage (Kubeflow notebook, from the checkout): see experiments/E4_generalization_gradient/RUN_GPU.md.
+  python experiments/E4_generalization_gradient/submit_kubeflow.py --batch e4_wave1 --repo-dir /scratch/<checkout> [--dry-run]
+  python experiments/E4_generalization_gradient/submit_kubeflow.py --batch e4_wave1 --phase probes --checkpoint <B> --repo-dir ...
+  python experiments/E4_generalization_gradient/submit_kubeflow.py --batch e4_wave1 --phase resume --resume <run dir> --repo-dir ...
 """
 
 from __future__ import annotations
@@ -38,26 +44,42 @@ SCRIPT = "experiments/E4_generalization_gradient"
 PUSH_TOKEN_DIR = "/etc/e4-results-push"
 PUSH_TOKEN_KEY = "RESULTS_PUSH_TOKEN"
 RESULTS_SUBDIR = "results"
+PHASES = ("train", "resume", "probes")
 
 
-def commands(phase: str, python: str, batch: str, push_repo: str, token_file: str, resume: str = "") -> list[tuple[str, list[str]]]:
-    """The supervisor's jobs: one run_e4.py process per run of the batch (train), or the resumed run."""
-    push = ["--push-batch", batch, "--push-repo", push_repo, "--push-token-file", token_file]
-    base = [python, "-u", f"{SCRIPT}/run_e4.py"]
+def commands(phase: str, python: str, batch: str, push: dict | None = None, resume: str = "", checkpoint: int | None = None,
+             configurations: list[str] | None = None, device: str = "cuda") -> list[tuple[str, list[str]]]:
+    """The supervisor's jobs. push: None (default, no push) or {"repo": url, "token_file": path}. device: cuda on the
+    cluster; cpu only to try the phases locally (--worker --device cpu)."""
+    push_args = [] if push is None else ["--push-batch", batch, "--push-repo", push["repo"], "--push-token-file", push["token_file"]]
+    run = [python, "-u", f"{SCRIPT}/run_e4.py"]
     if phase == "resume":
         if not resume:
             raise ValueError("resume requires a run directory")
-        return [("resume", base + ["--resume", resume, "--device", "cuda", *push])]
+        return [("resume", run + ["--resume", resume, "--device", device, *push_args])]
+    if phase == "probes":
+        if checkpoint is None:
+            raise ValueError("probes requires --checkpoint <environment step>")
+        known = batches.BATCHES[batch]["configurations"]
+        chosen = list(configurations or known)
+        unknown = sorted(set(chosen) - set(known))
+        if unknown:
+            raise ValueError(f"configuration(s) {unknown} not in {batch}: {list(known)}")
+        return [(f"probes_{cid}_env{int(checkpoint):06d}",
+                 [python, "-u", f"{SCRIPT}/measure_probes.py", "--config", batches.CONFIG, "--configuration", cid,
+                  "--checkpoint", str(int(checkpoint)), "--find-runs", RESULTS_SUBDIR, "--device", device,
+                  "--out-dir", RESULTS_SUBDIR, "--save-steps"]) for cid in chosen]
     if phase != "train":
         raise ValueError(f"unknown phase {phase!r}")
-    stop = batches.max_env_steps(batch)
-    return [(name, base + ["--config", batches.CONFIG, "--configuration", cid, "--condition", condition, "--device", "cuda",
-                           "--out-dir", RESULTS_SUBDIR, *([] if stop is None else ["--max-env-steps", str(stop)]), *push])
+    stop, diag = batches.max_env_steps(batch), batches.diagnostics_at(batch)
+    return [(name, run + ["--config", batches.CONFIG, "--configuration", cid, "--condition", condition, "--device", device,
+                          "--out-dir", RESULTS_SUBDIR, *([] if stop is None else ["--max-env-steps", str(stop)]),
+                          *([] if diag is None else ["--diagnostics-at", *map(str, diag)]), *push_args])
             for name, (cid, condition) in batches.batch_runs(batch).items()]
 
 
-def batch_run_dirs(repo: Path, batch: str, started_after: str) -> list[Path]:
-    """The run directories the batch created (newest per job), for the batch-level push."""
+def batch_run_dirs(repo: Path, batch: str, started_after: str = "") -> list[Path]:
+    """The run directories of the batch (the newest per job, created after started_after if given)."""
     root = repo / RESULTS_SUBDIR / "E4_generalization_gradient"
     out = []
     for cid, condition in batches.batch_runs(batch).values():
@@ -68,8 +90,8 @@ def batch_run_dirs(repo: Path, batch: str, started_after: str) -> list[Path]:
     return out
 
 
-def _run_e4(repo_dir: str, phase: str, output: str, batch: str, push_repo: str, token_dir: str, resume: str = "",
-            max_parallel: int = 0) -> None:
+def _run_e4(repo_dir: str, phase: str, output: str, batch: str, push_repo: str = "", token_dir: str = "", resume: str = "",
+            max_parallel: int = 0, checkpoint: int = 0, configurations: str = "") -> None:
     """Serialized by CustomTrainer: imports and constants must be self-contained (as E3's _run_e3)."""
     import os
     from pathlib import Path
@@ -91,31 +113,41 @@ def _run_e4(repo_dir: str, phase: str, output: str, batch: str, push_repo: str, 
     subprocess.run([sys.executable, "-m", "pip", "--python", python, "install", "--quiet", "-e", ".[e3,dev]"], cwd=repo, check=True)
     subprocess.run([python, "-c", "import torch; assert torch.cuda.is_available(), 'CUDA unavailable'; "
                                   "print('GPU:', torch.cuda.get_device_name(0), 'torch:', torch.__version__, flush=True)"], check=True)
-    subprocess.run([python, "-u", "experiments/E4_generalization_gradient/submit_kubeflow.py", "--worker", "--phase", phase,
-                    "--batch", batch, "--repo-dir", repo_dir, "--output", output, "--push-repo", push_repo,
-                    "--push-token-file", f"{token_dir}/RESULTS_PUSH_TOKEN", "--resume", resume,
-                    *(["--max-parallel", str(max_parallel)] if max_parallel else [])], cwd=repo, check=True)
+    args = [python, "-u", "experiments/E4_generalization_gradient/submit_kubeflow.py", "--worker", "--phase", phase, "--batch", batch,
+            "--repo-dir", repo_dir, "--output", output, "--resume", resume]
+    if push_repo:
+        args += ["--push-repo", push_repo, "--push-token-file", f"{token_dir}/RESULTS_PUSH_TOKEN"]
+    if max_parallel:
+        args += ["--max-parallel", str(max_parallel)]
+    if checkpoint:
+        args += ["--checkpoint", str(checkpoint)]
+    if configurations:
+        args += ["--configurations", *configurations.split(",")]
+    subprocess.run(args, cwd=repo, check=True)
 
 
 def worker(args) -> int:
-    from helplessness.cluster import results_push
-
     started = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     repo, output = Path(args.repo_dir), Path(args.output)
-    jobs = commands(args.phase, sys.executable, args.batch, args.push_repo, args.push_token_file, args.resume)
-    code = supervise(jobs, repo, output, max_parallel=args.max_parallel)
-    try:  # the batch-level status, after every run pushed its own results
-        token = results_push.read_token(args.push_token_file)
-        results_push.push_batch_status(output, batch_run_dirs(repo, args.batch, started), "E4_generalization_gradient", args.batch,
-                                       args.push_repo, token)
-    except Exception as err:
-        print(f"[submit_kubeflow] BATCH STATUS PUSH FAILED: {type(err).__name__}: {err}", flush=True)
-        code = code or 2
+    push = {"repo": args.push_repo, "token_file": args.push_token_file} if args.push_repo else None
+    jobs = commands(args.phase, sys.executable, args.batch, push, args.resume, args.checkpoint, args.configurations, args.device)
+    max_parallel = args.max_parallel or (batches.PROBES_MAX_PARALLEL if args.phase == "probes" else None)
+    code = supervise(jobs, repo, output, max_parallel=max_parallel)
+    if push is not None and args.phase != "probes":  # the batch-level status, after every run pushed its own results
+        from helplessness.cluster import results_push
+
+        try:
+            token = results_push.read_token(args.push_token_file)
+            results_push.push_batch_status(output, batch_run_dirs(repo, args.batch, started), "E4_generalization_gradient", args.batch,
+                                           args.push_repo, token)
+        except Exception as err:
+            print(f"[submit_kubeflow] BATCH STATUS PUSH FAILED: {type(err).__name__}: {err}", flush=True)
+            code = code or 2
     return code
 
 
-def check_checkout(repo: Path) -> str:
-    """The checkout must be on branch e4, unmodified, with an https remote; returns that remote's URL."""
+def check_checkout(repo: Path, need_https: bool) -> str:
+    """The checkout must be on branch e4 with no modified tracked file; with a push, an https remote. Returns its URL."""
     def git(*a):
         return subprocess.run(["git", *a], cwd=repo, capture_output=True, text=True).stdout.strip()
 
@@ -124,49 +156,54 @@ def check_checkout(repo: Path) -> str:
         raise SystemExit(f"{repo} is on branch {branch!r}, not e4")
     if dirty:
         raise SystemExit(f"{repo} has modified tracked files:\n{dirty}")
-    if not url.startswith("https://"):
+    if need_https and not url.startswith("https://"):
         raise SystemExit(f"origin is {url!r}: the results push needs an https remote")
     return url
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--batch", choices=list(batches.WAVES), required=True)
-    parser.add_argument("--phase", choices=("train", "resume"), default="train")
+    parser.add_argument("--batch", choices=list(batches.BATCHES), required=True)
+    parser.add_argument("--phase", choices=PHASES, default="train")
     parser.add_argument("--repo-dir", required=True, help="the e4 checkout on the persistent volume")
+    parser.add_argument("--checkpoint", type=int, default=None, help="phase probes: the environment step of the weights")
+    parser.add_argument("--configurations", nargs="+", default=None, help="phase probes: a subset of the batch's configurations")
     parser.add_argument("--volume", default="scratch-volume")
     parser.add_argument("--mount", default="/scratch")
     parser.add_argument("--memory", default="64Gi")
     parser.add_argument("--image", default=IMAGE)
-    parser.add_argument("--push-secret", help="the Kubernetes secret holding RESULTS_PUSH_TOKEN")
+    parser.add_argument("--push-secret", default=None, help="OPTIONAL: Kubernetes secret holding RESULTS_PUSH_TOKEN (push to results/<batch>)")
     parser.add_argument("--resume", default="", help="run directory (phase resume)")
     parser.add_argument("--max-parallel", type=int, default=None)
-    parser.add_argument("--output", help="supervisor directory (default: <repo>/logs/kubeflow/<phase>-<UTC>)")
+    parser.add_argument("--output", help="supervisor directory (default: <repo>/logs/kubeflow/e4-<phase>-<batch>-<UTC>)")
     parser.add_argument("--dry-run", action="store_true", help="print the jobs and the runtime patch, submit nothing")
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
-    parser.add_argument("--push-repo", help=argparse.SUPPRESS)
-    parser.add_argument("--push-token-file", help=argparse.SUPPRESS)
+    parser.add_argument("--device", choices=("cuda", "cpu"), default="cuda", help=argparse.SUPPRESS)
+    parser.add_argument("--push-repo", default="", help=argparse.SUPPRESS)
+    parser.add_argument("--push-token-file", default="", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     if (args.phase == "resume") != bool(args.resume):
         parser.error("--resume is required exactly when --phase=resume")
+    if (args.phase == "probes") != (args.checkpoint is not None):
+        parser.error("--checkpoint is required exactly when --phase=probes")
     if args.worker:
         return worker(args)
     repo = Path(args.repo_dir).resolve()
+    push = {"repo": "https://<origin>", "token_file": f"{PUSH_TOKEN_DIR}/{PUSH_TOKEN_KEY}"} if args.push_secret else None
     try:
-        commands(args.phase, "python", args.batch, "https://example.invalid/x.git", "TOKEN", args.resume or "x")
+        commands(args.phase, "python", args.batch, push, args.resume or "x", args.checkpoint, args.configurations)
     except ValueError as err:
         parser.error(str(err))
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-    output = Path(args.output).resolve() if args.output else repo / "logs" / "kubeflow" / f"e4-{args.phase}-{stamp}"
+    output = Path(args.output).resolve() if args.output else repo / "logs" / "kubeflow" / f"e4-{args.phase}-{args.batch}-{stamp}"
     patch = runtime_patch_secrets(args.volume, args.mount, {args.push_secret: PUSH_TOKEN_DIR} if args.push_secret else {})
-    push_repo = "https://<origin>" if args.dry_run else check_checkout(repo)
+    max_parallel = args.max_parallel or (batches.PROBES_MAX_PARALLEL if args.phase == "probes" else None)
     if args.dry_run:
-        jobs = commands(args.phase, "<venv python>", args.batch, push_repo, f"{PUSH_TOKEN_DIR}/{PUSH_TOKEN_KEY}", args.resume)
-        print(json.dumps({"batch": args.batch, "cpus": batches.BATCH_CPUS[args.batch], "output": str(output),
-                          "jobs": jobs, "runtime_patch": patch}, indent=1))
+        jobs = commands(args.phase, "<venv python>", args.batch, push, args.resume, args.checkpoint, args.configurations)
+        print(json.dumps({"batch": args.batch, "phase": args.phase, "cpus": batches.BATCH_CPUS[args.batch], "max_parallel": max_parallel,
+                          "push": push is not None, "output": str(output), "jobs": jobs, "runtime_patch": patch}, indent=1))
         return 0
-    if not args.push_secret:
-        parser.error("--push-secret is required: every run pushes its results")
+    url = check_checkout(repo, need_https=push is not None)
     if output.exists():
         parser.error(f"Output already exists: {output}")
     if not repo.is_relative_to(Path(args.mount).resolve()) or not output.is_relative_to(Path(args.mount).resolve()):
@@ -183,13 +220,15 @@ def main(argv: list[str] | None = None) -> int:
         trainer=kubeflow.trainer.CustomTrainer(
             func=_run_e4, image=args.image, num_nodes=1,
             func_args={"repo_dir": str(repo), "phase": args.phase, "output": str(output), "batch": args.batch,
-                       "push_repo": push_repo, "token_dir": PUSH_TOKEN_DIR, "resume": args.resume, "max_parallel": args.max_parallel or 0},
+                       "push_repo": url if push else "", "token_dir": PUSH_TOKEN_DIR if push else "", "resume": args.resume,
+                       "max_parallel": max_parallel or 0, "checkpoint": args.checkpoint or 0,
+                       "configurations": ",".join(args.configurations or [])},
             resources_per_node={"cpu": str(cpus), "memory": args.memory, "nvidia.com/gpu": "1"},
         ),
     )
     record = {"job_id": job_id, "batch": args.batch, "phase": args.phase, "output": str(output), "repo_dir": str(repo), "cpus": cpus,
-              "runs": list(batches.batch_runs(args.batch)), "push_branch": f"results/{args.batch}",
-              "submitted_at": datetime.now(timezone.utc).isoformat()}
+              "jobs": [name for name, _ in commands(args.phase, "python", args.batch, push, args.resume, args.checkpoint, args.configurations)],
+              "push": push is not None, "submitted_at": datetime.now(timezone.utc).isoformat()}
     record_path = output.parent / f"{output.name}.submission.json"
     record_path.parent.mkdir(parents=True, exist_ok=True)
     record_path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
