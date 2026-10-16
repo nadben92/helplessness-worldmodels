@@ -1,0 +1,78 @@
+{
+ "exploratory": "DECISIONS (36)",
+ "n_points": 1550,
+ "points_per_run": {
+  "seed0_experimental": 175,
+  "seed0_reference": 175,
+  "seed1_experimental": 200,
+  "seed1_reference": 225,
+  "seed5_experimental": 200,
+  "seed5_reference": 175,
+  "seed6_experimental": 175,
+  "seed6_reference": 225
+ },
+ "model_A": {
+  "b0": 1.5106431009721046,
+  "b1_log10n": -0.7952802972622302,
+  "residual_by_run": {
+   "seed0_experimental": -0.08547052051907603,
+   "seed0_reference": -0.0732467244852733,
+   "seed1_experimental": 0.15955371573943636,
+   "seed1_reference": 0.013709043546666327,
+   "seed5_experimental": 0.0261898396762547,
+   "seed5_reference": -0.04385838236779366,
+   "seed6_experimental": 0.018293800962464375,
+   "seed6_reference": -0.03548411670864215
+  },
+  "seed_residual": 0.15955371573943636,
+  "others_range": [
+   -0.08547052051907603,
+   0.0261898396762547
+  ]
+ },
+ "model_B": {
+  "b0": 1.3948958699703224,
+  "b1_log10n": -0.6668912161212069,
+  "b2_timing_per_100k": -0.17164642528211982,
+  "ci95": {
+   "b0": [
+    1.3093809914604375,
+    1.4910754762523801
+   ],
+   "b1_log10n": [
+    -0.7358791169773543,
+    -0.60588345978363
+   ],
+   "b2_timing_per_100k": [
+    -0.2074731905816408,
+    -0.13365680855050283
+   ]
+  },
+  "residual_by_run": {
+   "seed0_experimental": -0.09088211564968246,
+   "seed0_reference": -0.07731492519708175,
+   "seed1_experimental": 0.17959043216682383,
+   "seed1_reference": 0.012699046107389004,
+   "seed5_experimental": 0.007652918953868353,
+   "seed5_reference": -0.049278574594133255,
+   "seed6_experimental": 0.011493226345446294,
+   "seed6_reference": -0.018929055584876803
+  },
+  "seed_residual": 0.17959043216682383,
+  "others_range": [
+   -0.09088211564968246,
+   0.012699046107389004
+  ]
+ },
+ "mean_timing_per_run": {
+  "seed0_experimental": 1.5470595409268995,
+  "seed0_reference": 1.5166870142630464,
+  "seed1_experimental": 1.4796007136465263,
+  "seed1_reference": 1.539469576786549,
+  "seed5_experimental": 1.5833759990377105,
+  "seed5_reference": 1.5053058062912137,
+  "seed6_experimental": 1.7953674486378772,
+  "seed6_reference": 1.4242554376408998
+ },
+ "verdict": "gap persists: proper to the model, no explanation identified"
+}

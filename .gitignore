@@ -95,3 +95,9 @@ handoff/
 # CAMPAIGN_ANALYSIS.md, RESULTS_SECTION.md) are versioned.
 results/E3_worldmodel_4zones/campaign/runs/
 results/E3_worldmodel_4zones/campaign/rsa/
+
+# E4 batch archives written by experiments/E4_generalization_gradient/export_batch.py (downloaded, never versioned)
+exports/
+
+# The agent_mini bench run (E3): the paper reads only its diagnostics, versioned under reports/; the run itself stays local.
+results/E3_worldmodel_4zones/grid12x12__4zones__pair-experimental__worldmodel-agent-agent_mini__seed00__20260930T193212Z/
