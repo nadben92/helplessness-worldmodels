@@ -55,6 +55,7 @@ def test_probes_commands():
 
 
 def test_later_batches_wait_for_b_and_take_fewer_diagnostics(monkeypatch):
+    monkeypatch.setattr(submit.batches, "B_AFTER_PILOT", None)
     with pytest.raises(ValueError):
         submit.commands("train", "PY", "e4_wave2")
     monkeypatch.setattr(submit.batches, "B_AFTER_PILOT", 175000)
