@@ -7,6 +7,13 @@ filtered, never decoded; the same measurement seed for the two models). b = I_ex
 probes (the training image, theme only = T_inc at the neutral slot, position only) use the walks' full n_in steps in the
 zone (e4.walks.n_in, for the evolution in the zone); every other image the same walks cut after n_in_grid steps.
 
+The main measure is b at the FIRST step in the zone (b_step1 = curves.npz's curve_exp[:, 0] - curve_ref[:, 0], over the
+zone's 16 border states), the belief at the first encounter; b over steps 2..n_in is the recovery measure. Every probe
+environment is fully controllable (the reference's dynamics in every slot; the walks follow them), so from step 2 on
+the model has already seen, inside the zone, one transition where its action worked. pilot_analysis.py reads the
+main measure from curves.npz; b_entry below (the mean over the first m steps, the first plan's main measure) stays
+written as it was.
+
 Outputs, in a new directory <out-dir>/E4_generalization_gradient/probes__<configuration>__env<NNNNNN>__<UTC>/:
   images.csv     one row per (image, zone of interest): the slot colours, the role of the zone, I at entry for both
                  models and b at entry (mean over the first m steps in the zone, by state then by zone), the states
@@ -14,7 +21,8 @@ Outputs, in a new directory <out-dir>/E4_generalization_gradient/probes__<config
   probes.csv     one row per probe (axis, k, t, position): its image, its zone, b at entry; the distance of the probe's
                  colour to T_inc and to T_ctrl (RGB);
   curves.npz     b and I by step since entry (1..n_in) for every (image, zone): arrays curve_exp, curve_ref (rows = rows of
-                 images.csv), n_states;
+                 images.csv; column 0 = the first step in the zone, the main measure), n_states (distinct states behind
+                 each step, the smaller of the two models');
   steps.npz      every measured step (optional, --save-steps): I, state, steps since entry / start, walk, both models;
   meta.yaml      the configuration, the two runs and their weights' SHA-256, the checkpoint, the settings, the timing;
   status.json    "running", then "done" or "failed" with the error and its traceback.

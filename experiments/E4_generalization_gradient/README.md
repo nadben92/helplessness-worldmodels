@@ -67,6 +67,17 @@ this overestimates E4's own models. On the cluster, decoding and matching run on
 times it in a tenth of the cost). Local analyses with the weights: forgetting about 2-3 minutes, the extreme probes
 about 30 minutes per configuration, on CPU.
 
+## The measure: b at the first step in the zone
+
+The main measure is **b at the first step in the zone of interest** (`b_step1`: I at steps since entry = 1, by state
+then by zone, experimental minus reference): the belief at the first encounter, over the zone's 16 border states. The
+curve of b over steps 2..n_in is the recovery measure. Why: every test environment is fully controllable (the
+reference's dynamics in every slot, and the walks follow them), so from step 2 on the model has already observed, inside
+the zone, one transition where its action worked. At wave 1 the exposed models' I at the UD slot is about 0 at step 1
+and 0.3-0.47 bit from step 2 on. `measure_probes.py` writes the per-step curves (`curves.npz`) and the mean over the first
+m steps (`images.csv`'s `b_entry`); `pilot_analysis.py` reports `b_step1` as the main measure in every analysis
+(`convergence`, `protocol`, `probes`, `sufficiency`), the mean over m steps staying available as `b_entry_mean_m`.
+
 ## Pilot analyses (wave 1, local)
 
 `RUN_GPU.md`, steps 4-6: export the batch on the cluster, extract the archive locally, `export_batch.py verify`, then
@@ -74,3 +85,8 @@ about 30 minutes per configuration, on CPU.
 at B on the cluster (`submit_kubeflow.py --phase probes --checkpoint <B>`), a second export, and
 `pilot_analysis.py probes | sufficiency --export <dir>` (the grid, the extreme probes, the number of walks for wave 2).
 Then write B into `batches.py` (`B_AFTER_PILOT`) before launching wave 2.
+
+Done for wave 1 (2026-10-18): B = 300,000 (`batches.B_AFTER_PILOT`). The convergence criterion now leaves the corridor's
+mass out by default (`--mass-regions quadrants`: the training diagnostic's corridor mean includes the terminal goal
+state); recomputed with `b_step1` it gives B = 175,000, for information only (E5's sizing); see
+`docs/E4_generalization_gradient.md`.

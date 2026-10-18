@@ -1,6 +1,7 @@
 # E4 — Generalisation gradient
 
-**Status (2026-10-16): code ready, wave 1 (the pilot) prepared, not launched.** Branch `e4`. Code and usage:
+**Status (2026-10-18): wave 1 (the pilot) done and analysed locally; B = 300,000; wave 2 ready, not launched.**
+Branch `e4`. Code and usage:
 `experiments/E4_generalization_gradient/README.md`; launch: `experiments/E4_generalization_gradient/RUN_GPU.md`.
 Deterministic dynamics only.
 
@@ -38,7 +39,7 @@ both orientations:
 | Wave | Configurations | Budget | Checkpoint diagnostics |
 |---|---|---|---|
 | 1 (pilot) | `p1-a-d1`, `p1-b-d1` | 300,000 steps | every checkpoint (the choice of B) |
-| 2 | `p2-a-d1`, `p2-b-d1` | B (after the pilot) | B and the control checkpoints 10,000 and 100,000 |
+| 2 | `p2-a-d1`, `p2-b-d1` | B = 300,000 (set after the pilot) | B and the control checkpoints 10,000 and 100,000 |
 
 The diagonal was a factor of the first plan (8 configurations, 4 waves). It is no longer one: the column reflection
 about the goal exchanges the diagonals exactly, so a diagonal-2 run is the same dynamics with a mirrored image. The
@@ -87,18 +88,36 @@ n_pre = 32 steps of uniform actions within the corridor, a shortest corridor pat
 interest drawn uniformly, then the zone: the entry state is the 1st step in the zone and the walk takes n_in - 1 = 24
 more uniform actions within it (n_in = 25 states in the zone, steps since entry 1..25); never the goal nor another
 slot; n_walks = 300 (wave 2's from the pilot's sufficiency analysis). The extreme probes (training image, theme only,
-position only) use the 25 steps; the rest of the grid the same walks cut after 10 steps (n_in_grid), enough for the main
-measure (m = 5). I_s is computed at the steps in the zone only; the corridor steps are filtered, never decoded. Each model filters the walk with frozen weights from its learned initial state; at each step in the
-zone, I_s from the prior (16 draws per action, decoded and matched to the probe environment's state images, E3's rule;
-identical draws decoded once). Main measure: b at entry = mean of I over steps 1..m (m = 5), by state then by zone,
-experimental minus reference; secondary: b by step since entry; states covered reported.
+position only) use the 25 steps; the rest of the grid the same walks cut after 10 steps (n_in_grid). I_s is computed
+at the steps in the zone only; the corridor steps are filtered, never decoded. Each model filters the walk with frozen
+weights from its learned initial state; at each step in the zone, I_s from the prior (16 draws per action, decoded and
+matched to the probe environment's state images, E3's rule; identical draws decoded once).
+
+Main measure: **b at the first step in the zone** (b_step1: I at steps since entry = 1, by state then by zone,
+experimental minus reference), the belief at the first encounter, over the zone's 16 border states. Recovery measure:
+b by step since entry 2..n_in. Why the first step: every test environment is fully controllable (the reference's
+dynamics in every slot, walks included), so from step 2 on the model's context already holds one transition in the
+zone where its action worked -- evidence of control. At wave 1 the exposed models' I at the UD slot is about 0 at step
+1 and about 0.3-0.47 bit from step 2 on (b from -2.31 to about -1.9), a within-episode recovery, not a bias. Also
+reported: b at entry as the mean over steps 1..m (m = 5, b_entry_mean_m, the first plan's main measure, which mixes the
+first encounter with the start of the recovery), and the states covered.
 
 ## Pilot (wave 1)
 
-`pilot_analysis.py`: convergence and choice of B (mass on the true successor >= 0.97 in every region, |b| <= 0.1 bit at
-CD and in the corridor, |b_UD + log2 5| <= 0.15 bit, on two consecutive checkpoints, for every run of the wave; else
-B = 300,000 and the run is flagged), protocol control (b from the walks vs E3's end-of-training b), forgetting of the
-initial state, evolution in the zone, extreme probes, full grid.
+`pilot_analysis.py`: convergence and choice of B (b_step1 at the slots; mass on the true successor >= 0.97 in the four
+quadrants, |b| <= 0.1 bit at CD and in the corridor, |b_UD + log2 5| <= 0.15 bit, on two consecutive checkpoints, for
+every run of the wave; else B = 300,000 and the run is flagged), protocol control (b from the walks vs E3's
+end-of-training b), forgetting of the initial state, evolution in the zone, extreme probes, full grid.
+
+The corridor's mass is left out of the criterion: the training diagnostic averages it over the corridor's 44 states,
+the goal included, and the goal is terminal -- from it the prior predicts the next episode's start, not the tensor's
+successors (mass 0.05 to 0.40 at wave 1, against about 0.98-0.99 on the corridor's other states).
+
+Wave 1 (300,000 steps, 4 runs): with the first plan's criterion (b at entry over m = 5 steps, mass in every region)
+neither configuration converged, so B = 300,000 was set for E4. Recomputed with b_step1 and the quadrants' mass, the
+criterion gives B = 175,000 (p1-a-d1 175,000, p1-b-d1 125,000) -- for information only, to size E5; E4 keeps 300,000.
+Forgetting: h0's effect on I_s is below 0.05 bit within 2-3 steps (h distance below 0.01 within 17-32 steps), inside
+n_pre = 32. Protocol control: b_step1 at the walks matches E3's end-of-training b within 0.02 bit in every zone.
 
 ## Config, code, results
 
