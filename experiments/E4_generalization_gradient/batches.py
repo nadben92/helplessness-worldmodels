@@ -23,7 +23,7 @@ from __future__ import annotations
 
 CONDITIONS = ("experimental", "reference")
 CONFIG = "configs/e4/e4.yaml"
-B_AFTER_PILOT = None  # environment steps, set from pilot_analysis.py convergence (budget_choice.json "B")
+B_AFTER_PILOT = 300_000  # environment steps, set from pilot_analysis.py convergence (budget_choice.json "B")
 CONTROL_CHECKPOINTS = (10000, 100000)  # diagnostics of the later batches, besides their last checkpoint
 
 WAVES = {
