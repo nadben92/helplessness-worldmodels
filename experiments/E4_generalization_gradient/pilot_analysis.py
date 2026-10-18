@@ -4,13 +4,18 @@
   convergence  from the runs' checkpoints.jsonl alone (what results/<batch> holds): at every checkpoint, the prior's
                mass on the true successor by region (every zone of E4 is deterministic) for each run, and b by region
                for each configuration (experimental - reference): the slots from the fixed walks on the training image
-               (I at entry), the corridor from E3's real-context I_s. Criterion (defaults, all parameters): mass >= 0.97
-               in every region of both runs; |b| <= 0.1 bit at the CD slot and in the corridor (the corridor region and
-               the two corridor-coloured slots); |b_UD - (-log2 5)| <= 0.15 bit; on two consecutive checkpoints. B = the
-               first checkpoint of such a pair of consecutive checkpoints for EVERY configuration of the wave; when a
-               configuration never meets it, B = the last checkpoint (300,000) and the configuration is flagged.
-  protocol     at the last checkpoint (the runs' "final" record): b by slot from the fixed walks (full settings) next
-               to b from E3's end-of-training measure (real replay contexts, E3's full settings).
+               (--measure: b_step1, I at the first step in the zone, the main measure -- see `probes`; or
+               b_entry_mean_m, the mean over the first m steps; both are written), the corridor from E3's real-context
+               I_s. Criterion (defaults, all parameters): mass >= 0.97 in the four quadrants of both runs (--mass-regions;
+               the corridor is left out by default: its mean over states includes the goal, a terminal state from which
+               the prior predicts the next episode's start, not the tensor's successors -- 0.05 to 0.40 at wave 1); |b| <=
+               0.1 bit at the CD slot and in the corridor (the corridor region and the two corridor-coloured slots);
+               |b_UD - (-log2 5)| <= 0.15 bit; on two consecutive checkpoints. B = the first checkpoint of such a pair of
+               consecutive checkpoints for EVERY configuration of the wave; when a configuration never meets it, B = the
+               last checkpoint (300,000) and the configuration is flagged.
+  protocol     at the last checkpoint (the runs' "final" record): b by slot from the fixed walks (full settings), at the
+               first step and as the mean over m steps, next to b from E3's end-of-training measure (real replay
+               contexts over every state of the zone, E3's full settings).
   evolution    b by step since entry (1..n_in) on the training image, by slot: from the final records, or from a probe
                measurement (--probes).
   forgetting   needs the weights (--experimental-run/--reference-run, --checkpoint): a sample of walks filtered from
@@ -107,15 +112,33 @@ def _nan(v):
     return float("nan") if v is None else float(v)
 
 
-def b_by_region(exp_rec: dict, ref_rec: dict, key: str = "walks", real_key: str = "real_context") -> dict[str, float]:
-    """b by region at one checkpoint: the slots from the fixed walks (I at entry), the corridor from E3's real-context I_s."""
-    b = {slot: _nan(exp_rec[key][slot]["I_entry"]) - _nan(ref_rec[key][slot]["I_entry"]) for slot in QUADRANT_ORDER}
+WALK_MEASURES = ("b_step1", "b_entry_mean_m")
+
+
+def walk_I(walk_rec: dict, measure: str) -> float:
+    """I of one slot's fixed-walk record: at the first step in the zone (b_step1, the main measure: I_curve[0]) or the
+    mean over the first m steps (b_entry_mean_m: I_entry)."""
+    if measure == "b_step1":
+        return _nan(walk_rec["I_curve"][0])
+    if measure == "b_entry_mean_m":
+        return _nan(walk_rec["I_entry"])
+    raise ValueError(f"unknown measure {measure!r}")
+
+
+def b_by_region(exp_rec: dict, ref_rec: dict, key: str = "walks", real_key: str = "real_context",
+                measure: str = "b_step1") -> dict[str, float]:
+    """b by region at one checkpoint: the slots from the fixed walks (`measure`), the corridor from E3's real-context I_s."""
+    b = {slot: walk_I(exp_rec[key][slot], measure) - walk_I(ref_rec[key][slot], measure) for slot in QUADRANT_ORDER}
     b["corridor"] = _nan(exp_rec[real_key]["I_s_by_region"]["corridor"]) - _nan(ref_rec[real_key]["I_s_by_region"]["corridor"])
     return b
 
 
+MASS_REGIONS = {"quadrants": tuple(QUADRANT_ORDER), "all": ("corridor", *QUADRANT_ORDER)}
+
+
 def criterion(mass_exp: dict, mass_ref: dict, b: dict, roles: dict, args) -> dict:
-    mass_ok = all(_nan(m[r]) >= args.mass_min for m in (mass_exp, mass_ref) for r in m)
+    regions = MASS_REGIONS[args.mass_regions]
+    mass_ok = all(_nan(m[r]) >= args.mass_min for m in (mass_exp, mass_ref) for r in regions)
     corridor_like = ["corridor", roles["neutral"], roles["other"]]
     b_cd_ok = abs(b[roles["cd"]]) <= args.b_cd_max and all(abs(b[r]) <= args.b_cd_max for r in corridor_like)
     b_ud_ok = abs(b[roles["ud"]] + LOG2_5) <= args.b_ud_tol
@@ -135,21 +158,23 @@ def cmd_convergence(args) -> dict:
         for step in steps:
             e, r = exp[step]["e4"], ref[step]["e4"]
             mass_e, mass_r = e["real_context"]["mass_true_by_region"], r["real_context"]["mass_true_by_region"]
-            b = b_by_region(e, r)
+            b_all = {measure: b_by_region(e, r, measure=measure) for measure in WALK_MEASURES}
+            b = b_all[args.measure]
             c = criterion(mass_e, mass_r, b, pair["experimental"]["roles"], args)
             flags.append(c["all"])
             role_of = {slot: role for role, slot in pair["experimental"]["roles"].items()}
             for region in ("corridor", *QUADRANT_ORDER):
                 rows.append({"configuration": cid, "env_step": step, "region": region, "role": role_of.get(region, "corridor"),
-                             "mass_exp": _nan(mass_e[region]), "mass_ref": _nan(mass_r[region]), "b": b[region], **c})
+                             "mass_exp": _nan(mass_e[region]), "mass_ref": _nan(mass_r[region]), "b": b[region],
+                             **{measure: b_all[measure][region] for measure in WALK_MEASURES}, **c})
         first = next((steps[i] for i in range(len(steps) - 1) if flags[i] and flags[i + 1]), None)
         met[cid] = {"first_consecutive": first, "checkpoints": steps}
     last = max(max(m["checkpoints"]) for m in met.values())
     never = [cid for cid, m in met.items() if m["first_consecutive"] is None]
     B = last if never else max(m["first_consecutive"] for m in met.values())
     choice = {"B": int(B), "per_configuration": {cid: m["first_consecutive"] for cid, m in met.items()}, "never_converged": never,
-              "criterion": {"mass_min": args.mass_min, "b_cd_max": args.b_cd_max, "b_ud_target": -LOG2_5, "b_ud_tol": args.b_ud_tol,
-                            "consecutive": 2}}
+              "criterion": {"measure": args.measure, "mass_regions": list(MASS_REGIONS[args.mass_regions]), "mass_min": args.mass_min,
+                            "b_cd_max": args.b_cd_max, "b_ud_target": -LOG2_5, "b_ud_tol": args.b_ud_tol, "consecutive": 2}}
     _write_csv(args.out / "convergence.csv", rows)
     (args.out / "budget_choice.json").write_text(json.dumps(choice, indent=1), encoding="utf-8")
     plt = _plt()
@@ -163,7 +188,7 @@ def cmd_convergence(args) -> dict:
     axes[0].axhline(-LOG2_5, color="k", ls=":")
     axes[0].axvline(B, color="r", ls="--")
     axes[1].axhline(args.mass_min, color="k", ls=":")
-    for ax, title in zip(axes, ("b by region (exp - ref)", "mass on the true successor (min of the two runs)")):
+    for ax, title in zip(axes, (f"b by region (exp - ref, slots: {args.measure})", "mass on the true successor (min of the two runs)")):
         ax.set_xscale("log")
         ax.set_title(title)
         ax.set_xlabel("environment steps")
@@ -182,10 +207,12 @@ def cmd_protocol(args) -> dict:
             raise SystemExit(f"{cid}: no final protocol-control record (e4.final_protocol_control)")
         role_of = {slot: role for role, slot in pair["experimental"]["roles"].items()}
         for slot in QUADRANT_ORDER:
-            b_walks = _nan(e["final"]["walks"][slot]["I_entry"]) - _nan(r["final"]["walks"][slot]["I_entry"])
+            b_walks = {measure: walk_I(e["final"]["walks"][slot], measure) - walk_I(r["final"]["walks"][slot], measure)
+                       for measure in WALK_MEASURES}
             b_e3 = _nan(e["final"]["real_context"]["I_s_by_region"][slot]) - _nan(r["final"]["real_context"]["I_s_by_region"][slot])
-            rows.append({"configuration": cid, "slot": slot, "role": role_of[slot], "b_fixed_walks": b_walks, "b_e3_real_context": b_e3,
-                         "difference": b_walks - b_e3})
+            rows.append({"configuration": cid, "slot": slot, "role": role_of[slot], "b_fixed_walks_step1": b_walks["b_step1"],
+                         "b_fixed_walks_entry_mean_m": b_walks["b_entry_mean_m"], "b_e3_real_context": b_e3,
+                         "difference_step1": b_walks["b_step1"] - b_e3, "difference_entry_mean_m": b_walks["b_entry_mean_m"] - b_e3})
     _write_csv(args.out / "protocol_control.csv", rows)
     return {"rows": rows}
 
@@ -449,6 +476,10 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--mass-min", type=float, default=0.97)
     c.add_argument("--b-cd-max", type=float, default=0.1)
     c.add_argument("--b-ud-tol", type=float, default=0.15)
+    c.add_argument("--measure", default="b_step1", choices=WALK_MEASURES, help="the slots' b (default: at the first step in the zone)")
+    c.add_argument("--mass-regions", default="quadrants", choices=tuple(MASS_REGIONS),
+                   help="regions whose mass must reach --mass-min (default: the four quadrants; 'all' adds the corridor, whose "
+                        "mean includes the terminal goal state)")
     f = sub.choices["forgetting"]
     f.add_argument("--config", type=Path, default=e4_setup.DEFAULT_CONFIG)
     f.add_argument("--configuration", required=True)
