@@ -18,12 +18,16 @@
                corridor prefixes; by step, the distance between the h trajectories and the gap between the I_s values;
                the step after which the gap stays below --tol, against n_pre.
   probes       from measure_probes.py outputs (--probes, one directory per configuration): the extreme probes (training
-               image: UD and CD; theme only: T_inc at the neutral slot; position only: the corridor's colour at the UD
-               slot) and the full grid (b at entry against the distance to T_inc, by axis and position, with figures).
-  sufficiency  from measure_probes.py outputs saved with --save-steps: the standard error of b at entry against the
-               number of walks used (bootstrap resampling of the walks, the same walks for both models), by (image, zone)
-               and overall; the smallest number of walks whose median standard error is below --se-target, to set
-               e4.walks.n_walks for wave 2.
+               image: every slot; theme only: T_inc at the neutral slot; position only: the corridor's colour at the UD
+               slot) and the full grid (b against the distance to T_inc, by axis and position, with figures). The main
+               measure is b at the FIRST step in the zone (b_step1, the first encounter: the walks follow the reference's
+               controllable dynamics in every slot, so from step 2 on the model's context shows its actions working);
+               b by step since entry 2..n_in is the recovery measure; b at entry (mean over the first m steps,
+               measure_probes.py's b_entry) stays reported as b_entry_mean_m.
+  sufficiency  from measure_probes.py outputs saved with --save-steps: the standard error of b_step1 and of
+               b_entry_mean_m against the number of walks used (bootstrap resampling of the walks, the same walks for
+               both models), by (image, zone) and overall; the smallest number of walks whose median standard error of
+               b_step1 is below --se-target, to set e4.walks.n_walks.
 
 Inputs: --runs / --probes directories, or --export <dir>, the extracted archive of export_batch.py (its run and probe
 directories are found under <dir>/results/E4_generalization_gradient/); forgetting takes --export with --configuration.
@@ -282,46 +286,84 @@ def cmd_forgetting(args) -> dict:
     return {name: {k: v for k, v in m.items() if not isinstance(v, list)} for name, m in report["models"].items()}
 
 
+def probe_measures(d: Path) -> tuple[list[dict], list[dict]]:
+    """images.csv and probes.csv of one measure_probes.py output, each row with its b at the first step in the zone
+    (b_step1, the main measure: the first encounter, from curves.npz), the distinct states behind it (n_states_step1)
+    and b by step since entry (b_curve, 1..n_in: steps 2..n_in are the recovery measure); b_entry (the mean over the
+    first m steps) is kept as it is."""
+    with open(d / "images.csv", encoding="utf-8") as f:
+        images = list(csv.DictReader(f))
+    with open(d / "probes.csv", encoding="utf-8") as f:
+        probes = list(csv.DictReader(f))
+    curves = np.load(d / "curves.npz")
+    b_curves = curves["curve_exp"] - curves["curve_ref"]
+    row_of = {}
+    for i, r in enumerate(images):
+        r["b_curve"] = b_curves[i]
+        r["b_step1"] = float(b_curves[i, 0])
+        r["n_states_step1"] = int(curves["n_states"][i, 0])
+        row_of[(r["image"], r["zone"])] = r
+    for p in probes:
+        r = row_of[(p["image"], p["slot"])]
+        p["b_step1"], p["n_states_step1"], p["b_curve"] = r["b_step1"], r["n_states_step1"], r["b_curve"]
+    return images, probes
+
+
+def _extreme(r: dict) -> dict:
+    return {"b_step1": r["b_step1"], "b_entry_mean_m": float(r["b_entry"]), "n_states_step1": r["n_states_step1"],
+            "b_curve": [float(v) for v in r["b_curve"] if np.isfinite(v)]}
+
+
 def cmd_probes(args) -> dict:
     plt = _plt()
     summary = {}
     for d in args.probes:
         meta = yaml.safe_load((d / "meta.yaml").read_text(encoding="utf-8"))
         cid = meta["configuration"]
-        with open(d / "images.csv", encoding="utf-8") as f:
-            images = list(csv.DictReader(f))
-        with open(d / "probes.csv", encoding="utf-8") as f:
-            probes = list(csv.DictReader(f))
-        train = {r["role"]: float(r["b_entry"]) for r in images if r["is_training"] == "True"}
-        theme_only = [float(p["b_entry"]) for p in probes if p["axis"] == "segment" and int(p["k"]) == 0 and p["position"] == "neutral"]
-        position_only = [float(p["b_entry"]) for p in probes if p["axis"] == "position_only"]
-        summary[cid] = {"training_image": train, "checks": {"b_ud_negative": train.get("ud", np.nan) < 0,
-                                                            "b_cd_near_zero": abs(train.get("cd", np.nan)) <= 0.1},
+        images, probes = probe_measures(d)
+        train = {r["role"]: _extreme(r) for r in images if r["is_training"] == "True"}
+        theme_only = [_extreme(p) for p in probes if p["axis"] == "segment" and int(p["k"]) == 0 and p["position"] == "neutral"]
+        position_only = [_extreme(p) for p in probes if p["axis"] == "position_only"]
+        b1 = {role: v["b_step1"] for role, v in train.items()}
+        summary[cid] = {"main_measure": "b_step1 (b at the first step in the zone); b_entry_mean_m and b_curve kept",
+                        "training_image": train,
+                        "checks": {"b_ud_negative": b1.get("ud", np.nan) < 0, "b_cd_near_zero": abs(b1.get("cd", np.nan)) <= 0.1},
                         "theme_only_T_inc_at_neutral": theme_only[0] if theme_only else None,
                         "position_only_corridor_colour_at_ud": position_only[0] if position_only else None}
+        extremes = [("training", role, v) for role, v in train.items()] + [("theme_only", "neutral", v) for v in theme_only] \
+            + [("position_only", "ud", v) for v in position_only]
+        _write_csv(args.out / f"extremes_{cid}.csv",
+                   [{"probe": probe, "zone_role": role, "b_step1": v["b_step1"], "b_entry_mean_m": v["b_entry_mean_m"],
+                     "n_states_step1": v["n_states_step1"], **{f"b_k{k + 1}": b for k, b in enumerate(v["b_curve"])}}
+                    for probe, role, v in extremes])
         fig, axes = plt.subplots(1, 3, figsize=(16, 4.5), sharey=True)
         for ax, axis in zip(axes, ("segment", "arc_ctrl", "arc_inc")):
             for position in ("ud", "cd", "neutral"):
-                sel = sorted((float(p["dist_to_inc"]), float(p["b_entry"])) for p in probes if p["axis"] == axis and p["position"] == position)
+                sel = sorted((float(p["dist_to_inc"]), p["b_step1"]) for p in probes if p["axis"] == axis and p["position"] == position)
                 ax.plot([s[0] for s in sel], [s[1] for s in sel], marker="o", label=position)
             ax.axhline(-LOG2_5, color="k", ls=":")
             ax.axhline(0.0, color="grey", lw=0.5)
             ax.set_title(f"{cid} -- {axis}")
             ax.set_xlabel("RGB distance to T_inc")
-        axes[0].set_ylabel("b at entry (bits)")
+        axes[0].set_ylabel("b at the first step in the zone (bits)")
         axes[0].legend(title="position")
         fig.tight_layout()
         fig.savefig(args.out / f"grid_{cid}.png", dpi=120)
-        _write_csv(args.out / f"grid_{cid}.csv", [{k: p[k] for k in ("axis", "k", "t", "position", "dist_to_inc", "dist_to_ctrl", "b_entry")}
+        _write_csv(args.out / f"grid_{cid}.csv", [{**{k: p[k] for k in ("axis", "k", "t", "position", "dist_to_inc", "dist_to_ctrl")},
+                                                    "b_step1": p["b_step1"], "n_states_step1": p["n_states_step1"], "b_entry_mean_m": p["b_entry"]}
                                                    for p in probes])
     (args.out / "probes_summary.json").write_text(json.dumps(summary, indent=1, default=float), encoding="utf-8")
     return summary
 
 
-def b_entry_resampled(steps: dict, key: str, counts: np.ndarray, m: int) -> float:
-    """b at entry (by state, then by zone) with every walk weighted by its count in a resample."""
+MEASURES = {"b_step1": lambda m: (1, 1), "b_entry_mean_m": lambda m: (1, m)}  # steps since entry averaged, from m
+
+
+def b_resampled(steps: dict, key: str, counts: np.ndarray, k_first: int, k_last: int) -> float:
+    """b over the steps since entry k_first..k_last (by state, then by zone) with every walk weighted by its count in a
+    resample: (1, 1) is b at the first step in the zone, (1, m) b at entry."""
     k, states, walk = steps[f"{key}_steps_since_entry"], steps[f"{key}_states"].astype(np.int64), steps[f"{key}_walk"].astype(np.int64)
-    sel = (k >= 1) & (k <= m)
+    sel = (k >= k_first) & (k <= k_last)
     out = []
     for name in ("experimental", "reference"):
         I = steps[f"{key}_{name}_I"].astype(np.float64)
@@ -346,29 +388,34 @@ def cmd_sufficiency(args) -> dict:
         keys = sorted({k[: k.index("_", 5)] for k in steps if k.endswith("_steps_since_entry")})
         for key in keys:
             n_total = int(steps[f"{key}_walk"].max()) + 1
-            full = b_entry_resampled(steps, key, np.ones(n_total), m)
-            for n in [n for n in args.n_walks if n <= n_total]:
-                draws = [b_entry_resampled(steps, key, np.bincount(rng.integers(0, n_total, n), minlength=n_total), m)
-                         for _ in range(args.bootstrap)]
-                rows.append({"probes_dir": d.name, "image_zone": key, "n_walks": n, "b_entry_all_walks": full,
-                             "se": float(np.nanstd(draws, ddof=1))})
+            for measure, k_range in MEASURES.items():
+                full = b_resampled(steps, key, np.ones(n_total), *k_range(m))
+                for n in [n for n in args.n_walks if n <= n_total]:
+                    draws = [b_resampled(steps, key, np.bincount(rng.integers(0, n_total, n), minlength=n_total), *k_range(m))
+                             for _ in range(args.bootstrap)]
+                    rows.append({"probes_dir": d.name, "image_zone": key, "measure": measure, "n_walks": n, "b_all_walks": full,
+                                 "se": float(np.nanstd(draws, ddof=1))})
     _write_csv(args.out / "sufficiency.csv", rows)
     summary = {}
-    for n in sorted({r["n_walks"] for r in rows}):
-        se = [r["se"] for r in rows if r["n_walks"] == n and np.isfinite(r["se"])]
-        summary[n] = {"median_se": float(np.median(se)) if se else float("nan"), "max_se": float(np.max(se)) if se else float("nan"),
-                      "pairs": len(se)}
-    enough = [n for n, s in summary.items() if s["median_se"] <= args.se_target]
-    result = {"se_by_n_walks": summary, "se_target": args.se_target, "recommended_n_walks": min(enough) if enough else None}
+    for measure in MEASURES:
+        summary[measure] = {}
+        for n in sorted({r["n_walks"] for r in rows}):
+            se = [r["se"] for r in rows if r["measure"] == measure and r["n_walks"] == n and np.isfinite(r["se"])]
+            summary[measure][n] = {"median_se": float(np.median(se)) if se else float("nan"),
+                                   "max_se": float(np.max(se)) if se else float("nan"), "pairs": len(se)}
+    enough = [n for n, s in summary["b_step1"].items() if s["median_se"] <= args.se_target]  # the main measure decides
+    result = {"main_measure": "b_step1", "se_by_measure_and_n_walks": summary, "se_target": args.se_target,
+              "recommended_n_walks": min(enough) if enough else None}
     (args.out / "sufficiency.json").write_text(json.dumps(result, indent=1), encoding="utf-8")
     plt = _plt()
     fig, ax = plt.subplots(figsize=(6, 4))
-    ns = sorted(summary)
-    ax.plot(ns, [summary[n]["median_se"] for n in ns], marker="o", label="median over (image, zone)")
-    ax.plot(ns, [summary[n]["max_se"] for n in ns], marker=".", label="max")
+    for measure, style in (("b_step1", "-"), ("b_entry_mean_m", "--")):
+        ns = sorted(summary[measure])
+        ax.plot(ns, [summary[measure][n]["median_se"] for n in ns], ls=style, marker="o", label=f"{measure}: median over (image, zone)")
+        ax.plot(ns, [summary[measure][n]["max_se"] for n in ns], ls=style, marker=".", label=f"{measure}: max")
     ax.axhline(args.se_target, color="r", ls="--")
     ax.set_xlabel("walks")
-    ax.set_ylabel("standard error of b at entry (bits)")
+    ax.set_ylabel("standard error of b (bits)")
     ax.legend()
     fig.tight_layout()
     fig.savefig(args.out / "sufficiency.png", dpi=120)
