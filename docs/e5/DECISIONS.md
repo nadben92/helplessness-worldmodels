@@ -171,7 +171,7 @@ checkpoints up to 100,000 steps in the baseline and immunisation runs (`e5.decod
 switch comes much earlier than its reference's or the baseline's, with a low decodability at the first checkpoints after
 it, is the failure this point describes.
 
-## 2026-10-19 (17) -- the parade, proposed, NOT active (implementer)
+## 2026-10-19 (17) -- the parade, proposed (implementer); activated by (19)
 
 The switch statistic on pairs of items with the SAME background image (`train.latent_estimator.switch_pairs:
 same_background`; set from `e5.switch_pairs`, default `any` = E3/E4's statistic): the groups are computed from the
@@ -191,3 +191,53 @@ the run's last checkpoint in any case. Measured cost: 305 s per assignment per c
 The collapse of the mini configuration (JS and mass at 0) is E4's: E4's mini at the commit before the move (3657b33)
 gives the same logs and bit-identical weights at 200, 400 and 600 steps, both conditions. It comes from the mini config
 itself (`switch_js_threshold: -1.0` forces the switch at gradient step 16, `collapse_js_threshold: -inf`), not from E5.
+
+## 2026-10-19 (19) -- the same-background switch statistic, active on every E5 run (user, after the short runs)
+
+**Methodological observation (for the paper).** E3/E4's label-free separation criterion -- the Jensen-Shannon divergence
+between the posteriors of random pairs of batch images -- reads "the latent separates the agent's positions" only in a
+world whose background is fixed: two images then differ by the agent's cell alone. In a world whose background varies
+(E5's shuffled assignments), it is confounded by the background: the encoder separates the backgrounds (large, easy
+areas) long before the agent's position, the statistic crosses its threshold, and the switch (straight-through, the
+learning-rate drop, the heads' training, beta_rep's ramp) fires on a latent that does not code the agent's state; the
+collapse guard, which reads the same statistic, would miss a collapse of the position while the background stays coded.
+Restricted to pairs of images that share their background, the criterion keeps its meaning -- distinguishing the
+agent's positions -- in a world with a variable background.
+
+Evidence (short runs on CPU, the real config `e5.yaml`, p1-a-d1, seed A, experimental, 4,000 steps = 2,246 gradient
+steps; decodability = share of real contexts whose posterior reconstruction matches their own state's image):
+
+| Run | grad 446 | grad 797 | grad 1,353 | grad 2,234 | switch |
+|---|---|---|---|---|---|
+| baseline (E4's procedure) | JS 0.00, dec 0.7% | 0.00, 1.0% | 1.06, 12% | 3.84, 33% | not yet (JS above 3 at the end) |
+| shuffle f = 1, E3/E4's statistic | 4.57, 3.5% | 4.22, 2.4% | 4.61, 4.9% | -- | gradient step 701 (env 1,425), decodability about 3% |
+| shuffle f = 1, same-background statistic | 0.00, 3.5% | 0.00, 2.4% | 0.00, 8.1% | 0.00 | none up to 2,234 |
+
+(The two shuffle runs are identical until the first one switches: the pairs draw from their own stream. The canonical
+decodability of a shuffle run rests on about 85 contexts, 1/12 of the data: imprecise.) Validation criteria (user):
+the switch comes markedly later than 701 -- met (none up to 2,234, at least 3.2 times later); the decodability at the
+switch at least comparable to the baseline's -- NOT observable in 4,000 steps (neither the baseline nor the parade
+switched); it is read on the cluster from the first hours of wave 1 (`e5.estimator_switch`, `decode_accuracy`).
+
+Scope: every E5 run (user's points 1-2). Under shuffle, f = 1 and f = 0.5, experimental and reference (their
+backgrounds vary; a run and its reference follow one procedure). With one background (the baseline, the immunisation, a
+batch of a single assignment) the statistic is E3/E4's, the same draws: f = 0 with the option equals E4 bit for bit, and
+so does the baseline with it (tested: weights, losses, stored steps), so the option is set on every E5 run for one
+uniform procedure (`e5.switch_pairs: same_background`, copied by run_e5.py into `train.latent_estimator.switch_pairs`).
+The collapse guard reads the same statistic (SeparationSwitch.update takes one value for both). Pairs: logged at every
+evaluation and summarised at every checkpoint (`switch_pairs`: their number, the statistic's mean, sd, min, max, the
+items with a partner, the groups). Offline on the short run's replay (2,000 batches of 16 x 64 drawn as in training):
+1,023 to 1,024 of the 1,024 items have a same-background partner, 10.5 groups per batch on average; the statistic was
+<= 5e-5 bit on all 16 evaluations -- pairs are not scarce and the statistic not noisy: no running mean or minimum number
+of pairs is needed.
+
+## 2026-10-19 (20) -- a risk that remains: the separation deadline under shuffle (implementer; the user's decision)
+
+Under shuffle the agent's position is learnt more slowly: at gradient step 1,353 the reconstruction error on the agent's
+patch is 3.7 (parade) against 2.6 for the baseline (1.0 vs 3.8 at 2,234), the decodability 8% against 12%, and the
+same-background statistic still 0.00 at 2,234 where the baseline's is 3.84. E3/E4's procedure stops a run whose
+statistic has not crossed the threshold by `switch_max_steps` = 25,000 gradient steps (about 41,000 environment steps):
+`SeparationNotReachedError`, a result under RUN_GPU.md's rules. With the parade a shuffle run could meet it; without it
+the switch would come on a latent that does not code the state. Not changed (it is E4's parameter); to read on the first
+hours of wave 1 (the JS of the log lines, the switch, `decode_accuracy`). If wave 1's shuffle runs stop on it, the
+options are the user's: a later deadline for the shuffle runs, or accepting it as a result.

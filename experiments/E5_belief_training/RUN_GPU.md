@@ -77,6 +77,13 @@ The dry run prints the four jobs (`A_sh100_experimental`, `A_sh100_reference`, `
 --condition ... --fraction ... --device cuda --out-dir results`. Then, as E4: `kubectl get pods`, `cat $OUT/status.json`,
 `tail -n 3 $OUT/*.log` (`E5 checkpoint <step>: 12 assignment(s) ...` at each checkpoint), `nvidia-smi`.
 
+**Check in the first hours of wave 1** (docs/e5/DECISIONS.md (19), (20)): every run computes its estimator switch on
+pairs of images with the same background. In each job's log, the `JS` column of the `env step` lines and the line
+`>>> SWITCH to straight-through ...`; in `checkpoints.jsonl`, `e5.estimator_switch` and `e5.decode_accuracy_canonical`
+(the agent state's decodability). Report the switch step of each run and the decodability at the checkpoints around it.
+A shuffle run stopped by `SeparationNotReachedError` (no switch within 25,000 gradient steps, about 41,000 environment
+steps) is a result: report it, do not relaunch.
+
 ## Step 4 -- wave 2
 
 ```bash

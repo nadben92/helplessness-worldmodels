@@ -72,3 +72,19 @@ def test_e5_config_refuses_other_keys(tmp_path):
     p.write_text("base: configs/e4/e4.yaml\ne5: {}\ntrain: {lr: 1.0}\n", encoding="utf-8")
     with pytest.raises(ValueError):
         e5_setup.load_config(p)
+
+
+@pytest.mark.parametrize("spec", [
+    {"training": "baseline", "condition": "reference"},
+    {"training": "shuffle", "condition": "experimental", "fraction": 0.5},
+    {"training": "immunisation", "switch_step": 1000, "post_steps": 175000},
+])
+def test_every_e5_run_uses_the_same_background_statistic(spec):
+    """docs/e5/DECISIONS.md (19): one procedure for every E5 run."""
+    run_e5 = load_experiment_module("E5_belief_training", "run_e5.py", "test_e5_batches_run")
+    cfg = e5_setup.load_config(REPO_ROOT / "configs" / "e5" / "e5.yaml")
+    assert cfg["e5"]["switch_pairs"] == "same_background"
+    assert "switch_pairs" not in cfg["train"]["latent_estimator"]  # E4's block itself is untouched
+    cfg["e5"]["run"] = {"configuration": "p1-a-d1", "seed_label": "B", **spec}
+    run_e5.build(cfg)
+    assert cfg["train"]["latent_estimator"]["switch_pairs"] == "same_background"

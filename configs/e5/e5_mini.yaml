@@ -12,9 +12,10 @@ e5:
   # the agent state's decodability (posterior reconstruction -> its own template) at the checkpoints up to until_step, in
   # the runs with one appearance (baseline, immunisation); the shuffle runs have it by assignment at every checkpoint
   decodability: {until_step: 600, max_per_state: 2}
-  # the estimator switch's statistic: any pair of the batch (E3/E4's, the default) or same_background (pairs of images
-  # with the same background; docs/e5/DECISIONS.md (17): proposed, NOT active)
-  switch_pairs: any
+  # the estimator switch's statistic (and the collapse guard's): same_background, pairs of images with the same background
+  # (docs/e5/DECISIONS.md (19)), on EVERY E5 run -- with one background (baseline, immunisation) it is E3/E4's statistic,
+  # the same draws (bit for bit, tested); `any` would restore E3/E4's statistic everywhere
+  switch_pairs: same_background
   immunisation:
     post_steps: 400
   resumable_candidates: [200, 400]

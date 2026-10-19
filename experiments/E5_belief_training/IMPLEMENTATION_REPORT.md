@@ -192,40 +192,72 @@ l'immunisation A.
 
 ## 7. Diagnostics avant lancement (2026-10-19, soir)
 
-**Risque de bascule précoce de l'estimateur sous shuffle (décision (16)) : confirmé sur la config réelle.** Deux runs
-courts sur CPU (config `e5.yaml`, `p1-a-d1`, graine A, exposé, 4 000 pas, sortie dans `scratch/`) :
+**Risque de bascule précoce de l'estimateur sous shuffle : confirmé ; parade activée sur tous les runs E5** (décisions
+(16), (17), (19), (20)). Le critère sans label d'E3/E4 (JS entre paires d'images du batch) est confondu par la
+variabilité du fond : sous shuffle, il sépare les affectations avant la position de l'agent. Restreint aux paires de
+même fond, il garde son sens. C'est une observation méthodologique à reprendre dans le papier.
 
-| Run | Pas de gradient 446 (pas d'env 1 000) | Bascule de l'estimateur | Décodabilité de l'état au pas 1 000 |
+Runs courts sur CPU (config réelle `e5.yaml`, `p1-a-d1`, graine A, exposé, 4 000 pas = 2 246 pas de gradient ;
+« déc. » = décodabilité de l'état) :
+
+| Run | grad 446 | grad 797 | grad 1 353 | grad 2 234 | Bascule |
+|---|---|---|---|---|---|
+| baseline (procédure d'E4) | JS 0,00 · déc. 0,7 % | 0,00 · 1,0 % | 1,06 · 12 % | 3,84 · 33 % | pas encore (JS > 3 à la fin) |
+| shuffle f = 1, statistique d'E3/E4 | 4,57 · 3,5 % | 4,22 · 2,4 % | 4,61 · 4,9 % | — | **701** (env 1 425), déc. ≈ 3 % |
+| shuffle f = 1, statistique même fond | 0,00 · 3,5 % | 0,00 · 2,4 % | 0,00 · 8,1 % | 0,00 | **aucune jusqu'à 2 234** |
+
+Critères de validation :
+
+- **Bascule nettement plus tardive qu'à 701 : remplie.** Aucune bascule jusqu'à 2 234, soit au moins 3,2 fois plus
+  tard.
+- **Décodabilité au moment de la bascule comparable à la baseline : non observable en 4 000 pas.** Ni la baseline ni
+  la parade n'ont basculé. À lire sur la vague 1 dès les premières heures ; c'est consigné dans `RUN_GPU.md`.
+
+Les deux runs shuffle sont identiques jusqu'à la bascule du premier, car les paires sont tirées dans un flux propre. La
+décodabilité canonique d'un run shuffle repose sur environ 85 contextes : elle est imprécise.
+
+**Portée (points 1 et 2).** La parade s'applique à tous les runs E5.
+
+- **Shuffle**, f = 1 et f = 0,5, exposés et références.
+- **À fond unique** (baseline, immunisation, ou un batch d'une seule affectation), la statistique restreinte prend
+  exactement les tirages d'E3/E4.
+- **Tests d'identité bit à bit avec E4** (poids, pertes, pas stockés) : f = 0 avec l'option dans les 2 conditions,
+  ainsi que la baseline avec l'option.
+- **Procédure uniforme** : `e5.switch_pairs: same_background`, que `run_e5.py` recopie dans
+  `train.latent_estimator.switch_pairs` pour chaque run (testé pour les 3 types de runs).
+
+**Garde-fou d'effondrement (point 3).** `SeparationSwitch.update` reçoit une seule statistique, qui sert à la fois au
+seuil de bascule et au garde-fou : celui-ci utilise donc aussi les paires de même fond.
+
+**Paires (point 4).**
+
+- Elles sont loguées à chaque évaluation et résumées à chaque checkpoint (`switch_pairs`).
+- Hors ligne, sur le replay du run avec parade (2 000 batchs de 16×64, tirés comme à l'entraînement), 1 023 à 1 024 des
+  1 024 éléments ont un partenaire de même fond, avec 10,5 groupes par batch en moyenne.
+- Statistique ≤ 5·10⁻⁵ bit sur les 16 évaluations.
+- Conclusion : les paires ne sont pas rares et la statistique n'est pas bruitée. Aucun correctif (moyenne glissante,
+  seuil minimal de paires) n'est nécessaire.
+
+**Risque restant, à ta décision (décision (20)).** Sous shuffle, la position de l'agent s'apprend plus lentement.
+
+| Indicateur | Pas de gradient | Parade | Baseline |
 |---|---|---|---|
-| baseline (procédure d'E4) | JS = 0,000 bit (toujours 0,000 au pas de gradient 797) | pas encore au pas d'env 1 585 | 0,7 % (1,0 % au pas 1 585) |
-| shuffle f = 1 | JS = 4,57 bits (4,22 au pas 1 585, après la bascule) | **pas de gradient 701** (pas d'env 1 425, JS 4,85), le plus tôt possible : minimum 500, puis 5 évaluations consécutives | **3,5 %** des contextes (2,4 % au pas 1 585) |
+| Erreur de reconstruction du patch agent | 2 234 | 3,8 | 1,0 |
+| JS même fond | 2 234 | 0,00 | 3,84 |
 
-Les runs continuent (logs : `scratch/sw_base.log`, `scratch/sw_sh100.log`). Un troisième run, identique au run
-shuffle mais avec la parade activée (`scratch/e5_samebg.yaml`, log `scratch/sw_sh100_samebg.log`), est en cours. Il
-dira si la statistique de même fond reste sous le seuil tant que l'état n'est pas décodable. Sur ce CPU, il faut environ
-45 min pour 600 pas.
+La procédure d'E3/E4 arrête un run sans bascule à 25 000 pas de gradient, soit environ 41 000 pas d'env
+(`SeparationNotReachedError`). Avec la parade, un run shuffle pourrait l'atteindre. Je n'ai rien changé, puisque c'est
+un paramètre d'E4. Si les runs shuffle de la vague 1 s'arrêtent là, deux options : une échéance plus tardive pour les
+runs shuffle, ou un résultat accepté tel quel.
 
-Sous shuffle, la statistique de paires franchit le seuil de 3 bits alors que l'état de l'agent n'est pas décodable.
-Le latent sépare les fonds (les affectations), pas les positions. La bascule déclenche alors le passage en
-straight-through, la baisse du taux d'apprentissage, l'entraînement des têtes et la rampe de `beta_rep` sur un latent
-qui ne code pas encore l'état. Le garde-fou d'effondrement (même statistique, 1,0 bit) ne verrait pas un effondrement
-de la position tant que l'affectation reste codée. **Ma recommandation : activer la parade pour les runs shuffle**
-(`e5.switch_pairs: same_background`, décision (17)), après avoir vu le run de contrôle ci-dessous. C'est une décision
-de conception qui te revient : elle change la procédure d'entraînement des runs shuffle par rapport à E4, mais
-seulement sur le critère de bascule. Sous f = 0,5, la moitié des épisodes sont canoniques, ce qui atténue le problème
-sans le supprimer.
-
-Logué désormais dans chaque run : le pas de bascule de l'estimateur (`e5.estimator_switch.env_step`, et
-`switch_step` en pas de gradient), la statistique `batch_pair_js` à chaque checkpoint, et la décodabilité de l'état.
-Pour les runs shuffle, elle est donnée par affectation à chaque checkpoint (`decode_accuracy`) ; pour la baseline et
-l'immunisation, aux checkpoints ≤ 100 000 (`e5.decodability`).
+**Effondrement du latent en mini : ce n'est pas une régression** (section 3). Les poids du mini d'E4 sont identiques bit
+à bit avant le déplacement (3657b33) et sur `e5`. L'effondrement vient des seuils de la config mini.
 
 **Après la fusion e4 → e5 (demain).** Si `e4_setup.py`, `run_e4.py` ou `measure_probes.py` ont changé sur `e4` après
-3657b33, la fusion entrera en conflit avec les shims. Il faudra alors reporter ces changements dans les modules de la
+3657b33, la fusion entrera en conflit avec les shims. Il faudra reporter ces changements dans les modules de la
 bibliothèque (`two_zones_setup`, `two_zones_records`, `theme_probe_measure`), puis relancer :
 
-- `tests/e4/test_e4_training_identity.py` (identité de l'entraînement) ;
-- `tests/e5/test_e5_probe_identity.py`, avec `ORIGINAL` mis au dernier commit d'`e4` fusionné, pour comparer au code
-  E4 le plus récent ;
-- `tests/e5/test_e5_training.py` (f = 0 ≡ E4) ;
+- `tests/e4/test_e4_training_identity.py` ;
+- `tests/e5/test_e5_probe_identity.py`, avec `ORIGINAL` au dernier commit d'`e4` fusionné ;
+- `tests/e5/test_e5_training.py` (f = 0 ≡ E4, avec et sans parade) ;
 - `tests/e4` et `tests/e5`.
