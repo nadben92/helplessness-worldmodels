@@ -171,3 +171,14 @@ def test_within_group_pairs_never_cross_groups():
     assert mean_within_group_pair_jensen_shannon(probs, groups, np.random.default_rng(0)) == 0.0
     assert mean_random_pair_jensen_shannon(probs, np.random.default_rng(0)) > 1.0
     assert np.isnan(mean_within_group_pair_jensen_shannon(probs[:2], np.array([0, 1]), np.random.default_rng(0)))
+
+
+def test_within_group_statistic_with_one_group_is_the_default_one_bit_for_bit():
+    """docs/e5/DECISIONS.md (19): one background -> the same draws and value as E3/E4's statistic, and the stream left in
+    the same state."""
+    from helplessness.measures.diagnostics import mean_random_pair_jensen_shannon, mean_within_group_pair_jensen_shannon
+
+    probs = np.random.default_rng(1).dirichlet(np.ones(4), size=(50, 8))
+    r1, r2 = np.random.default_rng(5), np.random.default_rng(5)
+    assert mean_within_group_pair_jensen_shannon(probs, np.zeros(50, dtype=np.int64), r1) == mean_random_pair_jensen_shannon(probs, r2)
+    assert r1.random() == r2.random()

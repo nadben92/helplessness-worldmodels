@@ -96,12 +96,17 @@ def mean_within_group_pair_jensen_shannon(product_probs: np.ndarray, groups: np.
     """mean_random_pair_jensen_shannon restricted to pairs of DISTINCT items of the SAME group (E5, docs/e5/DECISIONS.md
     (17); an option, off by default): groups (n_items,) labels the items whose images share their background (computed
     from the images, no state label), so that the statistic measures the separation of the agent's states, not of the
-    backgrounds. i uniform among the items that have a partner, j uniform among i's partners. NaN when no item has one."""
+    backgrounds. i uniform among the items that have a partner, j uniform among i's partners. NaN when no item has one.
+    With ONE group (a single background: E3, E4, E5's baseline and immunisation, a shuffled batch that happens to hold one
+    assignment), every pair is a same-group pair and the result is mean_random_pair_jensen_shannon's, the same draws
+    (bit for bit: tested)."""
     groups = np.asarray(groups)
     n = product_probs.shape[0]
     if groups.shape != (n,):
         raise ValueError(f"groups must have shape ({n},), got {groups.shape}")
     _, inverse, counts = np.unique(groups, return_inverse=True, return_counts=True)
+    if counts.size == 1:  # one background: every pair is a same-background pair -- E3/E4's statistic, its very draws
+        return mean_random_pair_jensen_shannon(product_probs, rng, n_pairs)
     eligible = np.flatnonzero(counts[inverse] >= 2)
     if eligible.size == 0:
         return float("nan")
@@ -112,6 +117,14 @@ def mean_within_group_pair_jensen_shannon(product_probs: np.ndarray, groups: np.
         j[t] = partners[rng.integers(0, partners.size)]
     per_var = jensen_shannon_categorical(product_probs[i], product_probs[j])
     return float(per_var.sum(axis=-1).mean())
+
+
+def group_pair_counts(groups: np.ndarray) -> dict[str, int]:
+    """The items that have a same-group partner (n_eligible), the groups and the groups of two items or more, of a batch's
+    groups (mean_within_group_pair_jensen_shannon's pool)."""
+    _, inverse, counts = np.unique(np.asarray(groups), return_inverse=True, return_counts=True)
+    return {"n_items": int(inverse.size), "n_eligible": int((counts[inverse] >= 2).sum()), "n_groups": int(counts.size),
+            "n_groups_with_pairs": int((counts >= 2).sum())}
 
 
 # ---------------------------------------------------------------------

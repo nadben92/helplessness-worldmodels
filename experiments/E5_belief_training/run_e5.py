@@ -247,12 +247,13 @@ def build(cfg: dict) -> tuple[dict, str, ClosedLoopHooks, dict]:
             kwargs["save_resumable_at"] = tuple(int(s) for s in spec["save_resumable_at"])
     elif spec["training"] == "shuffle":
         hooks, condition = shuffle_hooks(cfg, conf, float(spec["fraction"])), spec["condition"]
-        if cfg["e5"].get("switch_pairs", "any") != "any":  # docs/e5/DECISIONS.md (17): proposed, off by default
-            cfg["train"]["latent_estimator"]["switch_pairs"] = cfg["e5"]["switch_pairs"]
+
     else:
         condition = "reference"
         hooks = immunisation_hooks(cfg, conf, int(spec["switch_step"]), int(spec["post_steps"]))
         kwargs["total_env_steps"] = int(spec["switch_step"]) + int(spec["post_steps"]) + int(cfg["episode"]["max_steps"])
+    if cfg["e5"].get("switch_pairs", "any") != "any":  # docs/e5/DECISIONS.md (17), (19): every E5 run, one procedure
+        cfg["train"]["latent_estimator"]["switch_pairs"] = cfg["e5"]["switch_pairs"]
     return conf, condition, hooks, kwargs
 
 

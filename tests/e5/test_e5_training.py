@@ -56,10 +56,13 @@ def quiet(hooks: ClosedLoopHooks) -> ClosedLoopHooks:
                            finalize=lambda records, world, run_dir: {}, episode_source=hooks.episode_source)
 
 
-def train(root, name: str, condition: str, hooks: ClosedLoopHooks, **kwargs):
+def train(root, name: str, condition: str, hooks: ClosedLoopHooks, parade: bool = False, **kwargs):
+    """parade: the switch statistic on same-background pairs (docs/e5/DECISIONS.md (17), (19))."""
     run_dir = root / name
     run_dir.mkdir()
     cfg = tiny_cfg()
+    if parade:
+        cfg["train"]["latent_estimator"]["switch_pairs"] = "same_background"
     run_one(copy.deepcopy(cfg), CONF["seed"], condition, run_dir, configure_runtime(cfg), hooks=hooks, **kwargs)
     return run_dir
 
@@ -88,6 +91,12 @@ def runs(tmp_path_factory):
         out[f"e4_{condition}"] = train(root, f"e4_{condition}", condition, quiet(e4_hooks(tiny_cfg(), CONF)))
         out[f"f0_{condition}"] = train(root, f"f0_{condition}", condition, quiet(run_e5.shuffle_hooks(tiny_cfg(), CONF, 0.0)))
         out[f"f1_{condition}"] = train(root, f"f1_{condition}", condition, quiet(run_e5.shuffle_hooks(tiny_cfg(), CONF, 1.0)))
+        out[f"f0_parade_{condition}"] = train(root, f"f0_parade_{condition}", condition, quiet(run_e5.shuffle_hooks(tiny_cfg(), CONF, 0.0)),
+                                              parade=True)
+    out["base_parade_experimental"] = train(root, "base_parade_experimental", "experimental", quiet(run_e5.baseline_hooks(tiny_cfg(), CONF)),
+                                            parade=True)
+    out["f1_parade_experimental"] = train(root, "f1_parade_experimental", "experimental", quiet(run_e5.shuffle_hooks(tiny_cfg(), CONF, 1.0)),
+                                          parade=True)
     out["reference_resumable"] = train(root, "ref_resumable", "reference", quiet(run_e5.baseline_hooks(tiny_cfg(), CONF)),
                                        save_resumable_at=(SWITCH,))
     total = SWITCH + POST + tiny_cfg()["episode"]["max_steps"]
@@ -246,3 +255,27 @@ def test_background_groups_are_the_assignments(runs):
     assert len(set(block.tolist())) > 1
     # the same partition (group labels are numbered in the backgrounds' byte order, not the assignments')
     assert np.array_equal(groups[:, None] == groups[None, :], block[:, None] == block[None, :])
+
+
+@pytest.mark.parametrize("name", ["f0_parade_experimental", "f0_parade_reference", "base_parade_experimental"])
+def test_parade_with_one_background_equals_e4_bit_for_bit(runs, name):
+    """docs/e5/DECISIONS.md (19): with one background (f = 0 with per-step backgrounds; the baseline without them), the
+    same-background statistic is E3/E4's, the same draws: the run equals E4's, weights, losses and stored steps."""
+    condition = "reference" if name.endswith("reference") else "experimental"
+    e4, run = runs[f"e4_{condition}"], runs[name]
+    for step in (100, 200, 300):
+        assert same_weights(weights(e4, step), weights(run, step)), step
+    assert train_losses(e4) == train_losses(run)
+    a, b = replay_arrays(e4), replay_arrays(run)
+    assert all(np.array_equal(a[k], b[k]) for k in ("s", "a", "r", "terminal", "truncated", "is_first"))
+    summary = [r["switch_pairs"] for r in e5_setup.records(run)]
+    assert all(sp["n_evals"] == 0 or sp["groups_max"] == 1 for sp in summary)  # one background throughout
+
+
+def test_parade_under_shuffle_logs_its_pairs(runs):
+    """Under f = 1 the statistic is computed within groups of the same background, and every checkpoint records the
+    pool: several groups per batch, most items with a partner."""
+    summary = [r["switch_pairs"] for r in e5_setup.records(runs["f1_parade_experimental"])]
+    evals = [e for sp in summary for e in sp.get("evals", [])]
+    assert evals and max(e[3] for e in evals) > 1
+    assert all(e[2] >= 2 for e in evals)

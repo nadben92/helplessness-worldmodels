@@ -49,7 +49,7 @@ from helplessness.agents.worldmodel.loop import (
 from helplessness.agents.worldmodel.replay import ReplayBuffer
 from helplessness.envs.layouts import four_zones_pixel as e3_env
 from helplessness.envs.zones import geographic_support_mask
-from helplessness.measures.diagnostics import mean_random_pair_jensen_shannon, mean_within_group_pair_jensen_shannon
+from helplessness.measures.diagnostics import group_pair_counts, mean_random_pair_jensen_shannon, mean_within_group_pair_jensen_shannon
 from helplessness.pipeline.checkpoints import _atomic_torch_save, build_rssm, e2_grid_env_steps
 from helplessness.pipeline.measure import ARRAY_FIELDS, measure_final, real_context_settings
 from helplessness.pipeline.runtime import (
@@ -334,6 +334,23 @@ def full_measures_at_checkpoint(rssm, world, replay, N: np.ndarray, cfg: dict, s
     return fields, arrays, summary
 
 
+def switch_pair_summary(evals: list[dict]) -> dict:
+    """The same-background switch statistic's evaluations over a stretch of the run: their number, the statistic's mean,
+    sd, min and max, and the pairs' pool (items with a same-background partner, groups)."""
+    if not evals:
+        return {"n_evals": 0}
+    stat = np.array([e["stat"] for e in evals], dtype=np.float64)
+    elig = np.array([e["n_eligible"] for e in evals])
+    return {"n_evals": len(evals), "first_grad_step": evals[0]["grad_step"], "last_grad_step": evals[-1]["grad_step"],
+            "stat_mean": float(np.nanmean(stat)) if np.isfinite(stat).any() else float("nan"),
+            "stat_sd": float(np.nanstd(stat)) if np.isfinite(stat).any() else float("nan"),
+            "stat_min": float(np.nanmin(stat)) if np.isfinite(stat).any() else float("nan"),
+            "stat_max": float(np.nanmax(stat)) if np.isfinite(stat).any() else float("nan"), "n_nan": int(np.isnan(stat).sum()),
+            "n_items": int(evals[0]["n_items"]), "eligible_min": int(elig.min()), "eligible_mean": float(elig.mean()),
+            "groups_mean": float(np.mean([e["n_groups"] for e in evals])), "groups_max": int(max(e["n_groups"] for e in evals)),
+            "evals": [[e["grad_step"], e["stat"], e["n_eligible"], e["n_groups"]] for e in evals]}
+
+
 def background_groups(model_batch) -> np.ndarray:
     """(B * T,) a label per item of the batch, equal for items whose per-step background images are equal (computed from
     the images; the batch's order, as the posteriors'). Needs ModelBatch.background."""
@@ -544,9 +561,13 @@ def run_one(cfg: dict, seed: int, condition: str, run_dir: Path, device: torch.d
                                              torch.as_tensor(np.asarray(model_batch.r)), acfg, gens["imagination"],
                                              critic_clip_norm=cfg["agent"]["critic_clip_norm"]))
             if eval_now:
-                if same_background_pairs:  # E5's option (off by default): pairs of items with the same background image
-                    progress["last_stat"] = mean_within_group_pair_jensen_shannon(out["post_probs"], background_groups(model_batch),
-                                                                                  streams["switch_pairs"], n_pairs)
+                if same_background_pairs:  # E5's option (off by default): pairs of items with the same background image; the
+                    # same statistic drives the switch AND the collapse guard (switch.update below)
+                    groups = (background_groups(model_batch) if model_batch.background is not None
+                              else np.zeros(np.asarray(model_batch.is_first).size, dtype=np.int64))  # one appearance: one background
+                    progress["last_stat"] = mean_within_group_pair_jensen_shannon(out["post_probs"], groups, streams["switch_pairs"], n_pairs)
+                    progress.setdefault("switch_pair_evals", []).append({"grad_step": grad_step, "stat": progress["last_stat"],
+                                                                         **group_pair_counts(groups)})
                 else:
                     progress["last_stat"] = mean_random_pair_jensen_shannon(out["post_probs"], streams["switch_pairs"], n_pairs)
                 was_switched = switch.switched
@@ -589,6 +610,8 @@ def run_one(cfg: dict, seed: int, condition: str, run_dir: Path, device: torch.d
                       **collector.stats.window(window), "tie_fraction": stats.tied_greedy_steps / max(stats.greedy_steps, 1),
                       "explored_fraction": stats.explored_steps / max(stats.env_steps, 1), "stored_steps": len(replay),
                       "train": {k: float(v) for k, v in last.items()}}
+            if same_background_pairs:  # E5: the same-background statistic's evaluations since the previous checkpoint
+                record["switch_pairs"] = switch_pair_summary(progress.pop("switch_pair_evals", []))
             if hooks is None:
                 record["twin_by_zone"] = twin_at_checkpoint(collector.N, world, P_ref, cfg, acfg, seed, condition, env_step,
                                                             progress["twin_arrays"] if save_twin else None)
