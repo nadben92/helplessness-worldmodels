@@ -41,6 +41,7 @@ SEED_LABELS = ("A", "B")
 # measurement slots of the run's streams (E3 1-16, E4 20-21)
 SLOT_ASSIGNMENT_REAL_CONTEXT = 22
 SLOT_ASSIGNMENT_FINAL_REAL_CONTEXT = 23
+SLOT_DECODABILITY = 25  # (the RSA's is 24)
 
 
 def load_config(path: str | Path | None = None) -> dict:

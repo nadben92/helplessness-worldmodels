@@ -49,6 +49,7 @@ from helplessness.pipeline import two_zones as two_zones_world
 from helplessness.pipeline import two_zones_setup
 from helplessness.pipeline.agent_run import ClosedLoopHooks, checkpoint_env_steps, run_one
 from helplessness.pipeline.assignment_records import (
+    decodability,
     mean_over_assignments,
     real_context_by_assignment,
     type_of_row,
@@ -76,6 +77,28 @@ def _visits(replay, offset: int, types: np.ndarray) -> dict:
     return visit_shares(replay.obs_rows_and_flags()[0] + offset, types)
 
 
+def estimator_switch(state: dict) -> dict:
+    """E3's estimator switch (probabilities -> straight-through, the batch-pair JS criterion): its environment step
+    (None before it) -- under shuffle, the criterion may fire on background differences (docs/e5/DECISIONS.md (16))."""
+    return {"env_step": state.get("switch_env_step")}
+
+
+def decodability_record(state: dict, cfg: dict, world, canonical: int) -> dict | None:
+    """The agent state's decodability on the canonical assignment at the early checkpoints (e5.decodability.until_step),
+    for a run with one appearance (the shuffle runs have it by assignment at every checkpoint)."""
+    dec = cfg["e5"]["decodability"]
+    if state["env_step"] > dec["until_step"]:
+        return None
+    rssm, device = state["rssm"], state["device"]
+    was_training = rssm.training
+    rssm.eval()
+    with torch.random.fork_rng(devices=[torch.cuda.current_device()] if device.type == "cuda" else []):
+        acc = decodability(rssm, state["replay"], {canonical: world}, cfg, state["seed"], state["condition"], state["env_step"],
+                           dec["max_per_state"], e5_setup.SLOT_DECODABILITY, row_offset=canonical * N_STATES)[canonical]
+    rssm.train(was_training)
+    return {"decode_accuracy": acc, "max_per_state": dec["max_per_state"]}
+
+
 def baseline_hooks(cfg: dict, conf: dict) -> ClosedLoopHooks:
     base = e4_hooks(cfg, conf)
     types, canonical = type_of_row(), canonical_assignment(conf["diagonal"])
@@ -83,7 +106,8 @@ def baseline_hooks(cfg: dict, conf: dict) -> ClosedLoopHooks:
     def checkpoint_record(state: dict) -> dict:
         rec = base.checkpoint_record(state)
         if rec.get("e4") is not None:
-            rec["e5"] = {"visits_by_type": _visits(state["replay"], canonical * N_STATES, types)}
+            rec["e5"] = {"visits_by_type": _visits(state["replay"], canonical * N_STATES, types), "estimator_switch": estimator_switch(state),
+                         "decodability": decodability_record(state, cfg, state["world"], canonical)}
         return rec
 
     return ClosedLoopHooks(episode=base.episode, build_world=base.build_world, checkpoint_record=checkpoint_record, finalize=base.finalize)
@@ -152,6 +176,8 @@ def shuffle_hooks(cfg: dict, conf: dict, fraction: float) -> ClosedLoopHooks:
                                          "I_step1_by_type": mean_over_assignments(wk, "I_step1_by_type")} if len(ks) > 1 else None),
               "visits_by_type": visit_shares(state["replay"].obs_rows_and_flags()[0], types),
               "episodes_by_assignment": counts.tolist(), "episodes_drawn": int(np.sum(source.episode_drawn)),
+              "estimator_switch": estimator_switch(state),
+              "decode_accuracy_canonical": rc[canonical]["decode_accuracy"],
               "episodes": len(source.episode_assignment),
               "seconds": {"real_context": t_walks - t_rc, "walks": t_end - t_walks, "per_assignment": (t_end - t_rc) / len(ks)}}
         np.savez_compressed(state["run_dir"] / "assignments.npz", **source.log_arrays())
@@ -187,7 +213,8 @@ def immunisation_hooks(cfg: dict, conf: dict, switch_step: int, post_steps: int)
         eff = source.dynamics_switch_step
         rec["e5"] = {"nominal_switch_step": switch_step, "dynamics_switch_step": eff, "post_steps": post_steps,
                      "post_switch_step": None if eff is None else state["env_step"] - eff,
-                     "visits_by_type": _visits(state["replay"], canonical * N_STATES, types)}
+                     "visits_by_type": _visits(state["replay"], canonical * N_STATES, types), "estimator_switch": estimator_switch(state),
+                     "decodability": decodability_record(state, cfg, current, canonical)}
         return rec
 
     return ClosedLoopHooks(episode=base.episode, build_world=base.build_world, checkpoint_record=checkpoint_record, finalize=base.finalize,
@@ -220,6 +247,8 @@ def build(cfg: dict) -> tuple[dict, str, ClosedLoopHooks, dict]:
             kwargs["save_resumable_at"] = tuple(int(s) for s in spec["save_resumable_at"])
     elif spec["training"] == "shuffle":
         hooks, condition = shuffle_hooks(cfg, conf, float(spec["fraction"])), spec["condition"]
+        if cfg["e5"].get("switch_pairs", "any") != "any":  # docs/e5/DECISIONS.md (17): proposed, off by default
+            cfg["train"]["latent_estimator"]["switch_pairs"] = cfg["e5"]["switch_pairs"]
     else:
         condition = "reference"
         hooks = immunisation_hooks(cfg, conf, int(spec["switch_step"]), int(spec["post_steps"]))

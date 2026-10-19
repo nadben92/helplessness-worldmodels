@@ -6,10 +6,16 @@ e5:
   seed_b_offset: 100          # seed B = seed A (E4's seed of the configuration) + 100
   shuffle:
     fractions: [1.0, 0.5]
-  # every assignment measured at these checkpoints (null: every checkpoint); the canonical assignment at every checkpoint
-  # and every assignment at the last one in any case. Cost: experiments/E5_belief_training/IMPLEMENTATION_REPORT.md.
+  # the checkpoint measures under shuffle: the canonical assignment at EVERY checkpoint; the 12 assignments at these
+  # checkpoints (and at the run's last one in any case; null = every checkpoint). Cost: IMPLEMENTATION_REPORT.md.
   shuffle_records:
-    all_assignments_at: null
+    all_assignments_at: [10000, 25119, 63096, 100000, 150000, 200000, 250000, 300000]
+  # the agent state's decodability (posterior reconstruction -> its own template) at the checkpoints up to until_step, in
+  # the runs with one appearance (baseline, immunisation); the shuffle runs have it by assignment at every checkpoint
+  decodability: {until_step: 100000, max_per_state: 5}
+  # the estimator switch's statistic: any pair of the batch (E3/E4's, the default) or same_background (pairs of images
+  # with the same background; docs/e5/DECISIONS.md (17): proposed, NOT active)
+  switch_pairs: any
   immunisation:
     post_steps: 175000        # the grid point nearest to 175,000 (the B of E4's recomputed criterion)
   # the steps where the baseline reference of seed B keeps its full state (the immunisation of seed B branches from it):

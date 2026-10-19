@@ -44,8 +44,10 @@ class AssignmentReplayView:
     """The replay as real_context_probe reads it, labelled by table row (assignment k, state s -> k * n_states + s)
     instead of by state, the rows outside `keep` relabelled n_rows (never selected). Measurements only."""
 
-    def __init__(self, replay, keep_assignments, n_states: int = N_STATES):
-        self.replay, self.n_states = replay, int(n_states)
+    def __init__(self, replay, keep_assignments, n_states: int = N_STATES, row_offset: int = 0):
+        """row_offset: added to the rows of a replay with ONE appearance (its rows are states): k * n_states for the
+        assignment k it shows (baseline and immunisation runs: the canonical one)."""
+        self.replay, self.n_states, self.row_offset = replay, int(n_states), int(row_offset)
         self.n_rows = len(ASSIGNMENTS) * self.n_states
         self.keep = np.zeros(self.n_rows, dtype=bool)
         for k in keep_assignments:
@@ -53,6 +55,7 @@ class AssignmentReplayView:
 
     def labels_and_flags(self) -> tuple[np.ndarray, np.ndarray]:
         rows, first = self.replay.obs_rows_and_flags()
+        rows = rows + self.row_offset
         return np.where(self.keep[rows], rows, self.n_rows), first
 
     def windows(self, logical_starts, seq_len):
@@ -71,13 +74,44 @@ def by_type(values_by_region: dict[str, float], roles: dict[str, str]) -> dict[s
     return {t: _nanmean(v) for t, v in out.items()}
 
 
-def real_context_by_assignment(rssm, replay, worlds: dict[int, object], cfg: dict, seed: int, condition: str, env_step: int,
-                               max_per_state: int, draws: int, slot: int) -> dict[int, dict]:
-    """worlds: assignment -> its World (the run's dynamics, templates on the model's device)."""
+def _streams(seed: int, condition: str, env_step: int, slot: int, device):
     seq = wm_streams.spawn_sequences(seed, condition)["measure"].spawn(wm_streams.N_MEASURE_SLOTS)[slot]
     child = np.random.SeedSequence(entropy=seq.entropy, spawn_key=(*seq.spawn_key, int(env_step)))
+    return np.random.default_rng(child), wm_streams.torch_generator(child, device)
+
+
+def _decode_accuracy(rssm, ctx: dict, idx: np.ndarray, states: np.ndarray, world) -> float:
+    """The share of contexts whose POSTERIOR reconstruction decode(h_t, z_t) matches the image of their own state (E3's
+    probe.real_context_template_accuracy): is the agent's state decodable from the latent at all."""
     device = next(rssm.parameters()).device
-    rng, gen = np.random.default_rng(child), wm_streams.torch_generator(child, device)
+    idx_t = torch.as_tensor(idx, device=device)
+    return e3_probe.real_context_template_accuracy(rssm, {"positions": idx, "states": states, "h": ctx["h"][idx_t], "z": ctx["z"][idx_t]},
+                                                   world.templates_t)
+
+
+def decodability(rssm, replay, worlds: dict[int, object], cfg: dict, seed: int, condition: str, env_step: int, max_per_state: int,
+                 slot: int, row_offset: int = 0) -> dict[int, float]:
+    """The decodability of the agent's state alone (cheap: real contexts, posterior reconstructions, no kernel), by
+    assignment. A replay with one appearance: row_offset = k * n_states for the assignment it shows."""
+    device = next(rssm.parameters()).device
+    rng, gen = _streams(seed, condition, env_step, slot, device)
+    rc = real_context_settings(cfg)
+    view = AssignmentReplayView(replay, sorted(worlds), row_offset=row_offset)
+    ctx = e3_probe.real_context_probe(rssm, view, window_len=rc["window_len"], burn_in=rc["burn_in"], max_per_state=max_per_state,
+                                      n_states=view.n_rows, rng=rng, generator=gen, max_images=max_images_per_forward(cfg))
+    out = {}
+    for k in sorted(worlds):
+        idx = np.flatnonzero(ctx["states"] // N_STATES == k)
+        out[k] = _decode_accuracy(rssm, ctx, idx, ctx["states"][idx] - k * N_STATES, worlds[k]) if idx.size else float("nan")
+    return out
+
+
+def real_context_by_assignment(rssm, replay, worlds: dict[int, object], cfg: dict, seed: int, condition: str, env_step: int,
+                               max_per_state: int, draws: int, slot: int) -> dict[int, dict]:
+    """worlds: assignment -> its World (the run's dynamics, templates on the model's device). Each assignment's record
+    also holds its decodability (decode_accuracy, on the same contexts)."""
+    device = next(rssm.parameters()).device
+    rng, gen = _streams(seed, condition, env_step, slot, device)
     rc = real_context_settings(cfg)
     view = AssignmentReplayView(replay, sorted(worlds))
     ctx = e3_probe.real_context_probe(rssm, view, window_len=rc["window_len"], burn_in=rc["burn_in"], max_per_state=max_per_state,
@@ -99,6 +133,7 @@ def real_context_by_assignment(rssm, replay, worlds: dict[int, object], cfg: dic
         mass_r, I_r = region_means(mass, world.layout), region_means(I_s, world.layout)
         out[k] = {"mass_true_by_region": mass_r, "I_s_by_region": I_r, "mass_true_by_type": by_type(mass_r, roles),
                   "I_s_by_type": by_type(I_r, roles), "n_contexts": int(idx.size), "n_states_measured": int(np.isfinite(I_s).sum()),
+                  "decode_accuracy": _decode_accuracy(rssm, ctx, idx, sub["states"], world) if idx.size else float("nan"),
                   "ghost_fraction_mean": float(np.nanmean(kernel["ghost_fraction"])) if np.isfinite(kernel["ghost_fraction"]).any() else float("nan")}
     return out
 

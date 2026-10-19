@@ -157,3 +157,17 @@ def test_assignment_stream_is_independent_of_the_training_streams():
     for condition in ("experimental", "reference"):
         for name, g in spawn_streams(1, condition).items():
             assert not np.allclose(g.random(4), first), (condition, name)
+
+
+def test_within_group_pairs_never_cross_groups():
+    """The proposed switch statistic (docs/e5/DECISIONS.md (17)) pairs items of the same group only: two groups whose
+    items are identical within and opposite across give 0, the default statistic does not; no pair gives NaN."""
+    from helplessness.measures.diagnostics import mean_random_pair_jensen_shannon, mean_within_group_pair_jensen_shannon
+
+    a, b = np.zeros((1, 4, 2)), np.zeros((1, 4, 2))
+    a[..., 0], b[..., 1] = 1.0, 1.0
+    probs = np.concatenate([np.repeat(a, 6, 0), np.repeat(b, 6, 0)])
+    groups = np.array([0] * 6 + [1] * 6)
+    assert mean_within_group_pair_jensen_shannon(probs, groups, np.random.default_rng(0)) == 0.0
+    assert mean_random_pair_jensen_shannon(probs, np.random.default_rng(0)) > 1.0
+    assert np.isnan(mean_within_group_pair_jensen_shannon(probs[:2], np.array([0, 1]), np.random.default_rng(0)))

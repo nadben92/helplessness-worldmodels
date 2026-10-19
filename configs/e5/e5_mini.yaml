@@ -5,8 +5,16 @@ e5:
   seed_b_offset: 100
   shuffle:
     fractions: [1.0, 0.5]
+  # the checkpoint measures under shuffle: the canonical assignment at EVERY checkpoint; the 12 assignments at these
+  # checkpoints (and at the run's last one in any case; null = every checkpoint). Cost: IMPLEMENTATION_REPORT.md.
   shuffle_records:
-    all_assignments_at: null
+    all_assignments_at: [400]
+  # the agent state's decodability (posterior reconstruction -> its own template) at the checkpoints up to until_step, in
+  # the runs with one appearance (baseline, immunisation); the shuffle runs have it by assignment at every checkpoint
+  decodability: {until_step: 600, max_per_state: 2}
+  # the estimator switch's statistic: any pair of the batch (E3/E4's, the default) or same_background (pairs of images
+  # with the same background; docs/e5/DECISIONS.md (17): proposed, NOT active)
+  switch_pairs: any
   immunisation:
     post_steps: 400
   resumable_candidates: [200, 400]

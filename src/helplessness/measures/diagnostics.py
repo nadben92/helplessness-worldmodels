@@ -91,6 +91,29 @@ def mean_random_pair_jensen_shannon(product_probs: np.ndarray, rng: np.random.Ge
     return float(per_var.sum(axis=-1).mean())
 
 
+def mean_within_group_pair_jensen_shannon(product_probs: np.ndarray, groups: np.ndarray, rng: np.random.Generator,
+                                          n_pairs: int = 64) -> float:
+    """mean_random_pair_jensen_shannon restricted to pairs of DISTINCT items of the SAME group (E5, docs/e5/DECISIONS.md
+    (17); an option, off by default): groups (n_items,) labels the items whose images share their background (computed
+    from the images, no state label), so that the statistic measures the separation of the agent's states, not of the
+    backgrounds. i uniform among the items that have a partner, j uniform among i's partners. NaN when no item has one."""
+    groups = np.asarray(groups)
+    n = product_probs.shape[0]
+    if groups.shape != (n,):
+        raise ValueError(f"groups must have shape ({n},), got {groups.shape}")
+    _, inverse, counts = np.unique(groups, return_inverse=True, return_counts=True)
+    eligible = np.flatnonzero(counts[inverse] >= 2)
+    if eligible.size == 0:
+        return float("nan")
+    i = eligible[rng.integers(0, eligible.size, size=n_pairs)]
+    j = np.empty_like(i)
+    for t, item in enumerate(i):
+        partners = np.flatnonzero((inverse == inverse[item]) & (np.arange(n) != item))
+        j[t] = partners[rng.integers(0, partners.size)]
+    per_var = jensen_shannon_categorical(product_probs[i], product_probs[j])
+    return float(per_var.sum(axis=-1).mean())
+
+
 # ---------------------------------------------------------------------
 # D1 acceptance, uncertainty and anomalies (docs/e3/DECISIONS.md, 2026-09-25)
 # ---------------------------------------------------------------------

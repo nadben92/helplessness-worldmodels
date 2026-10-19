@@ -49,7 +49,7 @@ from helplessness.agents.worldmodel.loop import (
 from helplessness.agents.worldmodel.replay import ReplayBuffer
 from helplessness.envs.layouts import four_zones_pixel as e3_env
 from helplessness.envs.zones import geographic_support_mask
-from helplessness.measures.diagnostics import mean_random_pair_jensen_shannon
+from helplessness.measures.diagnostics import mean_random_pair_jensen_shannon, mean_within_group_pair_jensen_shannon
 from helplessness.pipeline.checkpoints import _atomic_torch_save, build_rssm, e2_grid_env_steps
 from helplessness.pipeline.measure import ARRAY_FIELDS, measure_final, real_context_settings
 from helplessness.pipeline.runtime import (
@@ -334,6 +334,16 @@ def full_measures_at_checkpoint(rssm, world, replay, N: np.ndarray, cfg: dict, s
     return fields, arrays, summary
 
 
+def background_groups(model_batch) -> np.ndarray:
+    """(B * T,) a label per item of the batch, equal for items whose per-step background images are equal (computed from
+    the images; the batch's order, as the posteriors'). Needs ModelBatch.background."""
+    if model_batch.background is None:
+        raise ValueError("switch_pairs: same_background needs per-step backgrounds (ModelBatch.background)")
+    bg = torch.as_tensor(model_batch.background)
+    flat = bg.reshape(bg.shape[0] * bg.shape[1], -1)
+    return torch.unique(flat, dim=0, return_inverse=True)[1].cpu().numpy()
+
+
 def _stream_states(streams: dict, gens: dict) -> dict:
     return {**{name: streams[name].bit_generator.state for name in NUMPY_STREAMS}, **{name: g.get_state() for name, g in gens.items()},
             "torch_global": torch.get_rng_state()}
@@ -412,6 +422,8 @@ def run_one(cfg: dict, seed: int, condition: str, run_dir: Path, device: torch.d
     loss_cfg = WorldModelLossConfig(k=cfg["render"]["k"], w_patch=tr["w_patch"], beta_dyn=tr["beta_dyn"], beta_rep=tr["beta_rep"],
                                     free_bits=tr["free_bits"], free_bits_mode=tr["free_bits_mode"])
     switch, n_pairs = build_separation_switch(cfg)
+    # E5's option (docs/e5/DECISIONS.md (17)): the switch statistic on pairs of the same background (absent: any pair)
+    same_background_pairs = tr["latent_estimator"].get("switch_pairs", "any") == "same_background"
     planned_grad_steps = int(round((planned_env_steps - prefill) * tr["replay_ratio"]))
 
     collector = ClosedLoopCollector(world.env, replay, rssm, goal_head, critic, acfg, N_STATES, start_rng=streams["start_state"],
@@ -532,7 +544,11 @@ def run_one(cfg: dict, seed: int, condition: str, run_dir: Path, device: torch.d
                                              torch.as_tensor(np.asarray(model_batch.r)), acfg, gens["imagination"],
                                              critic_clip_norm=cfg["agent"]["critic_clip_norm"]))
             if eval_now:
-                progress["last_stat"] = mean_random_pair_jensen_shannon(out["post_probs"], streams["switch_pairs"], n_pairs)
+                if same_background_pairs:  # E5's option (off by default): pairs of items with the same background image
+                    progress["last_stat"] = mean_within_group_pair_jensen_shannon(out["post_probs"], background_groups(model_batch),
+                                                                                  streams["switch_pairs"], n_pairs)
+                else:
+                    progress["last_stat"] = mean_random_pair_jensen_shannon(out["post_probs"], streams["switch_pairs"], n_pairs)
                 was_switched = switch.switched
                 try:
                     switch.update(grad_step, progress["last_stat"])
@@ -583,7 +599,7 @@ def run_one(cfg: dict, seed: int, condition: str, run_dir: Path, device: torch.d
                     "rssm": rssm, "goal_head": goal_head, "critic": critic, "world": world, "replay": replay, "N": collector.N,
                     "cfg": cfg, "acfg": acfg, "seed": seed, "condition": condition, "env_step": env_step,
                     "grad_step": progress["grad_step"], "n_env_steps": n_env_steps, "device": device, "run_dir": run_dir, "log": log,
-                    "episode_source": collector.episode_source}))
+                    "episode_source": collector.episode_source, "switch_env_step": progress.get("switch_env_step")}))
             if cfg["measure"].get("checkpoint_goal_kernel"):
                 record["goal_diagnostics"] = goal_kernel_at_checkpoint(rssm, world, replay, collector.N, cfg, seed, condition, env_step, device,
                                                                        goal_head=goal_head, critic=critic, acfg=acfg)

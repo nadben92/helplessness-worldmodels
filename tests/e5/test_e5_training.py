@@ -26,7 +26,7 @@ from _experiment_loader import load_experiment_module
 from helplessness.agents.worldmodel.replay import ReplayBuffer
 from helplessness.config import REPO_ROOT
 from helplessness.envs.layouts import two_zones
-from helplessness.pipeline.agent_run import ClosedLoopHooks, run_one
+from helplessness.pipeline.agent_run import ClosedLoopHooks, background_groups, run_one
 from helplessness.pipeline.episode_sources import ASSIGNMENTS, background_uint8, canonical_assignment
 from helplessness.pipeline.runtime import configure_runtime
 from helplessness.pipeline.two_zones_records import make_hooks as e4_hooks
@@ -229,3 +229,20 @@ def test_branched_immunisation_equals_the_recomputed_one(runs):
     assert train_losses(a) == train_losses(b)
     ra, rb = replay_arrays(a), replay_arrays(b)
     assert all(np.array_equal(ra[k], rb[k]) for k in ra)
+
+
+def test_background_groups_are_the_assignments(runs):
+    """The proposed switch-pair option (docs/e5/DECISIONS.md (17)) groups a batch's items by their background image: on
+    a shuffled replay these groups are exactly the items' assignments."""
+    cfg = tiny_cfg()
+    hooks = run_e5.shuffle_hooks(cfg, CONF, 1.0)
+    world = hooks.build_world(cfg, CONF["seed"], "experimental")
+    source = hooks.episode_source(world, cfg, CONF["seed"], "experimental")
+    replay = ReplayBuffer.from_compact(replay_arrays(runs["f1_experimental"]), source.table, source.background_table, source.background_of_row)
+    starts = np.arange(0, len(replay) - 16, 37)[:8]
+    batch, _ = replay.windows(starts, 16)
+    groups = background_groups(batch)
+    block = replay.obs_rows_and_flags()[0][(starts[:, None] + np.arange(16)[None, :]).reshape(-1)] // N
+    assert len(set(block.tolist())) > 1
+    _, expected = np.unique(block, return_inverse=True)
+    assert np.array_equal(np.unique(groups, return_inverse=True)[1], expected)

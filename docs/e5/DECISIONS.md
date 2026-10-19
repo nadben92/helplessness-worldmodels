@@ -150,3 +150,44 @@ From a separate clone, `/scratch/helplessness-worldmodels-e5` (branch `e5`; `sub
 branch), the e4 clone keeping E4's runs and probes; `e4` is merged into `e5` before the launch. The configuration,
 switch_step and post_steps are batch parameters set at launch. Durations are estimated from E4's 40-45 h for 300,000
 steps (four runs in parallel).
+
+## 2026-10-19 (16) -- the estimator switch under shuffle: a risk, logged (user's question; implementer's analysis)
+
+E3's estimator switch (posterior probabilities -> straight-through, with the learning-rate drop, the heads' training
+and beta_rep's ramp) fires when the label-free statistic -- the mean Jensen-Shannon divergence between the posteriors
+of random PAIRS of batch images -- exceeds 3.0 bits (summed over the 8 variables) on 5 consecutive evaluations, after
+500 gradient steps. In E3/E4 the background is fixed, so two images differ only by the agent's cell: a high JS means the
+latent separates the agent's states. Under shuffle two images of different episodes also differ by the colours of the
+quadrants (11 of 12 cross-assignment pairs, large areas), which the encoder separates easily: the statistic can reach
+3 bits on a latent that codes the ASSIGNMENT but not yet the agent's position, so the switch may fire earlier. The same
+statistic guards against a collapse after the switch (1.0 bit): it may miss a collapse of the position while the
+assignment stays coded. Not a risk for the baseline and the immunisation (one appearance).
+
+Logged in every E5 run: the switch's environment step (`e5.estimator_switch.env_step`; the gradient step is the record's
+`switch_step`), the statistic (`batch_pair_js`) at every checkpoint; the agent state's decodability (the share of real
+contexts whose posterior reconstruction matches the image of their own state, E3's real_context_template_accuracy): by
+assignment at every checkpoint in the shuffle runs (`decode_accuracy`, `e5.decode_accuracy_canonical`), and at the
+checkpoints up to 100,000 steps in the baseline and immunisation runs (`e5.decodability`). Reading: a shuffle run whose
+switch comes much earlier than its reference's or the baseline's, with a low decodability at the first checkpoints after
+it, is the failure this point describes.
+
+## 2026-10-19 (17) -- the parade, proposed, NOT active (implementer)
+
+The switch statistic on pairs of items with the SAME background image (`train.latent_estimator.switch_pairs:
+same_background`; set from `e5.switch_pairs`, default `any` = E3/E4's statistic): the groups are computed from the
+batch's per-step background images (no state label), i draws among the items that have a partner, j among i's partners
+(`measures.diagnostics.mean_within_group_pair_jensen_shannon`, `pipeline.agent_run.background_groups`). Off: the
+default path is E3/E4's, unchanged (the identity tests). On, it would draw differently from the `switch_pairs` stream,
+so a run with it is not comparable step for step with one without it; it applies to the shuffle runs only (the others
+have one background). Tested: the groups are exactly the items' assignments on a shuffled replay; the statistic never
+pairs across groups.
+
+## 2026-10-19 (18) -- checkpoint measures by assignment: defaults (user)
+
+The canonical assignment at every checkpoint; the 12 assignments at 8 checkpoints, [10000, 25119, 63096, 100000,
+150000, 200000, 250000, 300000] (`e5.shuffle_records.all_assignments_at`, a parameter; null = every checkpoint), and at
+the run's last checkpoint in any case. Measured cost: 305 s per assignment per checkpoint on CPU (IMPLEMENTATION_REPORT.md).
+
+The collapse of the mini configuration (JS and mass at 0) is E4's: E4's mini at the commit before the move (3657b33)
+gives the same logs and bit-identical weights at 200, 400 and 600 steps, both conditions. It comes from the mini config
+itself (`switch_js_threshold: -1.0` forces the switch at gradient step 16, `collapse_js_threshold: -inf`), not from E5.
