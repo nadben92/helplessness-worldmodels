@@ -79,25 +79,24 @@ Tous les tests ont été lancés en local, sur CPU, avec Windows, Python 3.14 et
 | **Run mini CPU complet** par condition : shuffle f = 1 et f = 0,5 (exp/ref), baseline B (exp/ref, avec états reprenables), immunisation A (recalculée, bascule à 216, fin à 616) et B (branchée, `auto`), sondes (grille complète pour f = 1, extrêmes ailleurs, immunisation B à k = 400), RSA, export | **tout s'exécute** |
 | Suite complète `tests/` | voir ci-dessous |
 
-**Suite complète.** Une exécution unique de 37 min a donné 971 passés et **2 échecs** ; les noms ont été perdus à
-cause d'un `tail`. Pendant cette exécution, je modifiais l'arborescence et un test E5 alors défectueux faisait partie
-de la suite. Ce test (le compte des transitions de l'épisode coupé par la fin du run) a été corrigé depuis. J'ai
-ensuite relancé tous les groupes séparément, tous verts :
+**Suite complète, relancée sur une arborescence stable** (commit f9f40c6, sortie complète dans
+`logs/tests_e5_full.txt`) : **1 025 passés, 1 échec**, 5 ignorés, 3 xfail (52 min). L'unique échec,
+`tests/e5/test_e5_training.py::test_background_groups_are_the_assignments`, était un défaut du test : la partition
+des groupes est juste, mais `torch.unique` numérote les groupes dans l'ordre des octets des fonds, et le test comparait
+les numéros. Corrigé (comparaison de partitions, commit e6f9314), puis `tests/e5/test_e5_training.py` relancé : 10/10
+(`logs/tests_e5_training_rerun.txt`). Les 2 échecs de la première exécution, non identifiés, ne se sont pas reproduits.
 
-| Groupe | Résultat |
-|---|---|
-| `tests/e3`, `envs`, `measures`, `evaluation`, `interventions`, `metrics`, `planning` | 605 passés, 4 ignorés |
-| `agents`, `cluster`, tests de premier niveau, conformité et handoff E3, export E4 | 361 passés, 1 ignoré, 3 xfail |
-| `tests/e4` | 45 passés |
-| `tests/e5` | 36 + 9 + 5 passés |
+**Ajouté depuis** : un test d'identité des sondes, `tests/e5/test_e5_probe_identity.py`. Sur les mêmes poids (un
+checkpoint d'E4 mini entraîné et un modèle non entraîné, aux I non nuls), les sondes de la bibliothèque donnent
+exactement les mêmes I, courbes, pas mesurés et lignes que le code E4 d'origine (`measure_probes.py` et `e4_setup.py`
+lus par `git show 3657b33:…`), sur 6 images de la grille. **Passe.**
 
-Le second échec n'est donc pas identifié. Il ne se reproduit dans aucun groupe relancé.
-
-**Effondrement du latent en mini.** Dans tous les runs mini, y compris la baseline B, qui suit exactement la procédure
-d'E4, la statistique JS du switch reste à ~0,000 et la masse sur le vrai successeur à 0. Les I sont presque partout à
-0. La config mini (latent 3×4, 600 pas, garde d'effondrement désactivée) ne sert qu'à exercer la chaîne : ses valeurs
-ne mesurent rien. Rien n'indique un effet propre à E5, puisque la baseline B effondre de la même façon. Il faudra le
-vérifier sur les premiers checkpoints GPU : la statistique JS figure dans les logs.
+**Effondrement du latent en mini : ce n'est pas une régression.** Le mini d'E4 a été relancé au commit 3657b33
+(avant le déplacement, dans un worktree) et sur `e5`, dans les deux conditions. Les logs sont identiques ligne à ligne
+(JS 0,000, mêmes masses, mêmes I) et les **poids sont identiques bit à bit à 200, 400 et 600 pas**. L'effondrement
+vient de la config mini elle-même : `switch_js_threshold: -1.0` force la bascule de l'estimateur au pas de gradient 16,
+et `collapse_js_threshold: -inf` désactive le garde-fou. La config réelle a un seuil de 3,0 bits et un garde-fou à
+1,0.
 
 ## 4. Coût mesuré des mesures par affectation
 
@@ -119,12 +118,10 @@ de la vague 1 d'E4, que je n'ai pas en local), mesurer les 12 affectations aux 2
 exemple, X = 30 s donne +1,9 h et X = 120 s donne +7,7 h, sur les 40 à 45 h. Le prior non entraîné majore le coût de
 décodage, comme dans le chronométrage d'E4.
 
-**Proposition.** Lire X dans l'export de la vague 1 d'E4 avant de lancer :
-
-- si 231·X ≲ 10 % de la durée d'un run, garder `all_assignments_at: null` (toutes les affectations à chaque checkpoint) ;
-- sinon, mettre `all_assignments_at: [10000, 25119, 63096, 100000, 150000, 200000, 250000]`. La dernière est toujours
-  mesurée en plus, soit 8 points, ce qui ramène le surcoût à 88·X. L'affectation canonique reste mesurée à chaque
-  checkpoint.
+**Défaut retenu (décision (18))** : l'affectation canonique à chaque checkpoint, et les 12 affectations à 8
+checkpoints, `[10000, 25119, 63096, 100000, 150000, 200000, 250000, 300000]`, plus le dernier dans tous les cas. Le
+surcoût vaut alors 8·11·X = 88·X par run shuffle au lieu de 231·X (300 000, le dernier checkpoint, est l'un des 8). C'est
+paramétrable par `e5.shuffle_records.all_assignments_at` (null = tous les checkpoints).
 
 ## 5. Commandes exactes de dry-run des trois vagues
 
@@ -192,3 +189,43 @@ l'immunisation A.
    standard, comme les outils d'E4 lancés depuis le notebook. Les seeds sont lues dans le texte des configs.
 10. **Ajouter une condition** (thèmes, après E4) se fait par une nouvelle entrée de `WAVES` / `PROBE_PAIRS` et, si
     besoin, une nouvelle source d'épisodes dans `pipeline/episode_sources.py`.
+
+## 7. Diagnostics avant lancement (2026-10-19, soir)
+
+**Risque de bascule précoce de l'estimateur sous shuffle (décision (16)) : confirmé sur la config réelle.** Deux runs
+courts sur CPU (config `e5.yaml`, `p1-a-d1`, graine A, exposé, 4 000 pas, sortie dans `scratch/`) :
+
+| Run | Pas de gradient 446 (pas d'env 1 000) | Bascule de l'estimateur | Décodabilité de l'état au pas 1 000 |
+|---|---|---|---|
+| baseline (procédure d'E4) | JS = 0,000 bit (toujours 0,000 au pas de gradient 797) | pas encore au pas d'env 1 585 | 0,7 % (1,0 % au pas 1 585) |
+| shuffle f = 1 | JS = 4,57 bits (4,22 au pas 1 585, après la bascule) | **pas de gradient 701** (pas d'env 1 425, JS 4,85), le plus tôt possible : minimum 500, puis 5 évaluations consécutives | **3,5 %** des contextes (2,4 % au pas 1 585) |
+
+Les runs continuent (logs : `scratch/sw_base.log`, `scratch/sw_sh100.log`). Un troisième run, identique au run
+shuffle mais avec la parade activée (`scratch/e5_samebg.yaml`, log `scratch/sw_sh100_samebg.log`), est en cours. Il
+dira si la statistique de même fond reste sous le seuil tant que l'état n'est pas décodable. Sur ce CPU, il faut environ
+45 min pour 600 pas.
+
+Sous shuffle, la statistique de paires franchit le seuil de 3 bits alors que l'état de l'agent n'est pas décodable.
+Le latent sépare les fonds (les affectations), pas les positions. La bascule déclenche alors le passage en
+straight-through, la baisse du taux d'apprentissage, l'entraînement des têtes et la rampe de `beta_rep` sur un latent
+qui ne code pas encore l'état. Le garde-fou d'effondrement (même statistique, 1,0 bit) ne verrait pas un effondrement
+de la position tant que l'affectation reste codée. **Ma recommandation : activer la parade pour les runs shuffle**
+(`e5.switch_pairs: same_background`, décision (17)), après avoir vu le run de contrôle ci-dessous. C'est une décision
+de conception qui te revient : elle change la procédure d'entraînement des runs shuffle par rapport à E4, mais
+seulement sur le critère de bascule. Sous f = 0,5, la moitié des épisodes sont canoniques, ce qui atténue le problème
+sans le supprimer.
+
+Logué désormais dans chaque run : le pas de bascule de l'estimateur (`e5.estimator_switch.env_step`, et
+`switch_step` en pas de gradient), la statistique `batch_pair_js` à chaque checkpoint, et la décodabilité de l'état.
+Pour les runs shuffle, elle est donnée par affectation à chaque checkpoint (`decode_accuracy`) ; pour la baseline et
+l'immunisation, aux checkpoints ≤ 100 000 (`e5.decodability`).
+
+**Après la fusion e4 → e5 (demain).** Si `e4_setup.py`, `run_e4.py` ou `measure_probes.py` ont changé sur `e4` après
+3657b33, la fusion entrera en conflit avec les shims. Il faudra alors reporter ces changements dans les modules de la
+bibliothèque (`two_zones_setup`, `two_zones_records`, `theme_probe_measure`), puis relancer :
+
+- `tests/e4/test_e4_training_identity.py` (identité de l'entraînement) ;
+- `tests/e5/test_e5_probe_identity.py`, avec `ORIGINAL` mis au dernier commit d'`e4` fusionné, pour comparer au code
+  E4 le plus récent ;
+- `tests/e5/test_e5_training.py` (f = 0 ≡ E4) ;
+- `tests/e4` et `tests/e5`.
