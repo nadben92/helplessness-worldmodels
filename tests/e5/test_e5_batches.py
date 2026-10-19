@@ -1,0 +1,74 @@
+"""E5's batch table and the commands of its submission script (no cluster involved): 12 runs in three waves of four,
+the batch parameters (configuration, switch step, post steps, E4's results), the branch of immunisation B only, the
+resumable states of the baseline reference of seed B, the probe pairs; the config holds E4's parameters unchanged."""
+
+from __future__ import annotations
+
+import pytest
+
+from _experiment_loader import load_experiment_module
+from helplessness.config import REPO_ROOT
+from helplessness.pipeline import two_zones_setup
+
+batches = load_experiment_module("E5_belief_training", "batches.py", "e5_batches_under_test")
+submit = load_experiment_module("E5_belief_training", "submit_kubeflow.py", "test_e5_submit")
+e5_setup = load_experiment_module("E5_belief_training", "e5_setup.py", "test_e5_batches_setup")
+
+
+def test_twelve_runs_in_three_waves_of_four():
+    runs = [spec for wave in batches.WAVES.values() for spec in wave.values()]
+    assert len(runs) == 12 and all(len(w) == 4 for w in batches.WAVES.values())
+    assert len(set(runs)) == 12
+    count = {}
+    for label, training, fraction, condition in runs:
+        count[(training, fraction)] = count.get((training, fraction), 0) + 1
+    assert count == {("shuffle", 1.0): 4, ("shuffle", 0.5): 4, ("baseline", None): 2, ("immunisation", None): 2}
+    assert {r[0] for r in batches.WAVES["e5_wave1"].values()} == {"A"}
+    assert {r[0] for r in batches.WAVES["e5_wave2"].values()} == {"B"}
+    assert sorted(r[0] for r in runs if r[1] == "baseline") == ["B", "B"]  # seed A's baseline is E4's own pair
+
+
+def test_train_commands():
+    jobs = submit.commands("train", "PY", "e5_wave1", "p1-a-d1")
+    assert [n for n, _ in jobs] == list(batches.WAVES["e5_wave1"])
+    for _, cmd in jobs:
+        assert cmd[:3] == ["PY", "-u", "experiments/E5_belief_training/run_e5.py"]
+        assert cmd[cmd.index("--configuration") + 1] == "p1-a-d1" and cmd[cmd.index("--config") + 1] == "configs/e5/e5.yaml"
+        assert "--max-env-steps" not in cmd and cmd[cmd.index("--device") + 1] == "cuda"
+    w2 = dict(submit.commands("train", "PY", "e5_wave2", "p1-a-d1", switch_step=125000))
+    ref = w2["B_base_reference"]
+    assert ref[ref.index("--save-resumable-at") + 1:ref.index("--save-resumable-at") + 3] == ["candidates", "125000"]
+    assert "--save-resumable-at" not in w2["B_base_experimental"]
+    with pytest.raises(ValueError):
+        submit.commands("train", "PY", "e5_wave3", "p1-a-d1")  # the immunisation needs the switch step
+    w3 = dict(submit.commands("train", "PY", "e5_wave3", "p1-a-d1", switch_step=125000, post_steps=175000))
+    assert "--branch-from" not in w3["A_imm"] and w3["B_imm"][w3["B_imm"].index("--branch-from") + 1] == "auto"
+    for job in ("A_imm", "B_imm"):
+        assert w3[job][w3[job].index("--switch-step") + 1] == "125000" and "--condition" not in w3[job]
+    with pytest.raises(ValueError):
+        submit.commands("train", "PY", "e5_wave1", "")  # the configuration is required
+
+
+def test_probe_commands():
+    jobs = dict(submit.commands("probes", "PY", "e5_wave3", "p1-a-d1", checkpoint=100000, e4_results="/scratch/e4/results"))
+    assert sorted(jobs) == ["probes_A_imm_k100000", "probes_B_imm_k100000", "probes_B_sh050_k100000"]
+    a = jobs["probes_A_imm_k100000"]
+    assert a[a.index("--e4-results") + 1] == "/scratch/e4/results" and "--e4-results" not in jobs["probes_B_imm_k100000"]
+    with pytest.raises(ValueError):
+        submit.commands("probes", "PY", "e5_wave3", "p1-a-d1", checkpoint=1)  # immunisation A needs E4's results
+
+
+def test_config_is_e4_unchanged_plus_e5():
+    cfg = e5_setup.load_config(REPO_ROOT / "configs" / "e5" / "e5.yaml")
+    e4 = two_zones_setup.load_config(REPO_ROOT / "configs" / "e4" / "e4.yaml")
+    assert {k: v for k, v in cfg.items() if k != "e5"} == e4
+    assert e5_setup.configuration(cfg, "p1-a-d1", "A")["seed"] == e4["e4"]["configurations"]["p1-a-d1"]["seed"]
+    assert e5_setup.configuration(cfg, "p1-a-d1", "B")["seed"] == e4["e4"]["configurations"]["p1-a-d1"]["seed"] + 100
+    assert cfg["e5"]["immunisation"]["post_steps"] == 175000 and 175000 in e4["checkpoints"]["grid"]
+
+
+def test_e5_config_refuses_other_keys(tmp_path):
+    p = tmp_path / "bad.yaml"
+    p.write_text("base: configs/e4/e4.yaml\ne5: {}\ntrain: {lr: 1.0}\n", encoding="utf-8")
+    with pytest.raises(ValueError):
+        e5_setup.load_config(p)

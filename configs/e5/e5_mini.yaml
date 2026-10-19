@@ -1,0 +1,12 @@
+# E5's CPU smoke configuration: configs/e4/e4_mini.yaml unchanged (a 3x4 latent, 600 environment steps), the e5 block
+# scaled to it. Its numbers mean nothing; it only exercises every stage.
+base: configs/e4/e4_mini.yaml
+e5:
+  seed_b_offset: 100
+  shuffle:
+    fractions: [1.0, 0.5]
+  shuffle_records:
+    all_assignments_at: null
+  immunisation:
+    post_steps: 400
+  resumable_candidates: [200, 400]

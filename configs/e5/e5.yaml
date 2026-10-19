@@ -1,0 +1,17 @@
+# E5 -- manipulating the belief through training (docs/E5_belief_training.md). Every training parameter is E4's:
+# `base` is read whole and unchanged (e5_setup.load_config refuses any other key than base and e5). The E4 configuration
+# of E5 is a run parameter (--configuration), set after E4's analysis.
+base: configs/e4/e4.yaml
+e5:
+  seed_b_offset: 100          # seed B = seed A (E4's seed of the configuration) + 100
+  shuffle:
+    fractions: [1.0, 0.5]
+  # every assignment measured at these checkpoints (null: every checkpoint); the canonical assignment at every checkpoint
+  # and every assignment at the last one in any case. Cost: experiments/E5_belief_training/IMPLEMENTATION_REPORT.md.
+  shuffle_records:
+    all_assignments_at: null
+  immunisation:
+    post_steps: 175000        # the grid point nearest to 175,000 (the B of E4's recomputed criterion)
+  # the steps where the baseline reference of seed B keeps its full state (the immunisation of seed B branches from it):
+  # E4's grid points from 10,000 on; the batch adds the chosen switch step when it is known
+  resumable_candidates: [10000, 15849, 25119, 39811, 63096, 100000, 125000, 150000, 158489, 175000, 200000, 225000, 250000]
