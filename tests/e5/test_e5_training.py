@@ -244,5 +244,5 @@ def test_background_groups_are_the_assignments(runs):
     groups = background_groups(batch)
     block = replay.obs_rows_and_flags()[0][(starts[:, None] + np.arange(16)[None, :]).reshape(-1)] // N
     assert len(set(block.tolist())) > 1
-    _, expected = np.unique(block, return_inverse=True)
-    assert np.array_equal(np.unique(groups, return_inverse=True)[1], expected)
+    # the same partition (group labels are numbered in the backgrounds' byte order, not the assignments')
+    assert np.array_equal(groups[:, None] == groups[None, :], block[:, None] == block[None, :])
