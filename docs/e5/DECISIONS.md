@@ -213,6 +213,7 @@ steps; decodability = share of real contexts whose posterior reconstruction matc
 | shuffle f = 1, E3/E4's statistic | 4.57, 3.5% | 4.22, 2.4% | 4.61, 4.9% | -- | gradient step 701 (env 1,425), decodability about 3% |
 | shuffle f = 1, same-background statistic | 0.00, 3.5% | 0.00, 2.4% | 0.00, 8.1% | 0.00 | none up to 2,234 |
 
+At the runs' end (gradient step 2,246): baseline JS 3.84, decodability 34.8%, no switch; shuffle with E3/E4's statistic, switched at 701, decodability 1.0%; shuffle with the same-background statistic, JS 0.00, decodability 4.2%, no switch.
 (The two shuffle runs are identical until the first one switches: the pairs draw from their own stream. The canonical
 decodability of a shuffle run rests on about 85 contexts, 1/12 of the data: imprecise.) Validation criteria (user):
 the switch comes markedly later than 701 -- met (none up to 2,234, at least 3.2 times later); the decodability at the

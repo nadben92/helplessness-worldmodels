@@ -206,6 +206,8 @@ Runs courts sur CPU (config réelle `e5.yaml`, `p1-a-d1`, graine A, exposé, 4 0
 | shuffle f = 1, statistique d'E3/E4 | 4,57 · 3,5 % | 4,22 · 2,4 % | 4,61 · 4,9 % | — | **701** (env 1 425), déc. ≈ 3 % |
 | shuffle f = 1, statistique même fond | 0,00 · 3,5 % | 0,00 · 2,4 % | 0,00 · 8,1 % | 0,00 | **aucune jusqu'à 2 234** |
 
+Fin des runs (grad 2 246) : baseline JS 3,84, déc. 34,8 %, pas de bascule ; shuffle sans parade (basculé à 701) : déc. 1,0 % ; shuffle avec parade : JS 0,00, déc. 4,2 %, pas de bascule.
+
 Critères de validation :
 
 - **Bascule nettement plus tardive qu'à 701 : remplie.** Aucune bascule jusqu'à 2 234, soit au moins 3,2 fois plus
