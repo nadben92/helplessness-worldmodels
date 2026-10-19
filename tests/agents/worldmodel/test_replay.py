@@ -32,7 +32,9 @@ def test_model_batch_has_no_state_field():
     field_names = {f.name for f in dataclasses.fields(ModelBatch)}
     assert "s" not in field_names
     assert "state" not in field_names
-    assert field_names == {"x", "a", "r", "terminal", "truncated", "is_first"}
+    # background (E5, docs/e5/DECISIONS.md (4)): the agent-free background IMAGE of each step, for the loss's mask, None
+    # unless the buffer holds per-episode appearances -- an image, never a state label
+    assert field_names == {"x", "a", "r", "terminal", "truncated", "is_first", "background"}
 
 
 def test_label_batch_only_has_state():

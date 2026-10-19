@@ -7,6 +7,16 @@ re-exports every name. One addition, off by default: run_one's `hooks`
 (ClosedLoopHooks) -- None reproduces E3's run exactly; an experiment with another
 world (E4) passes its own world builder, episode parameters and checkpoint records.
 See run_agent.py's docstring for the run itself (outputs, resume, campaign keys).
+
+E5's additions (2026-10-19), every one off by default (E3's and E4's runs unchanged, tested bit for bit):
+  hooks.episode_source  the environment of each episode chosen at its reset (closed_loop.ClosedLoopCollector's
+                        episode source: E5's per-episode zone assignments, E5's dynamics switch), its replay table and
+                        per-step backgrounds; it may also set the run's checkpoints and, once, move its end and its
+                        checkpoints (schedule_update: E5's post-switch grid);
+  total_env_steps       the run's length when it exceeds its planned budget (budget.total_steps + prefill): beta_rep's
+                        ramp stays the planned budget's (E5's immunisation runs past E4's 300,000 steps with E4's ramp);
+  save_resumable_at     a copy of the full resume state (checkpoints/resumable_env<NNNNNN>.pt) at these steps, kept;
+  branch_from           a new run that starts from such a state (the same planned budget), its own records from there.
 """
 
 from __future__ import annotations
@@ -76,17 +86,23 @@ class ClosedLoopHooks:
       build_world        (cfg, seed, condition, themes=None) -> pipeline.world.World, in place of build_world
       checkpoint_record  (state) -> dict merged into each checkpoint's record, in place of E3's tabular twin and agent
                          Delta; state holds rssm, goal_head, critic, world, replay, N, cfg, acfg, seed, condition,
-                         env_step, grad_step, n_env_steps, device, run_dir, log. It must not draw from the training
+                         env_step, grad_step, n_env_steps, device, run_dir, log, episode_source (None without one). It must not draw from the training
                          streams nor the global torch RNG (own streams, torch.random.fork_rng), so that measuring never
                          changes the training trajectory.
       finalize           (records, world, run_dir) -> dict of report fields, in place of E3's metrics.csv and its
                          zone_class / zone_kinds fields
+      episode_source     optional (E5): (world, cfg, seed, condition) -> an episode source, with next_episode(env_steps_done)
+                         -> (env, obs_offset) (closed_loop.py), table, background_table, background_of_row (the replay's
+                         table and per-step backgrounds; None, None for one appearance) and, optionally,
+                         checkpoints(n_env_steps) -> the run's initial checkpoints and schedule_update() -> None or, once,
+                         (new n_env_steps, new checkpoints). It is saved with the resume state. None: E3's and E4's run.
     """
 
     episode: dict
     build_world: Callable
     checkpoint_record: Callable
     finalize: Callable
+    episode_source: Callable | None = None
 
 
 class Interrupted(RuntimeError):
@@ -332,11 +348,16 @@ def _restore_streams(state: dict, streams: dict, gens: dict) -> None:
 
 
 def run_one(cfg: dict, seed: int, condition: str, run_dir: Path, device: torch.device, max_env_steps: int | None = None,
-            resume: bool = False, interrupt_after: int | None = None, hooks: ClosedLoopHooks | None = None) -> dict:
+            resume: bool = False, interrupt_after: int | None = None, hooks: ClosedLoopHooks | None = None,
+            total_env_steps: int | None = None, save_resumable_at: tuple[int, ...] = (), branch_from: Path | None = None) -> dict:
     """One closed-loop run in run_dir. resume=True continues it from
     checkpoints/resume.pt (the config and the planned length are the run's
     own). interrupt_after (tests): raise Interrupted right after the resume
-    point written at that environment step."""
+    point written at that environment step. E5's options (module docstring):
+    total_env_steps, save_resumable_at, branch_from (a resumable state file
+    of a run with the same planned budget)."""
+    if resume and branch_from is not None:
+        raise ValueError("resume and branch_from are exclusive")
     log = RunLog(run_dir / "console.log", f"[agent seed={seed} {condition}]")
     meta = environment_metadata(device)
     require_code_provenance(meta)
@@ -349,8 +370,11 @@ def run_one(cfg: dict, seed: int, condition: str, run_dir: Path, device: torch.d
         log(f"RESUMING from {resume_path}")
     else:
         (run_dir / "config.yaml").write_text(yaml.safe_dump(cfg, sort_keys=False), encoding="utf-8")
+        e5_meta = {**({"total_env_steps": int(total_env_steps)} if total_env_steps is not None else {}),
+                   **({"branched_from": str(branch_from)} if branch_from is not None else {})}
         write_run_meta(run_dir, seed, status="running", condition=condition, phase="5 closed loop", agent=dataclasses.asdict(acfg),
-                       rng_streams=list(e3_rng.STREAM_NAMES), episode=load_episode_config() if hooks is None else hooks.episode, max_env_steps=max_env_steps, **meta)
+                       rng_streams=list(e3_rng.STREAM_NAMES), episode=load_episode_config() if hooks is None else hooks.episode, max_env_steps=max_env_steps,
+                       **e5_meta, **meta)
     log(f"code: git commit {meta['git_commit']}, source sha256 {meta['source_sha256']}")
 
     world_builder = build_world if hooks is None else hooks.build_world
@@ -361,7 +385,15 @@ def run_one(cfg: dict, seed: int, condition: str, run_dir: Path, device: torch.d
     budget, prefill = cfg["budget"]["total_steps"], cfg["budget"]["prefill_steps"]
     planned_env_steps = budget + prefill
     n_env_steps = planned_env_steps if max_env_steps is None else min(planned_env_steps, max_env_steps)
-    replay = ReplayBuffer.for_run(budget=stored_steps_bound(n_env_steps), prefill_steps=0, table=world.templates_np)
+    if total_env_steps is not None:  # E5: the run's own length, past its planned budget (beta_rep's ramp stays the budget's)
+        n_env_steps = int(total_env_steps)
+    source = (hooks.episode_source(world, cfg, seed, condition) if hooks is not None and hooks.episode_source is not None
+              else None)
+    if source is None:
+        replay = ReplayBuffer.for_run(budget=stored_steps_bound(n_env_steps), prefill_steps=0, table=world.templates_np)
+    else:
+        replay = ReplayBuffer.for_run(budget=stored_steps_bound(n_env_steps), prefill_steps=0, table=source.table,
+                                      background_table=source.background_table, background_of_row=source.background_of_row)
 
     streams, seqs = e3_rng.spawn_streams(seed, condition), e3_rng.spawn_sequences(seed, condition)
     gens = {name: e3_rng.torch_generator(seqs[seq], device)
@@ -383,8 +415,11 @@ def run_one(cfg: dict, seed: int, condition: str, run_dir: Path, device: torch.d
     planned_grad_steps = int(round((planned_env_steps - prefill) * tr["replay_ratio"]))
 
     collector = ClosedLoopCollector(world.env, replay, rssm, goal_head, critic, acfg, N_STATES, start_rng=streams["start_state"],
-                                    explore_rng=streams["explore"], tiebreak_rng=streams["tiebreak"], act_generator=gens["act"], device=device)
+                                    explore_rng=streams["explore"], tiebreak_rng=streams["tiebreak"], act_generator=gens["act"], device=device,
+                                    episode_source=source)
     checkpoints = checkpoint_env_steps(cfg, n_env_steps)
+    if source is not None and hasattr(source, "checkpoints"):
+        checkpoints = sorted(int(c) for c in source.checkpoints(n_env_steps))
     measures_spec = cfg["measure"].get("checkpoint_measures")  # the campaign's full measures at the checkpoints (2026-10-07 (29))
     save_twin = bool(cfg["twin"].get("save_kernels"))
     resume_every = cfg["checkpoints"].get("resume_every")
@@ -397,7 +432,7 @@ def run_one(cfg: dict, seed: int, condition: str, run_dir: Path, device: torch.d
                 "critic": critic.state_dict(), "slow_critic": slow_critic.state_dict(), "agent_config": dataclasses.asdict(acfg),
                 "env_step": progress["env_step"], "step": progress["grad_step"], "switch_step": switch.switch_step}
 
-    def save_resume() -> None:
+    def resume_state() -> dict:
         state = {
             "progress": progress, "rssm": rssm.state_dict(), "goal_head": goal_head.state_dict(), "critic": critic.state_dict(),
             "slow_critic": slow_critic.state_dict(), "optimizer": optimizer.state_dict(), "goal_optimizer": goal_optimizer.state_dict(),
@@ -410,20 +445,35 @@ def run_one(cfg: dict, seed: int, condition: str, run_dir: Path, device: torch.d
                           "filter": {"h": collector.filter.h, "z": collector.filter.z, "a_prev": collector.filter.a_prev}},
             "streams": _stream_states(streams, gens), "n_env_steps": n_env_steps, "planned_env_steps": planned_env_steps,
         }
-        _atomic_torch_save(state, resume_path)
+        if collector.episode_source is not None:  # the episode's environment and its source in one pickle: one object
+            state["env"], state["episode_source"] = pickle.dumps((collector.env, collector.episode_source)), True
+        return state
+
+    def save_resume() -> None:
+        _atomic_torch_save(resume_state(), resume_path)
         write_checkpoint_pointer(run_dir, resume_path.name, progress["env_step"])
 
-    if resume:
-        state = torch.load(resume_path, map_location="cpu", weights_only=False)
-        if state["planned_env_steps"] != planned_env_steps or state["n_env_steps"] != n_env_steps:
-            raise ValueError("resume.pt was written for another budget")
+    if resume or branch_from is not None:
+        state = torch.load(resume_path if resume else branch_from, map_location="cpu", weights_only=False)
+        if resume:
+            expected = state["progress"]["schedule"][0] if "schedule" in state["progress"] else n_env_steps
+            if state["planned_env_steps"] != planned_env_steps or state["n_env_steps"] != expected:
+                raise ValueError("resume.pt was written for another budget")
+        elif state["planned_env_steps"] != planned_env_steps:
+            raise ValueError(f"{branch_from} was planned for another budget (beta_rep's ramp would differ)")
         for module, key in ((rssm, "rssm"), (goal_head, "goal_head"), (critic, "critic"), (slow_critic, "slow_critic"),
                             (optimizer, "optimizer"), (goal_optimizer, "goal_optimizer"), (critic_optimizer, "critic_optimizer")):
             module.load_state_dict(state[key])
         for name, value in state["switch"].items():
             setattr(switch, name, value)
         replay = pickle.loads(state["replay"])
-        collector.replay, collector.env = replay, pickle.loads(state["env"])
+        if branch_from is not None:
+            replay.grow(stored_steps_bound(n_env_steps))
+        if state.get("episode_source"):
+            collector.env, collector.episode_source = pickle.loads(state["env"])
+        else:
+            collector.env = pickle.loads(state["env"])
+        collector.replay = replay
         world.env = collector.env
         c = state["collector"]
         collector.N, collector.stats = c["N"], EpisodeStats(**c["stats"])
@@ -432,9 +482,15 @@ def run_one(cfg: dict, seed: int, condition: str, run_dir: Path, device: torch.d
         collector.filter.h, collector.filter.z, collector.filter.a_prev = (c["filter"][k].to(device) for k in ("h", "z", "a_prev"))
         _restore_streams(state["streams"], streams, gens)
         progress = state["progress"]
+        if branch_from is not None:  # a new run from here: its own records, counts and schedule
+            progress.update(records=[], counts={}, twin_arrays={}, seconds=0.0, extra_checkpoints=[])
+            progress.pop("schedule", None)
+        if "schedule" in progress:
+            n_env_steps, checkpoints = progress["schedule"][0], list(progress["schedule"][1])
         (run_dir / "checkpoints.jsonl").write_text("".join(json.dumps(_jsonable(r)) + "\n" for r in progress["records"]),
                                                    encoding="utf-8")
-        log(f"resumed at environment step {progress['env_step']} (gradient step {progress['grad_step']}, switch {switch.switch_step})")
+        log(f"{'resumed' if resume else f'branched from {branch_from}'} at environment step {progress['env_step']} "
+            f"(gradient step {progress['grad_step']}, switch {switch.switch_step})")
     if device.type == "cuda":
         replay.to_device(device)
     log(f"condition {condition}; device {device}; {n_env_steps} environment steps (planned {planned_env_steps}, prefill {prefill} under "
@@ -448,8 +504,16 @@ def run_one(cfg: dict, seed: int, condition: str, run_dir: Path, device: torch.d
     t0 = time.perf_counter() - progress["seconds"]
     last = progress["last"]
     final_measures = None
-    for env_step in range(progress["env_step"] + 1, n_env_steps + 1):
+    env_step = progress["env_step"] + 1
+    while env_step <= n_env_steps:
         collector.step(estimator=switch.estimator())
+        if collector.episode_source is not None and hasattr(collector.episode_source, "schedule_update"):
+            update = collector.episode_source.schedule_update()
+            if update is not None:  # E5: the source moved the run's end and its checkpoints (once)
+                n_env_steps, checkpoints = int(update[0]), sorted(int(c) for c in update[1])
+                progress["schedule"] = (n_env_steps, checkpoints)
+                log(f"schedule from the episode source at environment step {env_step}: {n_env_steps} environment steps, "
+                    f"checkpoints at {checkpoints}")
         if env_step > prefill:
             progress["credit"] += tr["replay_ratio"]
         while progress["credit"] >= 1.0:
@@ -518,7 +582,8 @@ def run_one(cfg: dict, seed: int, condition: str, run_dir: Path, device: torch.d
                 record.update(hooks.checkpoint_record({
                     "rssm": rssm, "goal_head": goal_head, "critic": critic, "world": world, "replay": replay, "N": collector.N,
                     "cfg": cfg, "acfg": acfg, "seed": seed, "condition": condition, "env_step": env_step,
-                    "grad_step": progress["grad_step"], "n_env_steps": n_env_steps, "device": device, "run_dir": run_dir, "log": log}))
+                    "grad_step": progress["grad_step"], "n_env_steps": n_env_steps, "device": device, "run_dir": run_dir, "log": log,
+                    "episode_source": collector.episode_source}))
             if cfg["measure"].get("checkpoint_goal_kernel"):
                 record["goal_diagnostics"] = goal_kernel_at_checkpoint(rssm, world, replay, collector.N, cfg, seed, condition, env_step, device,
                                                                        goal_head=goal_head, critic=critic, acfg=acfg)
@@ -538,6 +603,11 @@ def run_one(cfg: dict, seed: int, condition: str, run_dir: Path, device: torch.d
             save_resume()
             if interrupt_after is not None and env_step >= interrupt_after:
                 raise Interrupted(f"simulated interruption after the resume point at environment step {env_step}")
+        if env_step in save_resumable_at:  # E5: a kept copy of the full state, from which another run may branch
+            progress["seconds"] = time.perf_counter() - t0
+            _atomic_torch_save(resume_state(), run_dir / "checkpoints" / f"resumable_env{env_step:06d}.pt")
+            log(f"resumable state saved at environment step {env_step}")
+        env_step += 1
 
     progress["seconds"] = time.perf_counter() - t0
     records, counts = progress["records"], progress["counts"]

@@ -399,9 +399,13 @@ def _world_model_loss_and_unroll(
     """model_batch: replay.ModelBatch ONLY -- no label ever passed in.
     background: (C, H, W) float in [0, 1], the run's single fixed
     render_background() image (constant across the whole run, see
-    module docstring)."""
+    module docstring). When the batch carries its own per-step
+    backgrounds (ModelBatch.background, E5's per-episode appearances),
+    those are used instead and `background` is ignored."""
     device = next(rssm.parameters()).device
     x_seq = to_chw_float(model_batch.x, device)
+    if model_batch.background is not None:
+        background = to_chw_float(model_batch.background, device)
     a_seq = torch.as_tensor(model_batch.a, dtype=torch.long, device=device)
     is_first_seq = torch.as_tensor(model_batch.is_first, dtype=torch.bool, device=device)
 
@@ -417,7 +421,8 @@ def losses_from_unroll(x_seq: torch.Tensor, out: dict[str, torch.Tensor], backgr
     multi-seed step (acceleration.py), one model's slice at a time."""
     device = x_seq.device
     B, T = x_seq.shape[0], x_seq.shape[1]
-    bg = background.to(device).unsqueeze(0).unsqueeze(0).expand(B, T, -1, -1, -1)
+    # background: (C, H, W), the run's single background; or (B, T, C, H, W), each step's own (E5's per-episode appearances)
+    bg = background.to(device) if background.dim() == 5 else background.to(device).unsqueeze(0).unsqueeze(0).expand(B, T, -1, -1, -1)
     x_flat = x_seq.reshape(B * T, *x_seq.shape[2:])
     decoded_flat = out["decoded"].reshape(B * T, *out["decoded"].shape[2:])
     bg_flat = bg.reshape(B * T, *bg.shape[2:])

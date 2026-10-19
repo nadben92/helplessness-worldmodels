@@ -17,11 +17,12 @@ from helplessness.streams import worldmodel as wm_streams
 
 
 def build_world(slot_colors: dict, agent_color, diagonal: int, condition: str, render_cfg: dict, episode: dict,
-                seed: int, env_condition: str | None = None) -> World:
+                seed: int, env_condition: str | None = None, ud_slot: str | None = None) -> World:
     """slot_colors: slot -> RGB of the image; condition: the dynamics ("experimental" = UD at the diagonal's first slot,
-    "reference" = everything controllable-deterministic). The dynamics seed is drawn from the env_dynamics stream of
-    (seed, env_condition or condition), as E3's build_world. Tensors on the CPU."""
-    layout = two_zones.build_layout(diagonal, condition)
+    or at ud_slot when given -- E5's assignments; "reference" = everything controllable-deterministic). The dynamics
+    seed is drawn from the env_dynamics stream of (seed, env_condition or condition), as E3's build_world. Tensors on
+    the CPU."""
+    layout = two_zones.build_layout(diagonal, condition, ud_slot)
     themes = two_zones.themes(slot_colors, agent_color)
     k, grid_lines = render_cfg["k"], render_cfg["grid_lines"]
     env_seed = wm_streams.env_seed(wm_streams.spawn_streams(seed, env_condition or condition))

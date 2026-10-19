@@ -57,12 +57,16 @@ def quadrant_mask(quadrant: str) -> np.ndarray:
     return torus_block_mask(GRID_SHAPE, tuple(block["rows"]), tuple(block["cols"]))
 
 
-def build_layout(diagonal: int, condition: str) -> ZoneLayout:
+def build_layout(diagonal: int, condition: str, ud_slot: str | None = None) -> ZoneLayout:
     """The experimental layout of a diagonal (UD at roles["ud"], every other zone controllable-deterministic), or its
-    reference (derive_control on every zone of the experimental one)."""
+    reference (derive_control on every zone of the experimental one). ud_slot (E5's per-episode assignments; None, the
+    default, is the diagonal's own UD slot): the conveyor at that slot instead, its drift resolved for that slot's rows
+    (away from the goal); the corridor, the goal and the other slots are unchanged."""
     if condition not in CONDITIONS:
         raise ValueError(f"condition must be one of {CONDITIONS}, got {condition!r}")
-    ud = roles(diagonal)["ud"]
+    ud = roles(diagonal)["ud"] if ud_slot is None else ud_slot
+    if ud not in QUADRANT_ORDER:
+        raise ValueError(f"ud_slot must be one of {QUADRANT_ORDER}, got {ud!r}")
     corridor = CFG["corridor"]
     zones = [Zone(mask=cross_corridor_mask(GRID_SHAPE, tuple(corridor["rows"]), tuple(corridor["cols"])),
                   dynamics=ControllableDeterministic(), appearance=AppearanceSpec(category=corridor["appearance"]))]
@@ -79,12 +83,17 @@ def build_layout(diagonal: int, condition: str) -> ZoneLayout:
                                    for z in experimental.zones])
 
 
-def training_colors(diagonal: int, t_inc, t_ctrl) -> dict[str, tuple[int, int, int]]:
-    """Slot -> colour of the training image: UD slot T_inc, CD slot T_ctrl, the other two the corridor's colour."""
+def training_colors(diagonal: int, t_inc, t_ctrl, ud_slot: str | None = None, cd_slot: str | None = None) -> dict[str, tuple[int, int, int]]:
+    """Slot -> colour of the training image: UD slot T_inc, CD slot T_ctrl, the other two the corridor's colour.
+    ud_slot / cd_slot (E5's assignments; None: the diagonal's own slots): T_inc / T_ctrl at those slots instead."""
     r = roles(diagonal)
+    ud = r["ud"] if ud_slot is None else ud_slot
+    cd = r["cd"] if cd_slot is None else cd_slot
+    if ud == cd:
+        raise ValueError(f"the UD and CD slots must differ, got {ud!r} twice")
     colors = {q: tuple(int(v) for v in CORRIDOR_COLOR) for q in QUADRANT_ORDER}
-    colors[r["ud"]] = tuple(int(v) for v in t_inc)
-    colors[r["cd"]] = tuple(int(v) for v in t_ctrl)
+    colors[ud] = tuple(int(v) for v in t_inc)
+    colors[cd] = tuple(int(v) for v in t_ctrl)
     return colors
 
 

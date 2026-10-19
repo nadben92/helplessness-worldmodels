@@ -22,6 +22,17 @@ Two storage modes (docs/e3/DECISIONS.md, 2026-09-28, audit B6):
 The index is private: it never appears on ModelBatch, only the images
 gathered from it.
 
+Per-episode appearances (E5, 2026-10-19; off by default): when the image of
+a state changes from one episode to the next (E5's shuffled zone
+assignments), the table holds every appearance's images and add() receives
+the row of the observation (obs_index, default: the state itself). With a
+background_table (one agent-free background per appearance) and
+background_of_row (the background of each table row), every window also
+carries its per-step background (ModelBatch.background), so the loss's
+reconstruction mask is the agent's patch in each step's own image, as with a
+single background. Without them, nothing changes: ModelBatch.background is
+None and the loss uses the run's single background.
+
 sample() returns TWO SEPARATE objects (docs/e3/DECISIONS.md, adjustment
 D): ModelBatch (x, a, r, terminal, truncated, is_first) and LabelBatch
 (s). World-model / goal-head / critic training functions accept only a
@@ -73,6 +84,9 @@ class ModelBatch:
     terminal: np.ndarray
     truncated: np.ndarray
     is_first: np.ndarray
+    # (B, T, H, W, C) uint8, the agent-free background of each step's image, or None (the run's single background):
+    # only with ReplayBuffer(background_table=...), see the module docstring
+    background: object = None
 
 
 @dataclass(frozen=True)
@@ -86,7 +100,7 @@ class LabelBatch:
 class ReplayBuffer:
     def __init__(
         self, capacity: int, image_shape: tuple[int, int, int] | None = None, raise_on_overwrite: bool = False,
-        table: np.ndarray | None = None,
+        table: np.ndarray | None = None, background_table: np.ndarray | None = None, background_of_row: np.ndarray | None = None,
     ):
         if (image_shape is None) == (table is None):
             raise ValueError("pass exactly one of image_shape (pixel mode) or table (table mode)")
@@ -106,6 +120,19 @@ class ReplayBuffer:
             self._obs_index = None
             self._x = np.zeros((self.capacity, *image_shape), dtype=np.uint8)
         self._device_table = None
+        if (background_table is None) != (background_of_row is None):
+            raise ValueError("pass both background_table and background_of_row, or neither")
+        if background_table is not None:
+            if table is None:
+                raise ValueError("background_table needs table mode")
+            background_table = np.ascontiguousarray(background_table)
+            background_of_row = np.asarray(background_of_row, dtype=np.int64)
+            if background_table.dtype != np.uint8 or background_table.shape[1:] != table.shape[1:]:
+                raise ValueError(f"background_table must be uint8 (n, {table.shape[1:]}), got {background_table.dtype} {background_table.shape}")
+            if (background_of_row.shape != (table.shape[0],) or background_of_row.min() < 0
+                    or background_of_row.max() >= background_table.shape[0]):
+                raise ValueError("background_of_row must give a background row for every table row")
+        self._background_table, self._background_of_row, self._device_background = background_table, background_of_row, None
         self._a = np.zeros(self.capacity, dtype=np.int64)
         self._r = np.zeros(self.capacity, dtype=np.float32)
         self._terminal = np.zeros(self.capacity, dtype=bool)
@@ -123,6 +150,8 @@ class ReplayBuffer:
         image_shape: tuple[int, int, int] | None = None,
         capacity: int | None = None,
         table: np.ndarray | None = None,
+        background_table: np.ndarray | None = None,
+        background_of_row: np.ndarray | None = None,
     ) -> "ReplayBuffer":
         """The constructor a real run must use (spec 3.4 + prefill,
         docs/e3/DECISIONS.md point 1): validates capacity >= budget +
@@ -144,7 +173,8 @@ class ReplayBuffer:
                 "ever collect (spec section 3.4); this is checked here, at run startup, so a "
                 "misconfigured run fails immediately instead of silently dropping data later"
             )
-        return cls(capacity=capacity, image_shape=image_shape, raise_on_overwrite=True, table=table)
+        return cls(capacity=capacity, image_shape=image_shape, raise_on_overwrite=True, table=table,
+                   background_table=background_table, background_of_row=background_of_row)
 
     @property
     def table_mode(self) -> bool:
@@ -164,12 +194,38 @@ class ReplayBuffer:
         import torch
 
         self._device_table = torch.as_tensor(self._table).to(device)
+        if self._background_table is not None:
+            self._device_background = torch.as_tensor(self._background_table).to(device)
+        return self
+
+    @property
+    def per_step_background(self) -> bool:
+        return self._background_table is not None
+
+    def grow(self, capacity: int) -> "ReplayBuffer":
+        """A larger capacity (a run branched from another's saved state and continued beyond that run's budget, E5).
+        Only before any wraparound (the stored steps are physically 0..size-1); sampling depends on the stored steps
+        alone, so the draws are those of a buffer built with this capacity. Returns self."""
+        capacity = int(capacity)
+        if capacity <= self.capacity:
+            return self
+        if self._next != self._size % self.capacity:
+            raise ValueError("grow() needs a buffer that never wrapped around")
+        extra = capacity - self.capacity
+        for name in ("_obs_index", "_x", "_a", "_r", "_terminal", "_truncated", "_is_first", "_s"):
+            arr = getattr(self, name)
+            if arr is not None:
+                setattr(self, name, np.concatenate([arr, np.zeros((extra, *arr.shape[1:]), dtype=arr.dtype)]))
+        self._next = self._size
+        self.capacity = capacity
         return self
 
     def __len__(self) -> int:
         return self._size
 
-    def add(self, x: np.ndarray, a: int, r: float, terminal: bool, truncated: bool, is_first: bool, s: int) -> None:
+    def add(self, x: np.ndarray, a: int, r: float, terminal: bool, truncated: bool, is_first: bool, s: int,
+            obs_index: int | None = None) -> None:
+        """obs_index: the table row of x (table mode; default: s, one image per state)."""
         if self.raise_on_overwrite and self._size == self.capacity:
             raise ReplayOverwriteError(
                 f"replay buffer (capacity={self.capacity}) is full and about to overwrite its "
@@ -179,12 +235,13 @@ class ReplayBuffer:
             )
         idx = self._next
         if self.table_mode:
-            if not np.array_equal(np.asarray(x), self._table[int(s)]):
+            row = int(s) if obs_index is None else int(obs_index)
+            if not np.array_equal(np.asarray(x), self._table[row]):
                 raise ObservationTableMismatch(
-                    f"observation of state {int(s)} differs from the pre-rendered table image: the observation is no "
-                    "longer a pure function of the state, so the table replay would store wrong data"
+                    f"observation of state {int(s)} differs from the pre-rendered table image (row {row}): the observation "
+                    "is no longer a pure function of the state, so the table replay would store wrong data"
                 )
-            self._obs_index[idx] = s
+            self._obs_index[idx] = row
         else:
             self._x[idx] = x
         self._a[idx] = a
@@ -217,6 +274,16 @@ class ReplayBuffer:
 
         return self._device_table[torch.as_tensor(index, device=self._device_table.device)]
 
+    def _backgrounds(self, physical: np.ndarray):
+        if self._background_table is None:
+            return None
+        index = self._background_of_row[self._obs_index[physical].astype(np.int64)]
+        if self._device_background is None:
+            return self._background_table[index]
+        import torch
+
+        return self._device_background[torch.as_tensor(index, device=self._device_background.device)]
+
     def windows(self, logical_starts: np.ndarray, seq_len: int) -> tuple[ModelBatch, LabelBatch]:
         """The windows of seq_len consecutive steps starting at the given
         logical positions (0 = oldest stored step), in chronological
@@ -227,7 +294,7 @@ class ReplayBuffer:
         physical = self._physical(logical_starts, seq_len)
         model_batch = ModelBatch(
             x=self._images(physical), a=self._a[physical], r=self._r[physical], terminal=self._terminal[physical],
-            truncated=self._truncated[physical], is_first=self._is_first[physical],
+            truncated=self._truncated[physical], is_first=self._is_first[physical], background=self._backgrounds(physical),
         )
         return model_batch, LabelBatch(s=self._s[physical])
 
@@ -261,6 +328,14 @@ class ReplayBuffer:
         physical = (self._oldest_physical_index() + np.arange(self._size)) % self.capacity
         return self._s[physical].copy(), self._is_first[physical].copy()
 
+    def obs_rows_and_flags(self) -> tuple[np.ndarray, np.ndarray]:
+        """(table row, is_first) of every stored step in logical order (table mode) -- with per-episode appearances,
+        the row tells the appearance and the state; for MEASUREMENTS only, as labels_and_flags."""
+        if not self.table_mode:
+            raise ValueError("obs_rows_and_flags() needs table mode")
+        physical = (self._oldest_physical_index() + np.arange(self._size)) % self.capacity
+        return self._obs_index[physical].astype(np.int64), self._is_first[physical].copy()
+
     def sample(self, batch_size: int, seq_len: int, rng: np.random.Generator) -> tuple[ModelBatch, LabelBatch]:
         """Uniform draw of batch_size windows of seq_len consecutive
         steps, in true chronological (oldest-to-newest) order (see
@@ -283,22 +358,30 @@ class ReplayBuffer:
         if not self.table_mode:
             raise ValueError("export_compact() needs table mode")
         physical = (self._oldest_physical_index() + np.arange(self._size)) % self.capacity
-        return {
+        out = {
             "s": self._s[physical].astype(np.int16), "a": self._a[physical].astype(np.int8), "r": self._r[physical].copy(),
             "terminal": self._terminal[physical].copy(), "truncated": self._truncated[physical].copy(),
             "is_first": self._is_first[physical].copy(),
         }
+        if self._background_table is not None:  # per-episode appearances: the table row of every step
+            out["obs"] = self._obs_index[physical].copy()
+        return out
 
     @classmethod
-    def from_compact(cls, arrays: dict[str, np.ndarray], table: np.ndarray) -> "ReplayBuffer":
+    def from_compact(cls, arrays: dict[str, np.ndarray], table: np.ndarray, background_table: np.ndarray | None = None,
+                     background_of_row: np.ndarray | None = None) -> "ReplayBuffer":
         """The buffer export_compact() was taken from, rebuilt from its
-        arrays and the run's table (strict mode, capacity = its size)."""
+        arrays and the run's table (strict mode, capacity = its size);
+        with per-episode appearances, its table rows ("obs") and the
+        background tables."""
         s = np.asarray(arrays["s"]).astype(np.int64)
-        if s.size and (s.min() < 0 or s.max() >= table.shape[0]):
+        rows = np.asarray(arrays["obs"]).astype(np.int64) if "obs" in arrays else s
+        if rows.size and (rows.min() < 0 or rows.max() >= table.shape[0]):
             raise ValueError("state index outside the table")
         n = len(s)
-        buf = cls(capacity=n, table=table, raise_on_overwrite=True)
-        buf._obs_index[:] = s
+        buf = cls(capacity=n, table=table, raise_on_overwrite=True, background_table=background_table,
+                  background_of_row=background_of_row)
+        buf._obs_index[:] = rows
         buf._s[:] = s
         buf._a[:] = arrays["a"]
         buf._r[:] = arrays["r"]

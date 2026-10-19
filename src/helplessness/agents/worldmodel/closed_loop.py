@@ -23,6 +23,16 @@ closed-loop run is budgeted for it (stored_steps_bound).
 The true state label s is stored for logging and for the tabular twin's
 counts N[s, a, s'] (condition B, spec 6), kept here from the environment's
 own transitions; it never reaches the model, the heads or the policy.
+
+EPISODE SOURCE (E5, 2026-10-19; off by default). With episode_source, the
+environment of each episode is the source's choice, made at the episode's
+reset and never within an episode: next_episode(env_steps_done) returns
+(env, obs_offset), env_steps_done being the transitions taken so far. The
+replay then stores each observation's table row as obs_offset + s (E5's
+per-episode zone assignments: one block of n_states rows per appearance).
+The episode boundary is the replay's is_first flag, as always: the model
+resets there, so no window ever carries a transition from one episode's
+environment into another's. Without a source, nothing changes.
 """
 
 from __future__ import annotations
@@ -78,6 +88,7 @@ class ClosedLoopCollector:
         self, env, replay: ReplayBuffer, rssm: RSSM, goal_head: GoalHead, critic: Critic, cfg: AgentConfig, n_states: int,
         start_rng: np.random.Generator, explore_rng: np.random.Generator, tiebreak_rng: np.random.Generator,
         act_generator: torch.Generator | None, device: torch.device, start_states: np.ndarray | None = None,
+        episode_source=None,
     ):
         self.env, self.replay, self.rssm, self.goal_head, self.critic, self.cfg = env, replay, rssm, goal_head, critic, cfg
         self.start_rng, self.explore_rng, self.tiebreak_rng = start_rng, explore_rng, tiebreak_rng
@@ -91,8 +102,15 @@ class ClosedLoopCollector:
         self._arrival_reward = 0.0
         self._is_first = True
         self._episode_length = 0
+        self.episode_source = episode_source
+        self._obs_offset = 0
+
+    def _obs_kwargs(self, s: int) -> dict:
+        return {} if self.episode_source is None else {"obs_index": self._obs_offset + int(s)}
 
     def _reset(self) -> None:
+        if self.episode_source is not None:
+            self.env, self._obs_offset = self.episode_source.next_episode(self.stats.env_steps)
         self._obs, info = self.env.reset(start_state=draw_start_state(self.start_states, self.start_rng))
         self._s, self._arrival_reward, self._is_first, self._episode_length = info["state"], 0.0, True, 0
 
@@ -115,7 +133,8 @@ class ClosedLoopCollector:
         self.filter.set_action(a)
 
         s = self._s
-        self.replay.add(x=self._obs, a=a, r=self._arrival_reward, terminal=False, truncated=False, is_first=self._is_first, s=s)
+        self.replay.add(x=self._obs, a=a, r=self._arrival_reward, terminal=False, truncated=False, is_first=self._is_first, s=s,
+                        **self._obs_kwargs(s))
         obs_next, r, terminated, truncated, info = self.env.step(a)
         s_next = info["state"]
         self.N[s, a, s_next] += 1
@@ -128,7 +147,7 @@ class ClosedLoopCollector:
         if terminated or truncated:
             # The episode's last observation, with the reward of reaching it; no action is taken from it.
             self.replay.add(x=obs_next, a=0, r=r, terminal=bool(terminated), truncated=bool(truncated and not terminated),
-                            is_first=False, s=s_next)
+                            is_first=False, s=s_next, **self._obs_kwargs(s_next))
             self.stats.episodes += 1
             self.stats.successes += int(terminated)
             self.stats.lengths.append(self._episode_length)
