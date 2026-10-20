@@ -110,14 +110,88 @@ RESUME_KEYS = ("progress", "rssm", "goal_head", "critic", "slow_critic", "optimi
                "switch", "replay", "env", "collector", "streams", "n_env_steps", "planned_env_steps")
 
 
+def load_for_check(path: Path) -> tuple[dict, object, object]:
+    """resume.pt loaded entirely on the CPU (returns the state, its replay and its environment), for the check only (the resume itself loads it with run_e4.py on the GPU):
+    torch.load with map_location="cpu", and the same unpickler for the pickles inside it (the replay and the
+    environment), whose torch tensors -- the replay's CUDA copy of its table -- would otherwise be restored on the device
+    they were saved from. Written by torch 2.10 / numpy 2 on the cluster, read by the notebook's older versions (torch
+    2.3.1, tested with numpy 1.26): when numpy < 2 is installed, the unpickler maps numpy 2's module numpy._core to numpy
+    1's numpy.core, and numpy 2's random-generator pickles (which pass the bit generator's class or instance where numpy 1
+    expects its name) to numpy 1's constructors."""
+    import io
+    import pickle
+    import types
+
+    import numpy
+    import torch
+
+    numpy_1 = int(numpy.__version__.split(".")[0]) < 2
+    numpy_1_random = {}
+    if numpy_1:
+        from numpy.random import Generator, RandomState
+        from numpy.random.bit_generator import BitGenerator
+
+        def bit_generator_ctor(bit_generator="MT19937"):
+            cls = bit_generator if isinstance(bit_generator, type) else numpy.random._pickle.BitGenerators[bit_generator]
+
+            def setstate(self, state):  # numpy 2 pickles (state, seed sequence), numpy 1 the state alone
+                cls.__setstate__(self, state[0] if isinstance(state, tuple) else state)
+
+            return type(cls.__name__, (cls,), {"__setstate__": setstate})()
+
+        def generator_ctor(bit_generator_name="MT19937", bit_generator_ctor=bit_generator_ctor):
+            return Generator(bit_generator_name if isinstance(bit_generator_name, BitGenerator) else bit_generator_ctor(bit_generator_name))
+
+        def randomstate_ctor(bit_generator_name="MT19937", bit_generator_ctor=bit_generator_ctor):
+            return RandomState(bit_generator_name if isinstance(bit_generator_name, BitGenerator) else bit_generator_ctor(bit_generator_name))
+
+        numpy_1_random = {"__bit_generator_ctor": bit_generator_ctor, "__generator_ctor": generator_ctor,
+                          "__randomstate_ctor": randomstate_ctor}
+
+    class CheckUnpickler(pickle.Unpickler):
+        def find_class(self, module, name):
+            if module == "torch.storage" and name == "_load_from_bytes":
+                return lambda b: torch.load(io.BytesIO(b), map_location="cpu", weights_only=False, pickle_module=check_pickle)
+            if numpy_1 and (module == "numpy._core" or module.startswith("numpy._core.")):
+                module = "numpy.core" + module[len("numpy._core"):]
+            if module == "numpy.random._pickle" and name in numpy_1_random:
+                return numpy_1_random[name]
+            return super().find_class(module, name)
+
+    check_pickle = types.ModuleType("check_pickle")
+    check_pickle.Unpickler = CheckUnpickler
+    check_pickle.load = lambda f, **kw: CheckUnpickler(f, **kw).load()
+    check_pickle.loads = lambda b, **kw: CheckUnpickler(io.BytesIO(b), **kw).load()
+    state = torch.load(path, map_location="cpu", weights_only=False, pickle_module=check_pickle)
+    missing = [k for k in RESUME_KEYS if k not in state]
+    if missing:
+        raise KeyError(f"keys missing: {missing}")
+    return state, check_pickle.loads(state["replay"]), check_pickle.loads(state["env"])
+
+
+def zip_problem(path: Path) -> str | None:
+    """None if resume.pt is a complete torch zip archive whose every member matches its CRC-32 (independent of the torch
+    and numpy versions); else what is wrong."""
+    import zipfile
+
+    try:
+        with zipfile.ZipFile(path) as z:
+            bad = z.testzip()
+            if bad is not None:
+                return f"member {bad} fails its CRC check"
+            if not any(n.endswith("/data.pkl") or n == "data.pkl" for n in z.namelist()):
+                return "no data.pkl in the archive"
+    except Exception as err:
+        return f"not a complete zip archive: {type(err).__name__}: {err}"
+    return None
+
+
 def resume_check(run_dir: Path) -> dict:
     """Where a resume of run_dir would start, checked read-only: done (meta.yaml status "done" or agent_final.pt: never
     relaunched), else checkpoints/latest.json must name resume.pt at a step, resume.pt must load entirely (torch.load,
-    every key the resume reads, its pickled replay and environment) at that environment step, below the run's last one.
-    Returns {"run", "status", "done", "resume_from_env_step", "latest_json_step", "n_env_steps", "last_weights_env_step",
+    every key the resume reads, its pickled replay and environment, on the CPU: load_for_check) at that environment step,
+    below the run's last one; its zip archive is first checked member by member (zip_problem). Returns {"run", "status", "done", "resume_from_env_step", "latest_json_step", "n_env_steps", "last_weights_env_step",
     "problems"}."""
-    import pickle
-
     ck = run_dir / "checkpoints"
     out = {"run": str(run_dir), "status": None, "done": False, "resume_from_env_step": None, "latest_json_step": None,
            "n_env_steps": None, "last_weights_env_step": None, "problems": []}
@@ -147,24 +221,24 @@ def resume_check(run_dir: Path) -> dict:
     if not path.is_file():
         problems.append("checkpoints/resume.pt missing")
         return out
+    damaged = zip_problem(path)
+    if damaged:
+        problems.append(f"resume.pt ({path.stat().st_size} bytes) is damaged: {damaged}")
+        return out
     try:
-        import torch
-
-        state = torch.load(path, map_location="cpu", weights_only=False)
-        missing = [k for k in RESUME_KEYS if k not in state]
-        if missing:
-            raise KeyError(f"keys missing: {missing}")
-        pickle.loads(state["replay"])
-        pickle.loads(state["env"])
+        import torch  # noqa: F401  (load_for_check needs it)
+    except ImportError as err:
+        problems.append(f"cannot check resume.pt here ({err}): run the dry-run with a Python that has torch")
+        return out
+    try:
+        state, _, _ = load_for_check(path)
         step = int(state["progress"]["env_step"])
         n_env_steps = int(state["progress"]["schedule"][0]) if "schedule" in state["progress"] else int(state["n_env_steps"])
         out["resume_from_env_step"], out["n_env_steps"] = step, n_env_steps
         del state
-    except ImportError as err:
-        problems.append(f"cannot check resume.pt here ({err}): run the dry-run with a Python that has torch")
-        return out
     except Exception as err:
-        problems.append(f"resume.pt ({path.stat().st_size} bytes) does not load entirely: {type(err).__name__}: {err}")
+        problems.append(f"resume.pt ({path.stat().st_size} bytes, its zip archive intact) does not load entirely here: "
+                        f"{type(err).__name__}: {err}")
         return out
     if out["latest_json_step"] is not None and out["latest_json_step"] != step:
         problems.append(f"resume.pt is at environment step {step}, latest.json says {out['latest_json_step']}")
