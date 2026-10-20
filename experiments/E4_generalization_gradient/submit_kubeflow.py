@@ -5,7 +5,13 @@ end) and one log per job.
 Phases:
   train    the batch's four runs in parallel (wave 1 at the full budget; the other batches stop at B,
            batches.max_env_steps; checkpoint diagnostics as batches.diagnostics_at);
-  resume   one run directory, continued from its checkpoints/resume.pt;
+  resume   with --resume <run dir>: that run, continued from its checkpoints/resume.pt; without --resume: every run of
+           the batch whose meta.yaml status is not "done" (the newest run directory of each job), all in parallel in
+           one pod, as the training phase -- each exactly as `--resume <its run dir>` would continue it (same command,
+           same resume point). A run whose status is "done" (or that holds checkpoints/agent_final.pt) is never relaunched.
+           Before anything is submitted (and in --dry-run), every run to resume is checked: checkpoints/latest.json names
+           resume.pt at an environment step, resume.pt loads entirely (torch.load, then its pickled replay and
+           environment) and its step is latest.json's; any problem is reported and nothing is submitted;
   probes   measure_probes.py at one checkpoint (--checkpoint <environment step>) for every configuration of the batch,
            or those given with --configurations: all the probes, on the exposed model and its reference, on the GPU,
            batches.PROBES_MAX_PARALLEL configurations at a time. Never launched automatically.
@@ -21,6 +27,7 @@ Usage (Kubeflow notebook, from the checkout): see experiments/E4_generalization_
   python experiments/E4_generalization_gradient/submit_kubeflow.py --batch e4_wave1 --repo-dir /scratch/<checkout> [--dry-run]
   python experiments/E4_generalization_gradient/submit_kubeflow.py --batch e4_wave1 --phase probes --checkpoint <B> --repo-dir ...
   python experiments/E4_generalization_gradient/submit_kubeflow.py --batch e4_wave1 --phase resume --resume <run dir> --repo-dir ...
+  python experiments/E4_generalization_gradient/submit_kubeflow.py --batch e4_wave2 --phase resume --repo-dir ... [--dry-run]
 """
 
 from __future__ import annotations
@@ -48,15 +55,19 @@ PHASES = ("train", "resume", "probes")
 
 
 def commands(phase: str, python: str, batch: str, push: dict | None = None, resume: str = "", checkpoint: int | None = None,
-             configurations: list[str] | None = None, device: str = "cuda", n_walks: int | None = None) -> list[tuple[str, list[str]]]:
+             configurations: list[str] | None = None, device: str = "cuda", n_walks: int | None = None,
+             resume_runs: dict[str, str] | None = None) -> list[tuple[str, list[str]]]:
     """The supervisor's jobs. push: None (default, no push) or {"repo": url, "token_file": path}. device: cuda on the
-    cluster; cpu only to try the phases locally (--worker --device cpu)."""
+    cluster; cpu only to try the phases locally (--worker --device cpu). Phase resume: one run (resume, job "resume") or
+    several (resume_runs: job name -> run directory, jobs "resume_<job name>"), each with the single run's command."""
     push_args = [] if push is None else ["--push-batch", batch, "--push-repo", push["repo"], "--push-token-file", push["token_file"]]
     run = [python, "-u", f"{SCRIPT}/run_e4.py"]
     if phase == "resume":
-        if not resume:
-            raise ValueError("resume requires a run directory")
-        return [("resume", run + ["--resume", resume, "--device", device, *push_args])]
+        if bool(resume) == bool(resume_runs):
+            raise ValueError("resume requires one run directory or the batch's runs to resume, not both")
+        if resume:
+            return [("resume", run + ["--resume", resume, "--device", device, *push_args])]
+        return [(f"resume_{name}", run + ["--resume", d, "--device", device, *push_args]) for name, d in resume_runs.items()]
     if phase == "probes":
         if checkpoint is None:
             raise ValueError("probes requires --checkpoint <environment step>")
@@ -79,20 +90,114 @@ def commands(phase: str, python: str, batch: str, push: dict | None = None, resu
             for name, (cid, condition) in batches.batch_runs(batch).items()]
 
 
-def batch_run_dirs(repo: Path, batch: str, started_after: str = "") -> list[Path]:
-    """The run directories of the batch (the newest per job, created after started_after if given)."""
+def batch_run_dirs_by_job(repo: Path, batch: str, started_after: str = "") -> dict[str, Path | None]:
+    """job name -> the newest run directory of that job (created after started_after if given), None if there is none."""
     root = repo / RESULTS_SUBDIR / "E4_generalization_gradient"
-    out = []
-    for cid, condition in batches.batch_runs(batch).values():
+    out = {}
+    for name, (cid, condition) in batches.batch_runs(batch).items():
         role = "experimental" if condition == "experimental" else "control"
         found = sorted(d for d in root.glob(f"*__2zones-{cid}__pair-{role}__*") if d.name[-16:] >= started_after)
-        if found:
-            out.append(found[-1])
+        out[name] = found[-1] if found else None
     return out
 
 
+def batch_run_dirs(repo: Path, batch: str, started_after: str = "") -> list[Path]:
+    """The run directories of the batch (the newest per job, created after started_after if given)."""
+    return [d for d in batch_run_dirs_by_job(repo, batch, started_after).values() if d is not None]
+
+
+RESUME_KEYS = ("progress", "rssm", "goal_head", "critic", "slow_critic", "optimizer", "goal_optimizer", "critic_optimizer",
+               "switch", "replay", "env", "collector", "streams", "n_env_steps", "planned_env_steps")
+
+
+def resume_check(run_dir: Path) -> dict:
+    """Where a resume of run_dir would start, checked read-only: done (meta.yaml status "done" or agent_final.pt: never
+    relaunched), else checkpoints/latest.json must name resume.pt at a step, resume.pt must load entirely (torch.load,
+    every key the resume reads, its pickled replay and environment) at that environment step, below the run's last one.
+    Returns {"run", "status", "done", "resume_from_env_step", "latest_json_step", "n_env_steps", "last_weights_env_step",
+    "problems"}."""
+    import pickle
+
+    ck = run_dir / "checkpoints"
+    out = {"run": str(run_dir), "status": None, "done": False, "resume_from_env_step": None, "latest_json_step": None,
+           "n_env_steps": None, "last_weights_env_step": None, "problems": []}
+    problems = out["problems"]
+    try:
+        import yaml
+
+        out["status"] = (yaml.safe_load((run_dir / "meta.yaml").read_text(encoding="utf-8")) or {}).get("status")
+    except Exception as err:
+        problems.append(f"meta.yaml unreadable: {type(err).__name__}: {err}")
+    weights = sorted(int(f.stem[len("agent_env"):]) for f in ck.glob("agent_env*.pt") if f.stem[len("agent_env"):].isdigit())
+    out["last_weights_env_step"] = weights[-1] if weights else None
+    if out["status"] == "done" or (ck / "agent_final.pt").exists():
+        out["done"] = True
+        return out
+    try:
+        latest = json.loads((ck / "latest.json").read_text(encoding="utf-8"))
+        out["latest_json_step"] = int(latest["step"])
+        if latest.get("filename") != "resume.pt":
+            problems.append(f"latest.json names {latest.get('filename')!r}, not resume.pt")
+    except Exception as err:
+        problems.append(f"checkpoints/latest.json missing or unreadable: {type(err).__name__}: {err}")
+    if (ck / "resume.pt.tmp").exists():
+        problems.append(f"checkpoints/resume.pt.tmp exists ({(ck / 'resume.pt.tmp').stat().st_size} bytes): a resume point "
+                        "was being written when the run stopped (it is not used; resume.pt is the previous one)")
+    path = ck / "resume.pt"
+    if not path.is_file():
+        problems.append("checkpoints/resume.pt missing")
+        return out
+    try:
+        import torch
+
+        state = torch.load(path, map_location="cpu", weights_only=False)
+        missing = [k for k in RESUME_KEYS if k not in state]
+        if missing:
+            raise KeyError(f"keys missing: {missing}")
+        pickle.loads(state["replay"])
+        pickle.loads(state["env"])
+        step = int(state["progress"]["env_step"])
+        n_env_steps = int(state["progress"]["schedule"][0]) if "schedule" in state["progress"] else int(state["n_env_steps"])
+        out["resume_from_env_step"], out["n_env_steps"] = step, n_env_steps
+        del state
+    except ImportError as err:
+        problems.append(f"cannot check resume.pt here ({err}): run the dry-run with a Python that has torch")
+        return out
+    except Exception as err:
+        problems.append(f"resume.pt ({path.stat().st_size} bytes) does not load entirely: {type(err).__name__}: {err}")
+        return out
+    if out["latest_json_step"] is not None and out["latest_json_step"] != step:
+        problems.append(f"resume.pt is at environment step {step}, latest.json says {out['latest_json_step']}")
+    if step >= n_env_steps:
+        problems.append(f"resume.pt is at environment step {step}, not below the run's last ({n_env_steps}): nothing to resume")
+    return out
+
+
+def resume_plan(repo: Path, batch: str, resume: str) -> tuple[dict[str, str] | None, list[dict]]:
+    """The runs to resume and their checks. resume: one run directory (that run only), or "" (every run of the batch not
+    done). Returns ({job name: run directory relative to repo} or None for a single run, every check)."""
+    if resume:
+        d = Path(resume) if Path(resume).is_absolute() else repo / resume
+        check = {"job": "resume", **resume_check(d)}
+        if check["done"]:
+            check["problems"].append("the run is done (meta.yaml status or agent_final.pt): never relaunched")
+        return None, [check]
+    checks, runs = [], {}
+    for name, d in batch_run_dirs_by_job(repo, batch).items():
+        if d is None:
+            checks.append({"job": name, "run": None, "done": False, "problems": ["no run directory for this job"]})
+            continue
+        check = {"job": name, **resume_check(d)}
+        checks.append(check)
+        if not check["done"]:
+            runs[name] = d.relative_to(repo).as_posix()
+    if not runs and not any(c["problems"] for c in checks):
+        checks.append({"job": None, "problems": [f"every run of {batch} is done: nothing to resume"]})
+    return runs, checks
+
+
 def _run_e4(repo_dir: str, phase: str, output: str, batch: str, push_repo: str = "", token_dir: str = "", resume: str = "",
-            max_parallel: int = 0, checkpoint: int = 0, configurations: str = "", n_walks: int = 0) -> None:
+            max_parallel: int = 0, checkpoint: int = 0, configurations: str = "", n_walks: int = 0, resume_runs: str = "") -> None:
     """Serialized by CustomTrainer: imports and constants must be self-contained (as E3's _run_e3)."""
     import os
     from pathlib import Path
@@ -126,6 +231,8 @@ def _run_e4(repo_dir: str, phase: str, output: str, batch: str, push_repo: str =
         args += ["--configurations", *configurations.split(",")]
     if n_walks:
         args += ["--n-walks", str(n_walks)]
+    if resume_runs:
+        args += ["--resume-runs", resume_runs]
     subprocess.run(args, cwd=repo, check=True)
 
 
@@ -134,7 +241,7 @@ def worker(args) -> int:
     repo, output = Path(args.repo_dir), Path(args.output)
     push = {"repo": args.push_repo, "token_file": args.push_token_file} if args.push_repo else None
     jobs = commands(args.phase, sys.executable, args.batch, push, args.resume, args.checkpoint, args.configurations, args.device,
-                    args.n_walks)
+                    args.n_walks, decode_resume_runs(args.resume_runs))
     max_parallel = args.max_parallel or (batches.PROBES_MAX_PARALLEL if args.phase == "probes" else None)
     code = supervise(jobs, repo, output, max_parallel=max_parallel)
     if push is not None and args.phase != "probes":  # the batch-level status, after every run pushed its own results
@@ -148,6 +255,14 @@ def worker(args) -> int:
             print(f"[submit_kubeflow] BATCH STATUS PUSH FAILED: {type(err).__name__}: {err}", flush=True)
             code = code or 2
     return code
+
+
+def encode_resume_runs(runs: dict[str, str] | None) -> str:
+    return ";".join(f"{name}={d}" for name, d in (runs or {}).items())
+
+
+def decode_resume_runs(text: str) -> dict[str, str] | None:
+    return dict(item.split("=", 1) for item in text.split(";")) if text else None
 
 
 def check_checkout(repo: Path, need_https: bool) -> str:
@@ -178,7 +293,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--memory", default="64Gi")
     parser.add_argument("--image", default=IMAGE)
     parser.add_argument("--push-secret", default=None, help="OPTIONAL: Kubernetes secret holding RESULTS_PUSH_TOKEN (push to results/<batch>)")
-    parser.add_argument("--resume", default="", help="run directory (phase resume)")
+    parser.add_argument("--resume", default="", help="phase resume: one run directory (default: every run of the batch not done)")
     parser.add_argument("--max-parallel", type=int, default=None)
     parser.add_argument("--output", help="supervisor directory (default: <repo>/logs/kubeflow/e4-<phase>-<batch>-<UTC>)")
     parser.add_argument("--dry-run", action="store_true", help="print the jobs and the runtime patch, submit nothing")
@@ -186,17 +301,32 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--device", choices=("cuda", "cpu"), default="cuda", help=argparse.SUPPRESS)
     parser.add_argument("--push-repo", default="", help=argparse.SUPPRESS)
     parser.add_argument("--push-token-file", default="", help=argparse.SUPPRESS)
+    parser.add_argument("--resume-runs", default="", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
-    if (args.phase == "resume") != bool(args.resume):
-        parser.error("--resume is required exactly when --phase=resume")
+    if args.resume and args.phase != "resume":
+        parser.error("--resume goes with --phase resume")
     if (args.phase == "probes") != (args.checkpoint is not None):
         parser.error("--checkpoint is required exactly when --phase=probes")
     if args.worker:
         return worker(args)
     repo = Path(args.repo_dir).resolve()
     push = {"repo": "https://<origin>", "token_file": f"{PUSH_TOKEN_DIR}/{PUSH_TOKEN_KEY}"} if args.push_secret else None
+    resume_runs, resume_checks = None, None
+    if args.phase == "resume":  # checked before anything is printed as a plan or submitted
+        resume_runs, resume_checks = resume_plan(repo, args.batch, args.resume)
+        bad = [c for c in resume_checks if c["problems"]]
+        print(json.dumps({"batch": args.batch, "phase": "resume", "resume_checks": resume_checks}, indent=1), flush=True)
+        if bad:
+            print("RESUME CHECK FAILED -- nothing submitted:", flush=True)
+            for c in bad:
+                for problem in c["problems"]:
+                    print(f"  {c['job']}: {problem}", flush=True)
+            return 1
+        for c in resume_checks:
+            print(f"  {c['job']}: {'done, not relaunched' if c['done'] else 'resumes from environment step ' + str(c['resume_from_env_step'])}"
+                  f" (status {c['status']}, last weights {c['last_weights_env_step']})", flush=True)
     try:
-        commands(args.phase, "python", args.batch, push, args.resume or "x", args.checkpoint, args.configurations, "cuda", args.n_walks)
+        commands(args.phase, "python", args.batch, push, args.resume, args.checkpoint, args.configurations, "cuda", args.n_walks, resume_runs)
     except ValueError as err:
         parser.error(str(err))
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
@@ -204,7 +334,8 @@ def main(argv: list[str] | None = None) -> int:
     patch = runtime_patch_secrets(args.volume, args.mount, {args.push_secret: PUSH_TOKEN_DIR} if args.push_secret else {})
     max_parallel = args.max_parallel or (batches.PROBES_MAX_PARALLEL if args.phase == "probes" else None)
     if args.dry_run:
-        jobs = commands(args.phase, "<venv python>", args.batch, push, args.resume, args.checkpoint, args.configurations, "cuda", args.n_walks)
+        jobs = commands(args.phase, "<venv python>", args.batch, push, args.resume, args.checkpoint, args.configurations, "cuda", args.n_walks,
+                        resume_runs)
         print(json.dumps({"batch": args.batch, "phase": args.phase, "cpus": batches.BATCH_CPUS[args.batch], "max_parallel": max_parallel,
                           "push": push is not None, "output": str(output), "jobs": jobs, "runtime_patch": patch}, indent=1))
         return 0
@@ -227,12 +358,14 @@ def main(argv: list[str] | None = None) -> int:
             func_args={"repo_dir": str(repo), "phase": args.phase, "output": str(output), "batch": args.batch,
                        "push_repo": url if push else "", "token_dir": PUSH_TOKEN_DIR if push else "", "resume": args.resume,
                        "max_parallel": max_parallel or 0, "checkpoint": args.checkpoint or 0,
-                       "configurations": ",".join(args.configurations or []), "n_walks": args.n_walks or 0},
+                       "configurations": ",".join(args.configurations or []), "n_walks": args.n_walks or 0,
+                       "resume_runs": encode_resume_runs(resume_runs)},
             resources_per_node={"cpu": str(cpus), "memory": args.memory, "nvidia.com/gpu": "1"},
         ),
     )
     record = {"job_id": job_id, "batch": args.batch, "phase": args.phase, "output": str(output), "repo_dir": str(repo), "cpus": cpus,
-              "jobs": [name for name, _ in commands(args.phase, "python", args.batch, push, args.resume, args.checkpoint, args.configurations)],
+              "jobs": [name for name, _ in commands(args.phase, "python", args.batch, push, args.resume, args.checkpoint, args.configurations,
+                                                    resume_runs=resume_runs)],
               "push": push is not None, "submitted_at": datetime.now(timezone.utc).isoformat()}
     record_path = output.parent / f"{output.name}.submission.json"
     record_path.parent.mkdir(parents=True, exist_ok=True)
