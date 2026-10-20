@@ -72,6 +72,16 @@ python experiments/E4_generalization_gradient/submit_kubeflow.py --batch e4_wave
     --repo-dir /scratch/helplessness-worldmodels-e4
 ```
 
+Several runs of a batch interrupted at once (one pod, as the training): leave out `--resume`. Every run of the batch
+whose status is not `done` resumes from its `checkpoints/resume.pt`, all in parallel in one pod; a `done` run is never
+relaunched. The dry-run (and the submission) first checks each resume point (latest.json, resume.pt loaded entirely,
+the same step) and prints, per run, the step it resumes from; on any problem it submits nothing.
+
+```bash
+python experiments/E4_generalization_gradient/submit_kubeflow.py --batch e4_wave2 --phase resume \
+    --repo-dir /scratch/helplessness-worldmodels-e4 --dry-run
+```
+
 A run stopped by a training guard (`SeparationNotReachedError`, `CollapseAfterSwitchError` in its log) is a result:
 do not resume it; report it.
 
