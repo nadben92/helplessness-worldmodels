@@ -78,9 +78,22 @@ def _visits(replay, offset: int, types: np.ndarray) -> dict:
 
 
 def estimator_switch(state: dict) -> dict:
-    """E3's estimator switch (probabilities -> straight-through, the batch-pair JS criterion): its environment step
-    (None before it) -- under shuffle, the criterion may fire on background differences (docs/e5/DECISIONS.md (16))."""
-    return {"env_step": state.get("switch_env_step")}
+    """E3's estimator switch (probabilities -> straight-through, the batch-pair JS criterion): its gradient and
+    environment steps (None before it) and the environment steps elapsed since (docs/e5/DECISIONS.md (16), (20))."""
+    env = state.get("switch_env_step")
+    return {"grad_step": state.get("switch_step"), "env_step": env, "env_steps_since": None if env is None else state["env_step"] - env}
+
+
+def apply_e5_procedure(cfg: dict) -> dict:
+    """E5's two changes to E4's training procedure, on every E5 run (docs/e5/DECISIONS.md (19), (20)): the switch
+    statistic on same-background pairs and the later separation deadline. Both leave a run that switches before E4's
+    deadline with one background bit-identical to E4's (tested). Returns cfg, modified in place."""
+    est = cfg["train"]["latent_estimator"]
+    if cfg["e5"].get("switch_pairs", "any") != "any":
+        est["switch_pairs"] = cfg["e5"]["switch_pairs"]
+    if cfg["e5"].get("switch_max_steps") is not None:
+        est["switch_max_steps"] = int(cfg["e5"]["switch_max_steps"])
+    return cfg
 
 
 def decodability_record(state: dict, cfg: dict, world, canonical: int) -> dict | None:
@@ -252,8 +265,7 @@ def build(cfg: dict) -> tuple[dict, str, ClosedLoopHooks, dict]:
         condition = "reference"
         hooks = immunisation_hooks(cfg, conf, int(spec["switch_step"]), int(spec["post_steps"]))
         kwargs["total_env_steps"] = int(spec["switch_step"]) + int(spec["post_steps"]) + int(cfg["episode"]["max_steps"])
-    if cfg["e5"].get("switch_pairs", "any") != "any":  # docs/e5/DECISIONS.md (17), (19): every E5 run, one procedure
-        cfg["train"]["latent_estimator"]["switch_pairs"] = cfg["e5"]["switch_pairs"]
+    apply_e5_procedure(cfg)  # docs/e5/DECISIONS.md (19), (20): every E5 run, one procedure
     return conf, condition, hooks, kwargs
 
 

@@ -232,13 +232,30 @@ items with a partner, the groups). Offline on the short run's replay (2,000 batc
 <= 5e-5 bit on all 16 evaluations -- pairs are not scarce and the statistic not noisy: no running mean or minimum number
 of pairs is needed.
 
-## 2026-10-19 (20) -- a risk that remains: the separation deadline under shuffle (implementer; the user's decision)
+## 2026-10-19 (20) -- the separation deadline, moved back for every E5 run (user, 2026-10-20)
 
-Under shuffle the agent's position is learnt more slowly: at gradient step 1,353 the reconstruction error on the agent's
-patch is 3.7 (parade) against 2.6 for the baseline (1.0 vs 3.8 at 2,234), the decodability 8% against 12%, and the
-same-background statistic still 0.00 at 2,234 where the baseline's is 3.84. E3/E4's procedure stops a run whose
-statistic has not crossed the threshold by `switch_max_steps` = 25,000 gradient steps (about 41,000 environment steps):
-`SeparationNotReachedError`, a result under RUN_GPU.md's rules. With the parade a shuffle run could meet it; without it
-the switch would come on a latent that does not code the state. Not changed (it is E4's parameter); to read on the first
-hours of wave 1 (the JS of the log lines, the switch, `decode_accuracy`). If wave 1's shuffle runs stop on it, the
-options are the user's: a later deadline for the shuffle runs, or accepting it as a result.
+E3/E4's procedure stops a run whose switch statistic has not crossed its threshold by `switch_max_steps` gradient steps
+(E4: 25,000; `SeparationNotReachedError`). That deadline is a guard calibrated on a world with a FIXED background: E4's
+wave 1 switched at gradient steps 2,551 / 3,901 (p1-a-d1 experimental / reference, environment steps 4,508 / 6,758) and
+3,051 / 3,451 (p1-b-d1, 5,342 / 6,008), the latest at 3,901 (E4's wave 2 is not available here). Under shuffle the
+agent's position is learnt more slowly (short runs, gradient step 2,234: same-background statistic about 4e-5 bit and
+reconstruction error on the agent's patch 3.79, against 2.1-3.2 bits and 0.38-1.05 for E4's four runs), so a shuffle
+run with the same-background statistic could meet E4's deadline.
+
+The deadline is moved back UNIFORMLY, for every E5 run, to max(75,000, 10 x E4's latest switch = 39,010) = **75,000
+gradient steps** (`e5.switch_max_steps`, copied by `run_e5.apply_e5_procedure` into `train.latent_estimator.switch_max_steps`;
+about 125,000 environment steps). The deadline only stops a run (`SeparationSwitch.check_deadline`): a run that switches
+before E4's 25,000 is unaffected, step for step (tested: f = 0 and the baseline with E5's procedure equal E4 bit for bit).
+
+Logged: at every checkpoint, the switch's gradient and environment steps and the environment steps elapsed since
+(`e5.estimator_switch`: grad_step, env_step, env_steps_since); `switch_monitor.py final` gives one line per run (switch
+steps, environment steps trained after it). Check of wave 1's first hours (`switch_monitor.py early`, RUN_GPU.md): at
+every checkpoint up to the switch, the switch statistic, the agent state's decodability and the reconstruction error on
+the agent's patch, shuffle against E4's baseline. ALERT rule (user; a notification, never an automatic stop): a shuffle
+run that has not switched at 50% of the deadline (37,500 gradient steps) with a decodability that has not risen over its
+last 3 checkpoints (last minus third-to-last <= 0.01).
+
+**The comparison between conditions is made after checking convergence, not at the budget alone**: a shuffle run that
+switches late trains fewer steps after its switch than E4's runs (about 295,000); the final table of
+`switch_monitor.py` gives it per run, and the probes are compared between converged models.
+

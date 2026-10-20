@@ -57,12 +57,15 @@ def quiet(hooks: ClosedLoopHooks) -> ClosedLoopHooks:
 
 
 def train(root, name: str, condition: str, hooks: ClosedLoopHooks, parade: bool = False, **kwargs):
-    """parade: the switch statistic on same-background pairs (docs/e5/DECISIONS.md (17), (19))."""
+    """parade: E5's procedure (run_e5.apply_e5_procedure: the switch statistic on same-background pairs and the later
+    separation deadline, docs/e5/DECISIONS.md (19), (20))."""
     run_dir = root / name
     run_dir.mkdir()
     cfg = tiny_cfg()
     if parade:
-        cfg["train"]["latent_estimator"]["switch_pairs"] = "same_background"
+        run_e5.apply_e5_procedure(cfg)
+        assert cfg["train"]["latent_estimator"]["switch_pairs"] == "same_background"
+        assert cfg["train"]["latent_estimator"]["switch_max_steps"] == cfg["e5"]["switch_max_steps"] != tiny_cfg()["train"]["latent_estimator"]["switch_max_steps"]
     run_one(copy.deepcopy(cfg), CONF["seed"], condition, run_dir, configure_runtime(cfg), hooks=hooks, **kwargs)
     return run_dir
 
@@ -259,8 +262,9 @@ def test_background_groups_are_the_assignments(runs):
 
 @pytest.mark.parametrize("name", ["f0_parade_experimental", "f0_parade_reference", "base_parade_experimental"])
 def test_parade_with_one_background_equals_e4_bit_for_bit(runs, name):
-    """docs/e5/DECISIONS.md (19): with one background (f = 0 with per-step backgrounds; the baseline without them), the
-    same-background statistic is E3/E4's, the same draws: the run equals E4's, weights, losses and stored steps."""
+    """docs/e5/DECISIONS.md (19), (20): with one background (f = 0 with per-step backgrounds; the baseline without them),
+    the same-background statistic is E3/E4's, the same draws, and the later deadline changes nothing for a run that
+    switches before E4's: the run with E5's procedure equals E4's, weights, losses and stored steps."""
     condition = "reference" if name.endswith("reference") else "experimental"
     e4, run = runs[f"e4_{condition}"], runs[name]
     for step in (100, 200, 300):

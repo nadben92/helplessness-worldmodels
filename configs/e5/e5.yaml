@@ -17,6 +17,9 @@ e5:
   # (docs/e5/DECISIONS.md (19)), on EVERY E5 run -- with one background (baseline, immunisation) it is E3/E4's statistic,
   # the same draws (bit for bit, tested); `any` would restore E3/E4's statistic everywhere
   switch_pairs: same_background
+  # the separation deadline (train.latent_estimator.switch_max_steps, E4: 25,000 gradient steps; DECISIONS (20)), every E5
+  # run: max(75,000, 10 x E4's latest switch: 3,901 at wave 1, p1-a-d1 reference) = 75,000
+  switch_max_steps: 75000
   immunisation:
     post_steps: 175000        # the grid point nearest to 175,000 (the B of E4's recomputed criterion)
   # the steps where the baseline reference of seed B keeps its full state (the immunisation of seed B branches from it):

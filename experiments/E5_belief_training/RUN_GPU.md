@@ -77,12 +77,28 @@ The dry run prints the four jobs (`A_sh100_experimental`, `A_sh100_reference`, `
 --condition ... --fraction ... --device cuda --out-dir results`. Then, as E4: `kubectl get pods`, `cat $OUT/status.json`,
 `tail -n 3 $OUT/*.log` (`E5 checkpoint <step>: 12 assignment(s) ...` at each checkpoint), `nvidia-smi`.
 
-**Check in the first hours of wave 1** (docs/e5/DECISIONS.md (19), (20)): every run computes its estimator switch on
-pairs of images with the same background. In each job's log, the `JS` column of the `env step` lines and the line
-`>>> SWITCH to straight-through ...`; in `checkpoints.jsonl`, `e5.estimator_switch` and `e5.decode_accuracy_canonical`
-(the agent state's decodability). Report the switch step of each run and the decodability at the checkpoints around it.
-A shuffle run stopped by `SeparationNotReachedError` (no switch within 25,000 gradient steps, about 41,000 environment
-steps) is a result: report it, do not relaunch.
+**Check in the first hours of wave 1** (docs/e5/DECISIONS.md (19), (20)). Every E5 run computes its estimator switch on
+pairs of images with the same background, with a separation deadline of 75,000 gradient steps (E4: 25,000). At each new
+checkpoint until every run has switched (every hour or two), in the notebook:
+
+```bash
+cd /scratch/helplessness-worldmodels-e5
+python experiments/E5_belief_training/switch_monitor.py early --runs results/E5_belief_training/*sh*__seed*     --e4-runs /scratch/helplessness-worldmodels-e4/results/E4_generalization_gradient/*__2zones-$CONF__pair-*     --e4-decodability --device cpu --out /scratch/e5_wave1_early.csv
+```
+
+It prints, per run and per checkpoint up to its switch: the switch statistic (`js`), the agent state's decodability
+(`decodability`; for E4's runs recomputed from their weights) and the reconstruction error on the agent's patch
+(`recon_patch`), the shuffle runs against E4's runs of `$CONF`; then the alerts. **If a line `ALERT ...` appears** (a
+shuffle run not switched at 50% of the deadline, i.e. 37,500 gradient steps, with a decodability that has not risen over
+its last 3 checkpoints): report it to the user at once, with the table. It is not a stop: the runs continue. A run
+stopped by `SeparationNotReachedError` (no switch within 75,000 gradient steps) is a result: report it, do not relaunch.
+
+At the end of every wave, the one-line-per-run table of the switch (gradient and environment steps, environment steps
+after it), for the final report:
+
+```bash
+python experiments/E5_belief_training/switch_monitor.py final --runs results/E5_belief_training/grid* --out /scratch/e5_switch_final.csv
+```
 
 ## Step 4 -- wave 2
 

@@ -85,6 +85,8 @@ def test_every_e5_run_uses_the_same_background_statistic(spec):
     cfg = e5_setup.load_config(REPO_ROOT / "configs" / "e5" / "e5.yaml")
     assert cfg["e5"]["switch_pairs"] == "same_background"
     assert "switch_pairs" not in cfg["train"]["latent_estimator"]  # E4's block itself is untouched
+    assert cfg["train"]["latent_estimator"]["switch_max_steps"] == 25000
     cfg["e5"]["run"] = {"configuration": "p1-a-d1", "seed_label": "B", **spec}
     run_e5.build(cfg)
     assert cfg["train"]["latent_estimator"]["switch_pairs"] == "same_background"
+    assert cfg["e5"]["switch_max_steps"] == 75000 and cfg["train"]["latent_estimator"]["switch_max_steps"] == 75000

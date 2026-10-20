@@ -240,17 +240,32 @@ seuil de bascule et au garde-fou : celui-ci utilise donc aussi les paires de mê
 - Conclusion : les paires ne sont pas rares et la statistique n'est pas bruitée. Aucun correctif (moyenne glissante,
   seuil minimal de paires) n'est nécessaire.
 
-**Risque restant, à ta décision (décision (20)).** Sous shuffle, la position de l'agent s'apprend plus lentement.
+**Limite de séparation reculée pour tous les runs E5 (décision (20), 2026-10-20).** Pas de bascule des runs de la
+vague 1 d'E4 (logs de l'archive `e4_wave1__20261018T124132Z`) :
 
-| Indicateur | Pas de gradient | Parade | Baseline |
+| Run E4 | Pas de gradient | Pas d'env |
+|---|---|---|
+| p1-a-d1 exposé | 2 551 | 4 508 |
+| p1-a-d1 référence | **3 901** | 6 758 |
+| p1-b-d1 exposé | 3 051 | 5 342 |
+| p1-b-d1 référence | 3 451 | 6 008 |
+
+La vague 2 d'E4 n'est pas disponible localement. Nouvelle limite : max(75 000, 10 × 3 901) = **75 000 pas de
+gradient**, environ 125 000 pas d'env (`e5.switch_max_steps`). La limite ne fait qu'arrêter un run : f = 0 et la
+baseline avec la procédure E5 restent identiques bit à bit à E4 (tests). Le pas de bascule et les pas d'env écoulés
+depuis sont logués à chaque checkpoint. `switch_monitor.py` fournit le contrôle des premières heures (règle d'alerte à
+50 % de la limite) et le tableau final par run. La comparaison entre conditions se fera après vérification de la
+convergence, pas au budget seul.
+
+**Tableau final de la bascule, une ligne par run** (`switch_monitor.py final`, à remplir après chaque vague) :
+
+| Run | Pas de bascule (gradient) | Pas de bascule (env) | Pas d'env après la bascule |
 |---|---|---|---|
-| Erreur de reconstruction du patch agent | 2 234 | 3,8 | 1,0 |
-| JS même fond | 2 234 | 0,00 | 3,84 |
-
-La procédure d'E3/E4 arrête un run sans bascule à 25 000 pas de gradient, soit environ 41 000 pas d'env
-(`SeparationNotReachedError`). Avec la parade, un run shuffle pourrait l'atteindre. Je n'ai rien changé, puisque c'est
-un paramètre d'E4. Si les runs shuffle de la vague 1 s'arrêtent là, deux options : une échéance plus tardive pour les
-runs shuffle, ou un résultat accepté tel quel.
+| E4 p1-a-d1 exposé (référence de comparaison) | 2 551 | 4 508 | 295 492 |
+| E4 p1-a-d1 référence | 3 901 | 6 758 | 293 242 |
+| E4 p1-b-d1 exposé | 3 051 | 5 342 | 294 658 |
+| E4 p1-b-d1 référence | 3 451 | 6 008 | 293 992 |
+| E5 vague 1 à 3 (12 runs) | à remplir | | |
 
 **Effondrement du latent en mini : ce n'est pas une régression** (section 3). Les poids du mini d'E4 sont identiques bit
 à bit avant le déplacement (3657b33) et sur `e5`. L'effondrement vient des seuils de la config mini.

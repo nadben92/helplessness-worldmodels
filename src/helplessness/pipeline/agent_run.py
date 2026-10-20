@@ -622,7 +622,8 @@ def run_one(cfg: dict, seed: int, condition: str, run_dir: Path, device: torch.d
                     "rssm": rssm, "goal_head": goal_head, "critic": critic, "world": world, "replay": replay, "N": collector.N,
                     "cfg": cfg, "acfg": acfg, "seed": seed, "condition": condition, "env_step": env_step,
                     "grad_step": progress["grad_step"], "n_env_steps": n_env_steps, "device": device, "run_dir": run_dir, "log": log,
-                    "episode_source": collector.episode_source, "switch_env_step": progress.get("switch_env_step")}))
+                    "episode_source": collector.episode_source, "switch_env_step": progress.get("switch_env_step"),
+                    "switch_step": switch.switch_step}))
             if cfg["measure"].get("checkpoint_goal_kernel"):
                 record["goal_diagnostics"] = goal_kernel_at_checkpoint(rssm, world, replay, collector.N, cfg, seed, condition, env_step, device,
                                                                        goal_head=goal_head, critic=critic, acfg=acfg)
