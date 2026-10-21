@@ -90,3 +90,28 @@ def test_a_bad_resume_point_stops_everything(repo, capsys, damage):
     assert submit.main(["--batch", "e4_wave2", "--phase", "resume", "--repo-dir", str(repo), "--dry-run"]) == 1
     out = capsys.readouterr().out
     assert "RESUME CHECK FAILED -- nothing submitted" in out and '"jobs"' not in out
+
+
+def test_the_check_loads_on_the_cpu_a_resume_point_saved_from_cuda(tmp_path, monkeypatch):
+    """The notebook has no GPU: tensors saved from CUDA -- in resume.pt itself and inside its pickled replay (the
+    replay's device copy of its table) -- are restored on the CPU by the check (a plain pickle.loads fails there)."""
+    import torch.serialization
+
+    run = make_run(tmp_path, "p2-a-d1", "experimental", step=None)
+    with monkeypatch.context() as m:  # every storage written as if it lived on cuda:0
+        m.setattr(torch.serialization, "location_tag", lambda storage: "cuda:0")
+        replay = pickle.dumps({"device_table": torch.arange(6, dtype=torch.uint8)})
+        state = {k: {} for k in submit.RESUME_KEYS}
+        state.update(progress={"env_step": 170000, "schedule": [300000, []]}, n_env_steps=300000, planned_env_steps=300000,
+                     replay=replay, env=pickle.dumps({"env": 1}), collector={"filter": {"h": torch.zeros(3)}})
+        torch.save(state, run / "checkpoints" / "resume.pt")
+    (run / "checkpoints" / "latest.json").write_text(json.dumps({"filename": "resume.pt", "step": 170000}), encoding="utf-8")
+    if not torch.cuda.is_available():
+        with pytest.raises(RuntimeError, match="CUDA"):
+            pickle.loads(replay)
+        with pytest.raises(RuntimeError, match="CUDA"):
+            torch.load(run / "checkpoints" / "resume.pt", weights_only=False)
+    check = submit.resume_check(run)
+    assert check["problems"] == [] and check["resume_from_env_step"] == 170000
+    loaded, replay_loaded, _ = submit.load_for_check(run / "checkpoints" / "resume.pt")
+    assert loaded["collector"]["filter"]["h"].device.type == "cpu" and replay_loaded["device_table"].device.type == "cpu"
