@@ -196,6 +196,8 @@ def build_separation_switch(cfg: dict) -> tuple[SeparationSwitch, int]:
         max_steps=est["switch_max_steps"], threshold_bits=threshold, consecutive=est["switch_consecutive"],
         eval_every=est["switch_eval_every"], min_steps=est["switch_min_steps"],
         collapse_threshold_bits=collapse, collapse_consecutive=est["collapse_consecutive"],
+        # E5's late threshold (docs/e5/DECISIONS.md (28)); absent in E3's and E4's configs: off
+        late_threshold_bits=est.get("switch_late_threshold"), late_after_steps=est.get("switch_late_after_steps"),
     )
     return switch, est["switch_n_pairs"]
 

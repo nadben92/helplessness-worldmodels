@@ -582,7 +582,8 @@ def run_one(cfg: dict, seed: int, condition: str, run_dir: Path, device: torch.d
                         progress["extra_checkpoints"] = extra_checkpoints(env_step, checkpoints, n_env_steps, measures_spec)
                     progress["rep_warmup"] = (tr["rep_warmup_steps"] if tr["rep_warmup_steps"] is not None
                                               else int(round(0.2 * (planned_grad_steps - switch.switch_step))))
-                    log(f">>> SWITCH to straight-through effective at gradient step {switch.switch_step} (batch-pair JS "
+                    log(f">>> SWITCH to straight-through effective at gradient step {switch.switch_step} "
+                        + (f"[rule {switch.switch_rule}] " if switch.late_threshold_bits is not None else "") + "(batch-pair JS "
                         f"{progress['last_stat']:.3f} bits, environment step {env_step}); the agent's heads train from here"
                         + (f"; full measures at every checkpoint after it, extra checkpoints {progress['extra_checkpoints']}"
                            if measures_spec else ""))
@@ -623,7 +624,7 @@ def run_one(cfg: dict, seed: int, condition: str, run_dir: Path, device: torch.d
                     "cfg": cfg, "acfg": acfg, "seed": seed, "condition": condition, "env_step": env_step,
                     "grad_step": progress["grad_step"], "n_env_steps": n_env_steps, "device": device, "run_dir": run_dir, "log": log,
                     "episode_source": collector.episode_source, "switch_env_step": progress.get("switch_env_step"),
-                    "switch_step": switch.switch_step}))
+                    "switch_step": switch.switch_step, "switch_rule": switch.switch_rule}))
             if cfg["measure"].get("checkpoint_goal_kernel"):
                 record["goal_diagnostics"] = goal_kernel_at_checkpoint(rssm, world, replay, collector.N, cfg, seed, condition, env_step, device,
                                                                        goal_head=goal_head, critic=critic, acfg=acfg)

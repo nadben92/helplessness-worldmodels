@@ -354,3 +354,51 @@ I 2.289 (63,096: 0.929, 2.200). It is one of `e5.resumable_candidates`.
 Separation deadline: E4's estimator switches, both waves -- wave 1: 2,551 / 3,901 (p1-a exp / ref), 3,051 / 3,451 (p1-b);
 wave 2: 4,801 / 6,001 (p2-a), 3,701 / 3,701 (p2-b). The latest, 6,001, is below 7,500: the deadline stays 75,000 gradient
 steps (max(75,000, 10 x 6,001)).
+
+## 2026-10-21 (28) -- wave 1: the same-background statistic plateaus under shuffle; a late threshold (user's question; implementer's diagnosis and proposal)
+
+**Observed** (wave 1, p1-b-d1, seed A, `switch_monitor.py early`, two checkpoints): no run switched by gradient step
+9,355. f = 1: the agent's patch is reconstructed almost perfectly (0.0055 reference, 0.027 exposed) but the
+same-background statistic plateaus at 1.9-2.1 bits, below the 3-bit threshold; f = 0.5 reference: statistic about 1e-5
+bit, reconstruction 1.28 and decreasing; f = 0.5 exposed: 0.50 then 0.16 bit. E4's eight runs switched at gradient steps
+2,551-6,001, their reconstruction of the agent's patch still 0.12-1.0 and their statistic rising without a plateau.
+
+**Semantics (the code).** At `switch_max_steps` the run STOPS (`SeparationSwitch.check_deadline` raises
+`SeparationNotReachedError`; the run is failed): never a forced switch. The collapse guard acts only AFTER the switch
+(before it, `update` only counts the streak above the threshold): the f = 0.5 runs are not exposed to it now; after a
+switch it stops a run whose statistic stays below 1.0 bit on 5 consecutive evaluations. The statistic: the posterior
+PROBABILITIES q(z_t | h_t, e(x_t)) of the training forward pass (the "probs" estimator before the switch), summed over
+the 8 variables of each pair's per-variable Jensen-Shannon divergence; h enters only through the posterior's
+conditioning. Ceiling: 8 x 0.979 = 7.83 bits (disjoint point masses under the 1% unimix); 6.85 bits in expectation over
+random pairs for a perfect, uniform code -- E4's 3 bits are 44% of it. The monitor's decodability unrolls the windows
+with hard straight-through SAMPLES and decodes (h, z): before the switch the model is trained on probabilities, so the
+decodability reads a regime the model is not trained in (it can fall while the reconstruction improves).
+
+**Diagnosis.** (i) The same-background groups are right under f = 0.5 (mini, both conditions: 0 wrong partition in 200
+batches). (ii) The f = 0.5 reference's near-zero statistic is not an anomaly of E5: E4's p2-b-d1 exposed run had a
+statistic of 0.000 for 2,846 gradient steps with a reconstruction about 3, then jumped (switch at 3,701). (iii) The f = 1
+plateau is structural: the latent first codes the background. On the local short run under f = 1 (gradient step 2,234,
+`latent_ceiling.py`), all 8 variables code the assignment (1.25-2.3 bits of mutual information each, posteriors sharp:
+largest probability 0.90-0.98) and none the agent's state within an assignment (0.0 bit); between different backgrounds
+the statistic is 5.35 bits, within the same background 0. A variable whose class follows the background is identical
+within a same-background pair and adds nothing to the statistic, so the statistic a converged shuffled model can reach
+is the share of the latent left to the position -- below E4's, whose background never varies. (To quantify on the
+cluster's runs: `latent_ceiling.py` on their resume.pt.)
+
+**Criterion.** The switch keeps E4's rule (3 bits on 5 consecutive evaluations) and ALSO fires on a lower threshold, 1.5
+bits on 5 consecutive evaluations, which can act only from gradient step 10,000 on -- after every switch of E4's eight
+runs (6,001 the latest). Library option `SeparationSwitch(late_threshold_bits, late_after_steps)`, off by default;
+`e5.late_switch: {threshold_bits: 1.5, after_steps: 10000}`, copied by `run_e5.apply_e5_procedure` into every E5 run;
+the rule that fired is logged (`switch_rule`, `e5.estimator_switch.rule`). Label-free (the same statistic). Identical to
+E4 where E4 switched: tolerance zero by construction, the late rule never acts before 10,000 and every E4 run switched
+by 6,001 by the main rule (tested: a run that switches by the main rule is unchanged; f = 0 and the baseline with E5's
+procedure equal E4 bit for bit). 1.5 bits: half of E4's threshold and 0.5 bit above the collapse guard (1.0), which keeps
+watching after the switch; the f = 1 runs (1.9-2.1 bits) would switch soon after 10,000, the f = 0.5 runs not yet.
+
+For the paper: "A separation threshold calibrated on a fixed background is unreachable when part of the latent codes a
+varying background, so after the latest switch of the fixed-background experiment the threshold is halved; it never
+acts where that experiment switched."
+
+**Risks that remain.** A shuffle run switched by the late rule could see its statistic fall below 1.0 bit after the
+switch (the collapse guard would then stop it: a result). The f = 0.5 runs may still not reach 1.5 bits before the
+deadline (75,000).

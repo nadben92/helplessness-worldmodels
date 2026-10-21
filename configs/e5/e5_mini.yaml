@@ -19,6 +19,10 @@ e5:
   # the separation deadline (train.latent_estimator.switch_max_steps, E4: 25,000 gradient steps; DECISIONS (20)), every E5
   # run: E4 mini's 60 x 3 (the mini forces its switch at gradient step 16: no effect)
   switch_max_steps: 180
+  # the late threshold (DECISIONS (28)): the switch also fires once the same-background statistic exceeds threshold_bits
+  # on switch_consecutive evaluations taken at gradient step >= after_steps -- scaled to the mini (which forces its switch at gradient step 16: no effect); the main
+  # rule (3 bits) is unchanged
+  late_switch: {threshold_bits: 1.5, after_steps: 100}
   immunisation:
     post_steps: 400
   resumable_candidates: [200, 400]

@@ -82,18 +82,22 @@ def estimator_switch(state: dict) -> dict:
     """E3's estimator switch (probabilities -> straight-through, the batch-pair JS criterion): its gradient and
     environment steps (None before it) and the environment steps elapsed since (docs/e5/DECISIONS.md (16), (20))."""
     env = state.get("switch_env_step")
-    return {"grad_step": state.get("switch_step"), "env_step": env, "env_steps_since": None if env is None else state["env_step"] - env}
+    return {"grad_step": state.get("switch_step"), "env_step": env, "env_steps_since": None if env is None else state["env_step"] - env,
+            "rule": state.get("switch_rule")}
 
 
 def apply_e5_procedure(cfg: dict) -> dict:
-    """E5's two changes to E4's training procedure, on every E5 run (docs/e5/DECISIONS.md (19), (20)): the switch
-    statistic on same-background pairs and the later separation deadline. Both leave a run that switches before E4's
-    deadline with one background bit-identical to E4's (tested). Returns cfg, modified in place."""
+    """E5's changes to E4's training procedure, on every E5 run (docs/e5/DECISIONS.md (19), (20), (28)): the switch
+    statistic on same-background pairs, the later separation deadline and the late threshold. All leave a run with one
+    background that switches before E4's latest switch bit-identical to E4's (tested). Returns cfg, modified in place."""
     est = cfg["train"]["latent_estimator"]
     if cfg["e5"].get("switch_pairs", "any") != "any":
         est["switch_pairs"] = cfg["e5"]["switch_pairs"]
     if cfg["e5"].get("switch_max_steps") is not None:
         est["switch_max_steps"] = int(cfg["e5"]["switch_max_steps"])
+    late = cfg["e5"].get("late_switch")
+    if late is not None:  # docs/e5/DECISIONS.md (28): a lower threshold that acts only after every switch of E4
+        est["switch_late_threshold"], est["switch_late_after_steps"] = float(late["threshold_bits"]), int(late["after_steps"])
     return cfg
 
 

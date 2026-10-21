@@ -24,6 +24,10 @@ e5:
   # the separation deadline (train.latent_estimator.switch_max_steps, E4: 25,000 gradient steps; DECISIONS (20)), every E5
   # run: max(75,000, 10 x E4's latest switch: 3,901 at wave 1, p1-a-d1 reference) = 75,000
   switch_max_steps: 75000
+  # the late threshold (DECISIONS (28)): the switch also fires once the same-background statistic exceeds threshold_bits
+  # on switch_consecutive evaluations taken at gradient step >= after_steps -- after every switch of E4's eight runs (2,551 to 6,001 gradient steps); the main
+  # rule (3 bits) is unchanged
+  late_switch: {threshold_bits: 1.5, after_steps: 10000}
   immunisation:
     post_steps: 175000        # the grid point nearest to 175,000 (the B of E4's recomputed criterion)
   # the steps where the baseline reference of seed B keeps its full state (the immunisation of seed B branches from it):

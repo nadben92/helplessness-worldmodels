@@ -146,6 +146,15 @@ class SeparationSwitch:
     and raises CollapseAfterSwitchError once it is below
     `collapse_threshold_bits` on `collapse_consecutive` consecutive
     evaluations. Stateful; one instance per training run.
+
+    Late threshold (E5, docs/e5/DECISIONS.md (28); off by default): with
+    late_threshold_bits and late_after_steps set, the switch ALSO fires once
+    the statistic exceeds late_threshold_bits on `consecutive` consecutive
+    evaluations taken at step >= late_after_steps -- a lower threshold that
+    can act only after a given step. It never acts before late_after_steps,
+    so a run that switches earlier by the main rule is unchanged step for
+    step. switch_rule records which rule fired ("threshold" or
+    "late_threshold").
     """
 
     max_steps: int
@@ -159,8 +168,14 @@ class SeparationSwitch:
     history: list[tuple[int, float]] = field(default_factory=list)
     _streak: int = 0
     _collapse_streak: int = 0
+    late_threshold_bits: float | None = None
+    late_after_steps: int | None = None
+    switch_rule: str | None = None
+    _late_streak: int = 0
 
     def __post_init__(self):
+        if (self.late_threshold_bits is None) != (self.late_after_steps is None):
+            raise ValueError("late_threshold_bits and late_after_steps go together")
         first_eval = -(-self.min_steps // self.eval_every) * self.eval_every  # first evaluation at step >= min_steps
         earliest_switch = first_eval + (self.consecutive - 1) * self.eval_every + 1
         if self.max_steps < earliest_switch:
@@ -192,8 +207,13 @@ class SeparationSwitch:
                 )
             return
         self._streak = self._streak + 1 if (step >= self.min_steps and statistic > self.threshold_bits) else 0
+        if self.late_threshold_bits is not None:
+            late = step >= max(self.min_steps, self.late_after_steps) and statistic > self.late_threshold_bits
+            self._late_streak = self._late_streak + 1 if late else 0
         if self._streak >= self.consecutive:
-            self.switch_step = step + 1
+            self.switch_step, self.switch_rule = step + 1, "threshold"
+        elif self.late_threshold_bits is not None and self._late_streak >= self.consecutive:
+            self.switch_step, self.switch_rule = step + 1, "late_threshold"
 
     def check_deadline(self, steps_done: int) -> None:
         if not self.switched and steps_done >= self.max_steps:

@@ -231,3 +231,37 @@ def test_episode_log_carries_the_symmetry_class():
     log = src.log_arrays()
     expected = [SYMMETRY_CLASSES.index(assignment_symmetry(int(k), 1)["rotation_class"]) for k in log["episode_assignment"]]
     assert log["episode_rotation_class"].tolist() == expected and set(expected) == {0, 1}
+
+
+def test_late_threshold_switch():
+    """docs/e5/DECISIONS.md (28): the late threshold never acts before late_after_steps (a history that switches by the
+    main rule is unchanged), and after it a plateau above the late threshold switches, recorded as such."""
+    from helplessness.agents.worldmodel.loop import SeparationSwitch
+
+    def run(history, **late):
+        sw = SeparationSwitch(max_steps=100_000, **late)
+        for step, stat in history:
+            sw.update(step, stat)
+            if sw.switched:
+                break
+        return sw.switch_step, sw.switch_rule
+
+    rising = [(s, min(4.0, s / 1000)) for s in range(0, 8000, 50)]  # crosses 3 bits at 3,050
+    plateau = [(s, 0.0 if s < 3000 else 2.0) for s in range(0, 20000, 50)]  # stays at 2 bits
+    assert run(rising) == run(rising, late_threshold_bits=1.5, late_after_steps=10000) == (3251, "threshold")
+    assert run(plateau) == (None, None)
+    assert run(plateau, late_threshold_bits=1.5, late_after_steps=10000) == (10201, "late_threshold")
+    with pytest.raises(ValueError):
+        SeparationSwitch(max_steps=100_000, late_threshold_bits=1.5)
+
+
+def test_late_threshold_changes_no_switch_of_e4():
+    """The late threshold acts from gradient step 10,000 on; every one of E4's eight runs switched by the main rule by
+    6,001 (both waves, their logs; docs/e5/DECISIONS.md (27), (28)), so by construction it changes none of them
+    (test_late_threshold_switch: a run that switches by the main rule is unchanged)."""
+    from helplessness.config import REPO_ROOT
+    import yaml
+
+    cfg = yaml.safe_load((REPO_ROOT / "configs" / "e5" / "e5.yaml").read_text(encoding="utf-8"))["e5"]
+    e4_switches = [2551, 3901, 3051, 3451, 4801, 6001, 3701, 3701]
+    assert cfg["late_switch"]["after_steps"] > max(e4_switches)

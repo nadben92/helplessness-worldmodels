@@ -90,6 +90,8 @@ def test_every_e5_run_uses_the_same_background_statistic(spec):
     run_e5.build(cfg)
     assert cfg["train"]["latent_estimator"]["switch_pairs"] == "same_background"
     assert cfg["e5"]["switch_max_steps"] == 75000 and cfg["train"]["latent_estimator"]["switch_max_steps"] == 75000
+    est = cfg["train"]["latent_estimator"]  # the late threshold (docs/e5/DECISIONS.md (28))
+    assert (est["switch_late_threshold"], est["switch_late_after_steps"]) == (1.5, 10000)
 
 
 def test_configuration_is_p1_b_d1_and_baseline_a_is_reprobed_from_e4(capsys):

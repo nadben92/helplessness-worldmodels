@@ -116,6 +116,44 @@ after it), for the final report:
 python experiments/E5_belief_training/switch_monitor.py final --runs results/E5_belief_training/grid* --out /scratch/e5_switch_final.csv
 ```
 
+## Step 3b -- 2026-10-21: stop and relaunch wave 1 with the late threshold (docs/e5/DECISIONS.md (28))
+
+The first launch of wave 1 (supervisor `logs/kubeflow/e5-train-e5_wave1-20261021T140249396664Z`) ran with the 3-bit
+threshold only; its shuffle runs plateau below it. In the notebook:
+
+```bash
+cd /scratch/helplessness-worldmodels-e5
+OLD=logs/kubeflow/e5-train-e5_wave1-20261021T140249396664Z
+python -c "import json; print(json.load(open('$OLD.submission.json'))['job_id'])"     # JOB = this name
+kubectl get trainjobs                                                                 # JOB is listed, Running
+kubectl delete trainjob <JOB>
+kubectl get pods                                                                      # its pod Terminating, then gone
+python experiments/E5_belief_training/submit_kubeflow.py --status $OLD               # the four jobs no longer running
+mkdir -p results/E5_belief_training_aborted/wave1_20261021
+mv results/E5_belief_training/grid12x12__2zones-p1-b-d1-sh* results/E5_belief_training_aborted/wave1_20261021/
+```
+
+(The aborted runs stay on the volume, out of the way of the new ones; their resume.pt feeds `latent_ceiling.py`.) Then,
+once the user has pushed `e5` with the late threshold:
+
+```bash
+git -C /scratch/helplessness-worldmodels-e5 pull --ff-only
+git -C /scratch/helplessness-worldmodels-e5 log --oneline -1
+git -C /scratch/helplessness-worldmodels-e5 status --short                            # prints nothing
+grep -n "late_switch" configs/e5/e5.yaml                                              # threshold_bits: 1.5, after_steps: 10000
+python experiments/E5_belief_training/submit_kubeflow.py --batch e5_wave1 --repo-dir /scratch/helplessness-worldmodels-e5 --dry-run
+python experiments/E5_belief_training/submit_kubeflow.py --batch e5_wave1 --repo-dir /scratch/helplessness-worldmodels-e5
+```
+
+Then the checks of step 3 (`switch_monitor.py early`); a switch by the late rule shows `[rule late_threshold]` in the
+log's `>>> SWITCH` line. Optional, on the aborted runs (CPU, about 10 minutes each):
+
+```bash
+mkdir -p /scratch/e5_ceiling
+for R in results/E5_belief_training_aborted/wave1_20261021/*; do
+  python experiments/E5_belief_training/latent_ceiling.py $R --batches 100 --out /scratch/e5_ceiling/$(basename $R).json; done
+```
+
 ## Step 4 -- wave 2
 
 ```bash
