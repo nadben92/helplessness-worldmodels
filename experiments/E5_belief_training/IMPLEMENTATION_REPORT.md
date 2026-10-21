@@ -278,3 +278,21 @@ bibliothèque (`two_zones_setup`, `two_zones_records`, `theme_probe_measure`), p
 - `tests/e5/test_e5_probe_identity.py`, avec `ORIGINAL` au dernier commit d'`e4` fusionné ;
 - `tests/e5/test_e5_training.py` (f = 0 ≡ E4, avec et sans parade) ;
 - `tests/e4` et `tests/e5`.
+
+## 8. Après la clôture d'E4 (2026-10-21)
+
+- **Fusion** de `e4` dans `e5` (`7530a97`). Aucun fichier déplacé dans la bibliothèque n'avait changé sur `e4` après
+  3657b33. Les deux conflits d'E4 (`submit_kubeflow.py`, `test_e4_resume_batch.py`) venaient d'un même commit présent sur
+  les deux branches (68d821b = f602e5b) ; le troisième conflit, dans `EXPERIMENTS.md`, a été résolu ligne par ligne.
+- **Reportés dans la bibliothèque** :
+  - `cluster/resume.py` : reprise d'un batch dans un seul pod et contrôle des points de reprise sur CPU, utilisés par E4
+    et E5 ;
+  - `cluster/batch_status.py` : statut du batch avec le drapeau STALE (`--status`) ;
+  - `probing/probe_validity.py` : critère de validité et diagnostic de reconstruction, pris dans `final_analysis.py`
+    d'E4.
+- **Adaptations** (décisions (21) à (27)) :
+  - configuration p1-b-d1 ;
+  - validité des sondes et diagnostic dans `measure_probes.py` ;
+  - 150 marches, et batch `e5_probes_baseline_A` ;
+  - symétrie des 12 affectations, testée et écrite dans les sorties ;
+  - budget de 300 000 pas, switch_step = 100 000, limite de bascule de 75 000 pas de gradient.

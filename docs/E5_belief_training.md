@@ -1,7 +1,8 @@
 # E5 — Manipulating the belief through training
 
-**Status (2026-10-19): code ready and tested on CPU (mini configuration), not launched.** Branch `e5` (from `e4`; `e4` is
-merged into it before the launch). The E4 configuration of E5 is set after E4's analysis. Code and usage:
+**Status (2026-10-21): ready to launch wave 1, not launched.** Branch `e5`, `e4` merged (E4 closed). Configuration
+**p1-b-d1** (seeds A = 2, B = 102), switch step 100,000, probes at 150 walks with E4's validity criterion
+(docs/e5/DECISIONS.md (21)-(27)). Code and usage:
 `experiments/E5_belief_training/README.md`; launch: `experiments/E5_belief_training/RUN_GPU.md`; decisions:
 `docs/e5/DECISIONS.md`; implementation report: `experiments/E5_belief_training/IMPLEMENTATION_REPORT.md`. Deterministic
 dynamics only.

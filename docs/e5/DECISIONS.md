@@ -259,3 +259,98 @@ last 3 checkpoints (last minus third-to-last <= 0.01).
 switches late trains fewer steps after its switch than E4's runs (about 295,000); the final table of
 `switch_monitor.py` gives it per run, and the probes are compared between converged models.
 
+
+## 2026-10-21 (21) -- the configuration: p1-b-d1 (user)
+
+E5 runs on **p1-b-d1** (pair 1, red/blue; T_inc = (22, 0, 244) blue, T_ctrl = (227, 17, 15) red): seed A = 2 (E4's), seed
+B = 102. Reason, fixed before seeing any E5 result: in E4, p1-b is the configuration where the theme alone carries no
+belief (theme only: b at step 1 = -0.021 +/- 0.007, against -0.289 in p1-a). Any belief the theme carries in E5 can then
+be attributed to the training manipulation, not to an effect already present in the baseline. Pair 2 is set aside: its
+near-black colour (17, 29, 14) is salient and close to the brown agent (RGB distance 86), and two of p2-a's extreme probes
+are invalid (E4's final report). `batches.CONFIGURATION`; the submission refuses another configuration.
+
+## 2026-10-21 (22) -- probe validity is part of the protocol (user)
+
+E4's final criterion (results/E4_generalization_gradient/final/REPORT.md): a probe's b is interpretable only if the
+REFERENCE of the same condition and seed (the baseline reference for the immunisation) predicts the transitions at the
+first step in the zone -- mass on the true successor >= 0.90 and |I_ref - log2 5| <= 0.15 bit. In E4, 203 of 400 probes
+failed it, and validity fell with the distance between the probed colour and the slot's training colour: every model's
+reconstruction rendered the probed quadrant in its training colour. E5's `measure_probes.py` writes, for every probe,
+mass / ghost / I at step 1 of both models and `valid` (read from the same measurement), `validity_summary.json` (the share
+of valid probes, overall and by axis and position) and `reconstruction.csv` (the reconstruction diagnostic, both
+models: reconstruction error, the agent's decoded position, the colour reconstructed in the zone of interest and its
+distance to the probe's colour and to every colour the slot takes in training). The code is the library's
+(`probing/probe_validity.py`, moved from E4's `final_analysis.py`). Invalid probes are excluded from the gradients and the
+comparisons; the analysis reports the share of valid probes BY CONDITION.
+
+**Prediction, recorded before any E5 result:** under shuffle the colour of a slot no longer follows from its position, so
+the model must code the quadrants' colours in its latent; we expect markedly more valid probes than in E4 (where the
+decoder rendered every quadrant in its training colour), most of all under f = 1, and f = 0 (= E4's training) about as
+many as E4's p1-b (48 of 100).
+
+## 2026-10-21 (23) -- probes under shuffle (user; implementer for the check)
+
+Unchanged: the probes' positions are the canonical layout's in every condition; f = 0 replicates E4 and is the control.
+Under f = 1 the canonical layout is one of the 12 training assignments, so "position only" (the corridor's colour at the
+canonical UD slot) tests whether a position without its theme still carries a belief: b about 0 is expected if the belief
+moved to the theme. Checked: nothing in the probe script assumes one colour per slot -- the probe images are built from
+the configuration's colours and the canonical roles only, and the reconstruction diagnostic compares the reconstructed
+colour with every colour a slot takes in training (canonical training colour, T_inc, T_ctrl, the corridor's), not with
+one.
+
+## 2026-10-21 (24) -- the conveyor in the 12 assignments (user's check)
+
+Only the UD slot's dynamics differ from the corridor's (CD and the neutral slots are controllable-deterministic alike),
+so every assignment equals the canonical one, for the dynamics, up to the goal-centred axial reflection that sends the
+canonical UD slot to its own (`pipeline.episode_sources.assignment_symmetry`); tested for the 12, both conditions, with
+E3's exact transport (every (s, a), actions permuted). The drift (`away_from_goal`, along the rows) is well defined in
+every slot: (+1, 0) for UD at nw and ne, (-1, 0) at se and sw. E3's two rotation classes (identity = 180 degrees: "A",
+UD at nw or se; 90 = 270 degrees: "B", UD at ne or sw) were inequivalent in E3, whose four zone types differed; here a
+column reflection maps one onto the other. The images differ (where T_ctrl sits: diagonal / same rows / same columns). The
+outputs carry the class for the analysis: `episode_rotation_class` per episode in `assignments.npz`, and at every
+checkpoint `e5.assignment_symmetry` (reflection, rotation class, the CD slot's relation, drift) of each measured
+assignment.
+
+| k | UD | CD | reflection | class | CD vs UD | drift |
+|---|---|---|---|---|---|---|
+| 0 | nw | ne | identity | A | same rows | (+1, 0) |
+| 1 | nw | se | identity (canonical) | A | diagonal | (+1, 0) |
+| 2 | nw | sw | identity | A | same columns | (+1, 0) |
+| 3 | ne | nw | col_reflect | B | same rows | (+1, 0) |
+| 4 | ne | se | col_reflect | B | same columns | (+1, 0) |
+| 5 | ne | sw | col_reflect | B | diagonal | (+1, 0) |
+| 6 | se | nw | point_reflect | A | diagonal | (-1, 0) |
+| 7 | se | ne | point_reflect | A | same columns | (-1, 0) |
+| 8 | se | sw | point_reflect | A | same rows | (-1, 0) |
+| 9 | sw | nw | row_reflect | B | same columns | (-1, 0) |
+| 10 | sw | ne | row_reflect | B | diagonal | (-1, 0) |
+| 11 | sw | se | row_reflect | B | same rows | (-1, 0) |
+
+## 2026-10-21 (25) -- 150 walks for the probes; seed A's baseline re-probed (user)
+
+The zero-data probes use the first 150 of E4's fixed walks (`e5.probes.n_walks`; E4: 300): over E4's 192 valid probes the
+standard error of b at step 1 has a median of 0.012 and a maximum of 0.048 at 100 walks (0.010 and 0.035 at 150). For
+one protocol across conditions, seed A's baseline -- E4's own pair of p1-b-d1 -- is re-probed with E5's script at 150
+walks: batch `e5_probes_baseline_A` (probes only, `--e4-results`). The walks of the measures during training stay E4's
+(100 at the checkpoints).
+
+## 2026-10-21 (26) -- STALE runs (user)
+
+E4's wave 2 was frozen for 24 hours by a failure of the cluster's storage with nothing visible in `status.json`. The
+batch status (`submit_kubeflow.py --status <supervisor directory>`, E4 and E5, `helplessness.cluster.batch_status`) flags
+STALE every running job whose log has not changed for more than an hour (exit code 2 when one is). A batch can be resumed
+in one pod (`--phase resume` without `--resume`; resume points checked on the CPU first, `helplessness.cluster.resume`).
+
+## 2026-10-21 (27) -- budget 300,000; switch step 100,000; separation deadline unchanged (user; implementer for the numbers)
+
+The budget stays 300,000 steps. E4's analysis suggests 200,000-225,000 (its recomputed criterion gives 175,000), but the
+shuffle runs will be harder to learn and switch later; 300,000 with diagnostics at several checkpoints lets the
+analysis checkpoint be chosen afterwards at the convergence criterion. No code change.
+
+switch_step: `choose_switch_step.py` on E4's reference of p1-b-d1 (diagnostics at every checkpoint) proposes **100,000**,
+the first checkpoint where the future UD slot (nw) meets mass >= 0.97 and |I at step 1 - log2 5| <= 0.1: mass 0.978,
+I 2.289 (63,096: 0.929, 2.200). It is one of `e5.resumable_candidates`.
+
+Separation deadline: E4's estimator switches, both waves -- wave 1: 2,551 / 3,901 (p1-a exp / ref), 3,051 / 3,451 (p1-b);
+wave 2: 4,801 / 6,001 (p2-a), 3,701 / 3,701 (p2-b). The latest, 6,001, is below 7,500: the deadline stays 75,000 gradient
+steps (max(75,000, 10 x 6,001)).
