@@ -43,6 +43,7 @@ if str(_SRC) not in sys.path:  # the notebook's Python runs this script without 
 import batches
 import e5_names
 from export_batch import seeds
+from helplessness.cluster import batch_status
 from helplessness.cluster import resume as cluster_resume
 from helplessness.cluster.kubeflow import runtime_patch_secrets, supervise
 
@@ -155,9 +156,12 @@ def check_checkout(repo: Path) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--batch", choices=list(batches.BATCHES), required=True)
+    parser.add_argument("--batch", choices=list(batches.BATCHES), default=None, help="required, except with --status")
+    parser.add_argument("--status", type=Path, default=None,
+                        help="print the state of a submitted batch (its supervisor directory), with a STALE flag, and exit")
+    parser.add_argument("--stale-after", type=float, default=batch_status.STALE_AFTER, help="--status: seconds without a log change")
     parser.add_argument("--phase", choices=PHASES, default="train")
-    parser.add_argument("--repo-dir", required=True, help="the e5 checkout on the persistent volume")
+    parser.add_argument("--repo-dir", default=None, help="the e5 checkout on the persistent volume (required, except with --status)")
     parser.add_argument("--configuration", default="", help="the E4 configuration of E5 (e.g. p1-a-d1)")
     parser.add_argument("--switch-step", type=int, default=None, help="the immunisation's switch step (wave 3; optional in wave 2)")
     parser.add_argument("--post-steps", type=int, default=None, help="the immunisation's steps after the switch (wave 3)")
@@ -176,6 +180,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--device", choices=("cuda", "cpu"), default="cuda", help=argparse.SUPPRESS)
     parser.add_argument("--resume-runs", default="", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
+    if args.status is not None:  # helplessness.cluster.batch_status: done / failed / running / STALE / not started
+        rows = batch_status.batch_status(args.status, args.stale_after)
+        print("\n".join(batch_status.format_status(rows, args.stale_after)), flush=True)
+        return 2 if any(r["state"] == "STALE" for r in rows) else 0
+    if args.batch is None:
+        parser.error("--batch is required")
+    if args.repo_dir is None:
+        parser.error("--repo-dir is required")
     if args.resume and args.phase != "resume":
         parser.error("--resume goes with --phase resume")
     if args.phase == "resume" and not args.resume and not args.configuration and not args.worker:
