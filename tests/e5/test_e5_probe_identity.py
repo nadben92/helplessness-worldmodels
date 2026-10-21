@@ -25,7 +25,7 @@ from helplessness.pipeline.two_zones_records import make_hooks
 from helplessness.probing import theme_probe_measure
 from helplessness.probing.theme_probes import probe_images
 
-ORIGINAL = "3657b33"  # E4 before the move of 2026-10-19
+ORIGINAL = "f8b2dc5"  # the last e4 commit merged into e5 (E4 closed, 2026-10-21); its measure code is the pre-move original
 E4_DIR = "experiments/E4_generalization_gradient"
 IMAGES = (0, 5, 17, 40, 63, 92)
 N_WALKS = 6
@@ -107,3 +107,34 @@ def test_library_probes_equal_e4_original_code(original, models):
         assert {k: v for k, v in a.items() if k != "seconds"} == {k: v for k, v in b.items() if k != "seconds"}
     # not trivially 0 = 0: the untrained model's I is positive somewhere
     assert np.nanmax(lib["curve_exp"]) > 0.1
+
+
+def test_e5_validity_hook_leaves_the_measure_unchanged_and_flags_each_probe(models):
+    """E5's probes (measure_probes.py's validity hook, helplessness.probing.probe_validity): the measure with the hook is
+    the measure without it; I at step 1 of the reference is its curve at step 1; `valid` is E4's criterion on the
+    reference; the reconstruction diagnostic covers every colour the slot takes in training."""
+    from _experiment_loader import load_experiment_module
+    from helplessness.probing import probe_validity
+
+    e5_probes = load_experiment_module("E5_belief_training", "measure_probes.py", "test_e5_measure_probes_validity")
+    cfg = mini_cfg()
+    device = configure_runtime(cfg)
+    conf = two_zones_setup.configuration(cfg, "p1-a-d1")
+    images_all = probe_images(conf["diagonal"], conf["t_inc"], conf["t_ctrl"], conf["axes"])
+    images = [images_all[i] for i in (0, 92)]
+    plain = theme_probe_measure.measure(cfg, conf, models, images, device, log=lambda s: None, n_walks=N_WALKS)
+    diagnostics: list[dict] = []
+    hook = e5_probes.validity_hook({**conf, "cfg": cfg}, models, 3, diagnostics)
+    hooked = theme_probe_measure.measure(cfg, conf, models, images, device, log=lambda s: None, n_walks=N_WALKS, on_pair=hook)
+    for key in ("curve_exp", "curve_ref"):
+        assert np.array_equal(plain[key], hooked[key], equal_nan=True)
+    for i, (a, b) in enumerate(zip(plain["rows"], hooked["rows"])):
+        assert {k: v for k, v in a.items() if k != "seconds"} == {k: v for k, v in b.items() if k in a and k != "seconds"}
+        assert np.isclose(b["I_ref_step1"], hooked["curve_ref"][i, 0]) and np.isclose(b["I_exp_step1"], hooked["curve_exp"][i, 0])
+        assert b["valid"] == probe_validity.is_valid(b["mass_ref_step1"], b["I_ref_step1"])
+        assert 0.0 <= b["mass_ref_step1"] <= 1.0 and 0.0 <= b["ghost_ref_step1"] <= 1.0
+    assert len(diagnostics) == len(hooked["rows"]) * 2 * len(probe_validity.PARTS)
+    assert {"zone_rgb_dist_to_canonical_training", "zone_rgb_dist_to_T_inc", "zone_rgb_dist_to_T_ctrl", "zone_rgb_dist_to_corridor",
+            "zone_rgb_dist_to_probe", "zone_rgb_nearest", "agent_cell_accuracy"} <= set(diagnostics[0])
+    summary = e5_probes.validity_summary([{"axis": "segment", "position": "ud", "valid": True}, {"axis": "segment", "position": "ud", "valid": False}])
+    assert summary["share_valid"] == 0.5 and summary["by_axis_position"]["segment/ud"] == {"probes": 2, "valid": 1}

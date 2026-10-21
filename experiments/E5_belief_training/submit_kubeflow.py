@@ -162,7 +162,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--stale-after", type=float, default=batch_status.STALE_AFTER, help="--status: seconds without a log change")
     parser.add_argument("--phase", choices=PHASES, default="train")
     parser.add_argument("--repo-dir", default=None, help="the e5 checkout on the persistent volume (required, except with --status)")
-    parser.add_argument("--configuration", default="", help="the E4 configuration of E5 (e.g. p1-a-d1)")
+    parser.add_argument("--configuration", default=batches.CONFIGURATION,
+                        help=f"the E4 configuration of E5 (default and only accepted value: {batches.CONFIGURATION})")
     parser.add_argument("--switch-step", type=int, default=None, help="the immunisation's switch step (wave 3; optional in wave 2)")
     parser.add_argument("--post-steps", type=int, default=None, help="the immunisation's steps after the switch (wave 3)")
     parser.add_argument("--e4-results", default=None, help="probes: E4's results root (immunisation A's reference)")
@@ -188,6 +189,10 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--batch is required")
     if args.repo_dir is None:
         parser.error("--repo-dir is required")
+    if args.configuration and args.configuration != batches.CONFIGURATION and not args.worker:
+        parser.error(f"E5's configuration is {batches.CONFIGURATION} (docs/e5/DECISIONS.md (21)), not {args.configuration!r}")
+    if args.phase in ("train", "resume") and not batches.batch_runs(args.batch):
+        parser.error(f"{args.batch} trains nothing: it has the probes phase only")
     if args.resume and args.phase != "resume":
         parser.error("--resume goes with --phase resume")
     if args.phase == "resume" and not args.resume and not args.configuration and not args.worker:

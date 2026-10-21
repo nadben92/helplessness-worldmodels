@@ -13,12 +13,19 @@ launch: --configuration (every phase), --switch-step (wave 3; wave 2: optional, 
 (wave 3, default e5.immunisation.post_steps), --e4-results (probes of wave 3: E4's results root, for the reference of
 immunisation A).
 
+  e5_probes_baseline_A  no training: the probes of seed A's baseline, i.e. E4's own pair of the configuration (under
+            --e4-results), re-measured with E5's probe script (150 walks, validity, reconstruction), so that every
+            condition is probed by one protocol (docs/e5/DECISIONS.md (25)).
+
+The configuration is p1-b-d1 (CONFIGURATION, docs/e5/DECISIONS.md (21)); the submission refuses another one.
+
 A later condition (the themes, after E4's analysis) is a new wave here: its runs as RUNS entries, its pairs as PROBE_PAIRS.
 """
 
 from __future__ import annotations
 
 CONFIG = "configs/e5/e5.yaml"
+CONFIGURATION = "p1-b-d1"  # E5's configuration of E4 (docs/e5/DECISIONS.md (21)): seed A = 2, seed B = 102
 
 # job -> (seed label, training, fraction, condition); the immunisation has no condition (it runs on the reference's streams)
 WAVES: dict[str, dict[str, tuple]] = {
@@ -28,12 +35,14 @@ WAVES: dict[str, dict[str, tuple]] = {
                  "B_sh100_experimental": ("B", "shuffle", 1.0, "experimental"), "B_sh100_reference": ("B", "shuffle", 1.0, "reference")},
     "e5_wave3": {"B_sh050_experimental": ("B", "shuffle", 0.5, "experimental"), "B_sh050_reference": ("B", "shuffle", 0.5, "reference"),
                  "A_imm": ("A", "immunisation", None, None), "B_imm": ("B", "immunisation", None, None)},
+    "e5_probes_baseline_A": {},  # probes only: seed A's baseline is E4's own pair, re-probed with E5's protocol
 }
 # the probe pairs of each wave: (seed label, training, fraction)
 PROBE_PAIRS: dict[str, list[tuple]] = {
     "e5_wave1": [("A", "shuffle", 1.0), ("A", "shuffle", 0.5)],
     "e5_wave2": [("B", "baseline", None), ("B", "shuffle", 1.0)],
     "e5_wave3": [("B", "shuffle", 0.5), ("A", "immunisation", None), ("B", "immunisation", None)],
+    "e5_probes_baseline_A": [("A", "baseline", None)],
 }
 BATCHES = WAVES
 BATCH_CPUS = {name: 3 for name in BATCHES}  # as E4: 4 processes, one thread each, on the job's 3 CPUs
@@ -76,9 +85,9 @@ def probe_args(batch: str, configuration: str, checkpoint: int, e4_results: str 
                 "--training", training, "--seed-label", seed_label]
         if fraction is not None:
             args += ["--fraction", str(fraction)]
-        if training == "immunisation" and seed_label == "A":
+        if training in ("immunisation", "baseline") and seed_label == "A":
             if not e4_results:
-                raise ValueError("the immunisation of seed A is measured against E4's reference: --e4-results <E4 results root>")
+                raise ValueError(f"the {training} of seed A is (or is measured against) E4's own runs: --e4-results <E4 results root>")
             args += ["--e4-results", e4_results]
         tag = {"baseline": "base", "immunisation": "imm"}.get(training) or f"sh{int(round(fraction * 100)):03d}"
         out.append((f"probes_{seed_label}_{tag}_k{int(checkpoint):06d}", args))

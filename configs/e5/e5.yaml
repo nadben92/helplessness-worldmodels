@@ -4,6 +4,10 @@
 base: configs/e4/e4.yaml
 e5:
   seed_b_offset: 100          # seed B = seed A (E4's seed of the configuration) + 100
+  # the zero-data probes' walks (the first n_walks of E4's fixed walks; E4's probes used 300): the standard error of b at
+  # step 1 stays below 0.05 bit from 100 walks on in E4's grid (docs/e5/DECISIONS.md (25)); the walks of the measures
+  # during training stay E4's
+  probes: {n_walks: 150}
   shuffle:
     fractions: [1.0, 0.5]
   # the checkpoint measures under shuffle: the canonical assignment at EVERY checkpoint; the 12 assignments at these

@@ -17,7 +17,7 @@ e5_setup = load_experiment_module("E5_belief_training", "e5_setup.py", "test_e5_
 
 def test_twelve_runs_in_three_waves_of_four():
     runs = [spec for wave in batches.WAVES.values() for spec in wave.values()]
-    assert len(runs) == 12 and all(len(w) == 4 for w in batches.WAVES.values())
+    assert len(runs) == 12 and [len(w) for w in batches.WAVES.values()] == [4, 4, 4, 0]  # + the probes-only batch of baseline A
     assert len(set(runs)) == 12
     count = {}
     for label, training, fraction, condition in runs:
@@ -90,3 +90,26 @@ def test_every_e5_run_uses_the_same_background_statistic(spec):
     run_e5.build(cfg)
     assert cfg["train"]["latent_estimator"]["switch_pairs"] == "same_background"
     assert cfg["e5"]["switch_max_steps"] == 75000 and cfg["train"]["latent_estimator"]["switch_max_steps"] == 75000
+
+
+def test_configuration_is_p1_b_d1_and_baseline_a_is_reprobed_from_e4(capsys):
+    """docs/e5/DECISIONS.md (21) and (25): the submission takes p1-b-d1 only; e5_probes_baseline_A trains nothing and
+    probes E4's own pair of the configuration (--e4-results), with E5's probe script."""
+    assert batches.CONFIGURATION == "p1-b-d1"
+    with pytest.raises(SystemExit):
+        submit.main(["--batch", "e5_wave1", "--configuration", "p1-a-d1", "--repo-dir", "/scratch/x", "--dry-run"])
+    with pytest.raises(SystemExit):
+        submit.main(["--batch", "e5_probes_baseline_A", "--repo-dir", "/scratch/x", "--dry-run"])  # no training phase
+    capsys.readouterr()
+    assert submit.main(["--batch", "e5_wave1", "--repo-dir", "/scratch/x", "--dry-run"]) == 0  # the default configuration
+    assert '"configuration": "p1-b-d1"' in capsys.readouterr().out
+    jobs = submit.commands("probes", "PY", "e5_probes_baseline_A", "p1-b-d1", checkpoint=300000, e4_results="/scratch/e4/results")
+    assert [n for n, _ in jobs] == ["probes_A_base_k300000"]
+    cmd = jobs[0][1]
+    assert cmd[cmd.index("--training") + 1] == "baseline" and cmd[cmd.index("--seed-label") + 1] == "A"
+    assert cmd[cmd.index("--e4-results") + 1] == "/scratch/e4/results" and "--n-walks" not in cmd  # e5.probes.n_walks (150)
+    with pytest.raises(ValueError):
+        submit.commands("probes", "PY", "e5_probes_baseline_A", "p1-b-d1", checkpoint=300000)
+    cfg = e5_setup.load_config()
+    assert cfg["e5"]["probes"]["n_walks"] == 150 and cfg["e4"]["checkpoint"]["n_walks"] == 100  # training-time walks: E4's
+    assert e5_setup.configuration(cfg, "p1-b-d1", "A")["seed"] == 2 and e5_setup.configuration(cfg, "p1-b-d1", "B")["seed"] == 102
