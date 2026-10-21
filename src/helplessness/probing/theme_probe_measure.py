@@ -45,8 +45,10 @@ def is_extreme(image: dict) -> bool:
 
 
 def measure(cfg: dict, conf: dict, models: dict, images: list[dict], device, log=lambda s: print(s, flush=True), save_steps: bool = False,
-            n_walks: int | None = None) -> dict:
-    """Every (image, zone) of `images` on both models. Returns rows (images.csv), curves and the optional steps."""
+            n_walks: int | None = None, on_pair=None) -> dict:
+    """Every (image, zone) of `images` on both models. Returns rows (images.csv), curves and the optional steps.
+    on_pair (option, default None: E4's measure unchanged): called after each (image, zone) as on_pair(image, slot, res,
+    world, walks) -- res: model name -> its measure_walks result; the dict it returns is added to that row."""
     w, draws = cfg["e4"]["walks"], cfg["e4"]["probe"]["draws"]
     margin = cfg["measure"]["kernel_margin_threshold"]
     role_of = {slot: role for role, slot in conf["roles"].items()}
@@ -73,6 +75,8 @@ def measure(cfg: dict, conf: dict, models: dict, images: list[dict], device, log
                          "mass_true_exp": float(np.nanmean(e["mass_true"])), "mass_true_ref": float(np.nanmean(r["mass_true"])),
                          "decodes_exp": e["n_unique_decodes"], "decodes_ref": r["n_unique_decodes"], "seconds": seconds,
                          "n_probes": len(image["probes"])})
+            if on_pair is not None:
+                rows[-1].update(on_pair(image, slot, res, world, walks) or {})
             pad = w["n_in"] - n_in  # every curve on 1..n_in (NaN beyond a grid image's n_in_grid)
             curves_exp.append(np.concatenate([e["curve"], np.full(pad, np.nan)]))
             curves_ref.append(np.concatenate([r["curve"], np.full(pad, np.nan)]))

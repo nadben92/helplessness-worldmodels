@@ -47,16 +47,16 @@ import yaml
 
 import e4_setup
 from helplessness.envs.appearance.theme_axes import rgb_distance
-from helplessness.envs.layouts import two_zones
 from helplessness.envs.layouts.four_zones import QUADRANT_ORDER
-from helplessness.probing import walks as walks_mod
-from helplessness.probing.fixed_trajectory import fixed_trajectory_context, measure_walks, template_distances_torch
+from helplessness.probing import probe_validity
+from helplessness.probing.fixed_trajectory import measure_walks
+from helplessness.probing.probe_validity import by_state_then_zone
 from helplessness.probing.theme_probes import probe_images
 from helplessness.pipeline.runtime import max_images_per_forward
 from measure_probes import load_rssm
 from pilot_analysis import b_resampled, export_dirs, find_in_export, probe_measures
 
-LOG2_5 = float(np.log2(5))
+LOG2_5 = probe_validity.LOG2_5
 POSITIONS = ("ud", "cd", "neutral")
 AXES = ("segment", "arc_ctrl", "arc_inc")
 
@@ -83,14 +83,6 @@ def _plt():
     import matplotlib.pyplot as plt
 
     return plt
-
-
-def by_state_then_zone(values: np.ndarray, states: np.ndarray) -> float:
-    ok = np.isfinite(values)
-    if not ok.any():
-        return float("nan")
-    uniq, inv = np.unique(states[ok], return_inverse=True)
-    return float((np.bincount(inv, weights=values[ok]) / np.bincount(inv)).mean())
 
 
 def _models(export: list[Path], config_id: str, which: tuple[str, ...]) -> dict:
@@ -129,11 +121,8 @@ def cmd_validity(args) -> None:
                 res = measure_walks(model, world.templates_np, world.templates_t, walks, succ, draws, margin, seed, 1, 1,
                                     chunk=cfg["e4"]["walks"]["chunk"], max_images=max_images_per_forward(cfg))
                 tag = "ref" if name == "reference" else "exp"
-                for field, key in (("mass_true", "mass"), ("ghost_fraction", "ghost"), ("I", "I")):
-                    values = np.asarray(res[field], dtype=np.float64)
-                    if values.ndim == 2:  # per action: the mean over the actions, as the training diagnostic does
-                        values = values.mean(axis=1)
-                    row[f"{key}_{tag}_step1"] = by_state_then_zone(values, res["states"])
+                row.update({f"{key[:-len('_step1')]}_{tag}_step1": v for key, v in probe_validity.step1_summary(res).items()
+                            if key != "n_states_step1"})
                 row[f"n_states_{tag}_step1"] = int(np.unique(res["states"]).size)
             row["seconds"] = time.perf_counter() - t0
             rows.append(row)
@@ -144,14 +133,6 @@ def cmd_validity(args) -> None:
 
 # ---------------------------------------------------------------------------------------------------------- diagnose
 
-def toric_cells(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    R, C = two_zones.GRID_SHAPE
-    ra, ca = np.divmod(a, C)
-    rb, cb = np.divmod(b, C)
-    dr, dc = np.abs(ra - rb), np.abs(ca - cb)
-    return np.minimum(dr, R - dr) + np.minimum(dc, C - dc)
-
-
 def cmd_diagnose(args) -> None:
     cfg = e4_setup.load_config(args.config)
     conf = e4_setup.configuration(cfg, args.configuration)
@@ -161,62 +142,16 @@ def cmd_diagnose(args) -> None:
     for idx in args.images:
         image = images[idx]
         world = e4_setup.probe_world(cfg, conf, image["slot_colors"])
-        tf = world.templates_t.reshape(world.templates_t.shape[0], -1).double()
-        tsq = (tf ** 2).sum(1)
-        R, C = two_zones.GRID_SHAPE
-        kpx = world.templates_t.shape[-1] // C
-        agent = torch.tensor(conf["agent_color"], dtype=torch.float32)[:, None, None] / 255.0
         for slot in image["zones"]:
-            cells = np.zeros((R, C), dtype=bool)
-            for st in two_zones.region_states(world.layout)[slot]:
-                cells[divmod(int(st), C)] = True
-            zone_px = torch.as_tensor(np.kron(cells, np.ones((kpx, kpx), dtype=bool)))
-            probe_rgb = np.array(image["slot_colors"][slot], dtype=float)
-            train_rgb = np.array(conf["training_colors"][slot], dtype=float)
             walks = e4_setup.walks_for_slot(cfg, slot, args.n_walks, n_in=args.n_in)
-            valid = walks["phase"] != walks_mod.PHASE_PAD
-            states = walks["states"][valid]
-            k = walks["steps_since_entry"][valid]
             for name, model in models.items():
                 gen = torch.Generator().manual_seed(e4_setup.measurement_seed(cfg, conf, idx, slot, "probe"))
-                with torch.no_grad():
-                    ctx = fixed_trajectory_context(model, world.templates_np, walks, generator=gen)
-                    h, z = ctx["h"][torch.as_tensor(valid)], ctx["z"][torch.as_tensor(valid)]
-                    nearest, mse, mse_out, agent_cell, zone_rgb = [], [], [], [], []
-                    for i in range(0, h.shape[0], 1024):
-                        dec = model.decode(h[i:i + 1024], z[i:i + 1024])
-                        nearest.append(template_distances_torch(dec, tf, tsq).argmin(axis=1))
-                        dec = dec.clamp(0, 1)
-                        truth = world.templates_t[states[i:i + 1024]]
-                        err = ((dec - truth) ** 2).mean(dim=1)
-                        mse.append(err.mean(dim=(1, 2)).numpy())
-                        mse_out.append(err[:, ~zone_px].mean(dim=1).numpy())
-                        d_agent = ((dec - agent) ** 2).sum(dim=1)  # (n, H, W)
-                        per_cell = d_agent.reshape(-1, R, kpx, C, kpx).amin(dim=(2, 4)).reshape(-1, R * C)
-                        agent_cell.append(per_cell.argmin(dim=1).numpy())
-                        n = dec.shape[0]
-                        own = torch.zeros(n, R * C, dtype=torch.bool)
-                        own[torch.arange(n), torch.as_tensor(states[i:i + n].astype(np.int64))] = True
-                        own_px = own.reshape(n, R, 1, C, 1).expand(n, R, kpx, C, kpx).reshape(n, R * kpx, C * kpx)
-                        mask = zone_px[None] & ~own_px
-                        rgb = (dec * mask[:, None]).sum(dim=(2, 3)) / mask.sum(dim=(1, 2))[:, None]
-                        zone_rgb.append((rgb * 255.0).numpy())
-                nearest, mse, mse_out = np.concatenate(nearest), np.concatenate(mse), np.concatenate(mse_out)
-                agent_cell, zone_rgb = np.concatenate(agent_cell), np.concatenate(zone_rgb)
-                dist = toric_cells(nearest, states)
-                dist_agent = toric_cells(agent_cell, states)
-                for part, sel in (("corridor", k == 0), ("zone", k >= 1), ("zone_step1", k == 1)):
+                parts = probe_validity.reconstruction_diagnostic(model, world, walks, slot, image["slot_colors"][slot],
+                                                                 {"training": conf["training_colors"][slot]}, conf["agent_color"], gen)
+                for part in parts:
                     rows.append({"configuration": args.configuration, "image": idx, "is_training": image["is_training"],
                                  "probes": ";".join(f"{p['axis']}:{p['k']}:{p['position']}" for p in image["probes"]) or "training",
-                                 "zone": slot, "model": name, "part": part, "n_frames": int(sel.sum()),
-                                 "recon_mse": float(mse[sel].mean()), "recon_mse_outside_zone": float(mse_out[sel].mean()),
-                                 "nearest_template_accuracy": float((nearest[sel] == states[sel]).mean()),
-                                 "nearest_template_error_cells": float(dist[sel].mean()),
-                                 "agent_cell_accuracy": float((agent_cell[sel] == states[sel]).mean()),
-                                 "agent_cell_error_cells": float(dist_agent[sel].mean()),
-                                 "zone_rgb_reconstructed": "-".join(f"{v:.0f}" for v in zone_rgb[sel].mean(axis=0)),
-                                 "zone_rgb_dist_to_probe": float(np.linalg.norm(zone_rgb[sel].mean(axis=0) - probe_rgb)),
-                                 "zone_rgb_dist_to_training": float(np.linalg.norm(zone_rgb[sel].mean(axis=0) - train_rgb)),
+                                 "zone": slot, "model": name, **part,
                                  **{f"color_{q}": "-".join(map(str, image["slot_colors"][q])) for q in QUADRANT_ORDER}})
                 r = rows[-2]
                 print(f"{args.configuration} image {idx} {slot} {name}: zone recon {r['recon_mse']:.5f} agent cell acc "
@@ -325,7 +260,7 @@ def cmd_report(args) -> None:
                                         p["steps"][f"{key}_states"][p["steps"][f"{key}_steps_since_entry"] == 1])
             mass = float(v["mass_ref_step1"]) if v else float("nan")
             ghost = float(v["ghost_ref_step1"]) if v else float("nan")
-            valid = bool(mass >= args.mass_min and abs(I_ref1 - LOG2_5) <= args.i_tol)
+            valid = probe_validity.is_valid(mass, I_ref1, args.mass_min, args.i_tol)
             colors = {q: tuple(int(x) for x in r[f"color_{q}"].split("-")) for q in QUADRANT_ORDER}
             train_slot = conf["training_colors"][r["zone"]]
             pair_rows.append({"configuration": c, "image": int(r["image"]), "zone": r["zone"], "role": r["role"],
@@ -665,8 +600,8 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--validity", type=Path, nargs="+", required=True)
     r.add_argument("--local-probes", type=Path, nargs="*", default=[])
     r.add_argument("--n-walks", type=int, default=300, help="only the probe directories measured with this many walks")
-    r.add_argument("--mass-min", type=float, default=0.90)
-    r.add_argument("--i-tol", type=float, default=0.15)
+    r.add_argument("--mass-min", type=float, default=probe_validity.MASS_MIN)
+    r.add_argument("--i-tol", type=float, default=probe_validity.I_TOL)
     r.add_argument("--bootstrap", type=int, default=200)
     r.add_argument("--suff-walks", type=int, nargs="+", default=[25, 50, 100, 150, 200, 300])
     r.add_argument("--suff-bootstrap", type=int, default=100)
