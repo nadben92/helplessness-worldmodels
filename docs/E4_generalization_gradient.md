@@ -1,6 +1,7 @@
 # E4 — Generalisation gradient
 
-**Status (2026-10-18): wave 1 (the pilot) done and analysed locally; B = 300,000; wave 2 ready, not launched.**
+**Status (2026-10-21): finished.** Both waves trained (300,000 steps), the full probe grid measured on the cluster
+(300 walks, checkpoint 300,000) and analysed: `results/E4_generalization_gradient/final/REPORT.md` (figures, tables).
 Branch `e4`. Code and usage:
 `experiments/E4_generalization_gradient/README.md`; launch: `experiments/E4_generalization_gradient/RUN_GPU.md`.
 Deterministic dynamics only.
@@ -124,3 +125,13 @@ n_pre = 32. Protocol control: b_step1 at the walks matches E3's end-of-training 
 `configs/e4/`; `experiments/E4_generalization_gradient/`; results: on the cluster's volume, brought back as one archive
 per batch (`export_batch.py`: light files, final weights, probes, logs, manifest); the push to a branch `results/<batch>`
 is optional and off by default.
+
+## Final analysis (2026-10-21)
+
+`final_analysis.py` (validity, diagnose, report; `results/E4_generalization_gradient/final/REPORT.md` gives the
+commands). Validity criterion, applied before any gradient: a probe is interpretable only if the REFERENCE predicts the
+transitions at the first step in the zone -- mass on the true successor >= 0.90 and |I_ref - log2 5| <= 0.15 bit. 203 of
+the 400 probes fail it (p1-a 39, p1-b 52, p2-a 40, p2-b 72); validity falls with the RGB distance between the probed
+colour and the zone's TRAINING colour (8 of 112 image-zones valid beyond 250). Every model's reconstruction renders the
+probed quadrant in its training colour, never the probe's. The gradients, comparisons, recovery and the standard error
+of b at step 1 against the number of walks (median 0.012, max 0.048 at 100 walks) are in the report.

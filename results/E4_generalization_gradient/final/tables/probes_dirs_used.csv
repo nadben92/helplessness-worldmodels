@@ -1,0 +1,5 @@
+configuration,probes_dir,n_walks,checkpoint,n_image_zones
+p1-a-d1,C:\nrw\e4_probes\extracted\e4_wave1\results\E4_generalization_gradient\probes__p1-a-d1__env300000__20261021T064814Z,300,300000,96
+p1-b-d1,C:\nrw\e4_probes\extracted\e4_wave1\results\E4_generalization_gradient\probes__p1-b-d1__env300000__20261021T064814Z,300,300000,96
+p2-a-d1,C:\nrw\e4_probes\extracted\e4_wave2\results\E4_generalization_gradient\probes__p2-a-d1__env300000__20261021T070426Z,300,300000,96
+p2-b-d1,C:\nrw\e4_probes\extracted\e4_wave2\results\E4_generalization_gradient\probes__p2-b-d1__env300000__20261021T070426Z,300,300000,96

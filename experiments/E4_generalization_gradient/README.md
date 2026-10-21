@@ -18,6 +18,7 @@ the walks and the measure (`probing/walks.py`, `probing/fixed_trajectory.py`), E
 | `measure_probes.py` | The zero-data probes of a configuration at a checkpoint (93 images, both models) |
 | `export_batch.py` | One archive per batch (light files, final weights, probes, logs, manifest) and its check |
 | `pilot_analysis.py` | The pilot's analyses: convergence and B, protocol control, evolution in the zone, forgetting, probes |
+| `final_analysis.py` | The final analysis of the probe grid: validity at step 1, reconstruction diagnostics, gradients, comparisons, recovery, sufficiency |
 | `batches.py` | The two waves (and the optional diagonal-2 replicas) |
 | `submit_kubeflow.py` | Submission to the GPU cluster: training, resume, probes at a checkpoint (push optional, off) |
 | `render_check.py` | Renders the environments and some probes for a visual check (outside the repo) |
@@ -90,3 +91,8 @@ Done for wave 1 (2026-10-18): B = 300,000 (`batches.B_AFTER_PILOT`). The converg
 mass out by default (`--mass-regions quadrants`: the training diagnostic's corridor mean includes the terminal goal
 state); recomputed with `b_step1` it gives B = 175,000, for information only (E5's sizing); see
 `docs/E4_generalization_gradient.md`.
+
+## Final analysis (2026-10-21)
+
+`final_analysis.py validity | diagnose | report`, on the two extracted probe archives: the commands and the results are in
+`results/E4_generalization_gradient/final/REPORT.md` (figures and CSV tables beside it, each probe with its validity).

@@ -1,0 +1,41 @@
+configuration,axis,position,probes,invalid,invalid_k
+p1-a-d1,segment,ud,11,4,7 8 9 10
+p1-a-d1,segment,cd,11,1,0
+p1-a-d1,segment,neutral,11,0,
+p1-a-d1,arc_ctrl,ud,11,4,7 8 9 10
+p1-a-d1,arc_ctrl,cd,11,11,0 1 2 3 4 5 6 7 8 9 10
+p1-a-d1,arc_ctrl,neutral,11,0,
+p1-a-d1,arc_inc,ud,11,11,0 1 2 3 4 5 6 7 8 9 10
+p1-a-d1,arc_inc,cd,11,4,7 8 9 10
+p1-a-d1,arc_inc,neutral,11,4,7 8 9 10
+p1-a-d1,position_only,ud,1,0,
+p1-b-d1,segment,ud,11,5,6 7 8 9 10
+p1-b-d1,segment,cd,11,7,0 1 2 3 4 5 6
+p1-b-d1,segment,neutral,11,4,7 8 9 10
+p1-b-d1,arc_ctrl,ud,11,2,9 10
+p1-b-d1,arc_ctrl,cd,11,11,0 1 2 3 4 5 6 7 8 9 10
+p1-b-d1,arc_ctrl,neutral,11,0,
+p1-b-d1,arc_inc,ud,11,11,0 1 2 3 4 5 6 7 8 9 10
+p1-b-d1,arc_inc,cd,11,8,3 4 5 6 7 8 9 10
+p1-b-d1,arc_inc,neutral,11,4,0 1 2 3
+p1-b-d1,position_only,ud,1,0,
+p2-a-d1,segment,ud,11,9,2 3 4 5 6 7 8 9 10
+p2-a-d1,segment,cd,11,2,0 2
+p2-a-d1,segment,neutral,11,2,0 2
+p2-a-d1,arc_ctrl,ud,11,6,3 6 7 8 9 10
+p2-a-d1,arc_ctrl,cd,11,7,0 1 2 3 4 5 6
+p2-a-d1,arc_ctrl,neutral,11,2,0 3
+p2-a-d1,arc_inc,ud,11,11,0 1 2 3 4 5 6 7 8 9 10
+p2-a-d1,arc_inc,cd,11,0,
+p2-a-d1,arc_inc,neutral,11,0,
+p2-a-d1,position_only,ud,1,1,0
+p2-b-d1,segment,ud,11,5,6 7 8 9 10
+p2-b-d1,segment,cd,11,9,0 1 2 3 4 5 6 7 8
+p2-b-d1,segment,neutral,11,4,7 8 9 10
+p2-b-d1,arc_ctrl,ud,11,5,6 7 8 9 10
+p2-b-d1,arc_ctrl,cd,11,11,0 1 2 3 4 5 6 7 8 9 10
+p2-b-d1,arc_ctrl,neutral,11,6,5 6 7 8 9 10
+p2-b-d1,arc_inc,ud,11,11,0 1 2 3 4 5 6 7 8 9 10
+p2-b-d1,arc_inc,cd,11,10,1 2 3 4 5 6 7 8 9 10
+p2-b-d1,arc_inc,neutral,11,11,0 1 2 3 4 5 6 7 8 9 10
+p2-b-d1,position_only,ud,1,0,
