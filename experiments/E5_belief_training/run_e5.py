@@ -61,6 +61,7 @@ from helplessness.pipeline.episode_sources import (
     DynamicsSwitch,
     ZoneAssignmentShuffle,
     assignment_colors,
+    assignment_symmetry,
     assignment_world,
     canonical_assignment,
 )
@@ -189,6 +190,7 @@ def shuffle_hooks(cfg: dict, conf: dict, fraction: float) -> ClosedLoopHooks:
                                          "I_step1_by_type": mean_over_assignments(wk, "I_step1_by_type")} if len(ks) > 1 else None),
               "visits_by_type": visit_shares(state["replay"].obs_rows_and_flags()[0], types),
               "episodes_by_assignment": counts.tolist(), "episodes_drawn": int(np.sum(source.episode_drawn)),
+              "assignment_symmetry": {str(k): assignment_symmetry(k, conf["diagonal"]) for k in ks},
               "estimator_switch": estimator_switch(state),
               "decode_accuracy_canonical": rc[canonical]["decode_accuracy"],
               "episodes": len(source.episode_assignment),

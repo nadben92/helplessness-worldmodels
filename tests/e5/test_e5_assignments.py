@@ -182,3 +182,52 @@ def test_within_group_statistic_with_one_group_is_the_default_one_bit_for_bit():
     r1, r2 = np.random.default_rng(5), np.random.default_rng(5)
     assert mean_within_group_pair_jensen_shannon(probs, np.zeros(50, dtype=np.int64), r1) == mean_random_pair_jensen_shannon(probs, r2)
     assert r1.random() == r2.random()
+
+
+# ---- the conveyor in the 12 assignments (docs/e5/DECISIONS.md (24)) ------------------------------------------------
+
+def _e3_symmetry():
+    import importlib.util
+    from pathlib import Path
+
+    spec = importlib.util.spec_from_file_location("e3_symmetry_for_e5", Path(__file__).parents[1] / "e3" / "test_e3_symmetry.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+EXPECTED_DRIFT = {"nw": (1, 0), "ne": (1, 0), "se": (-1, 0), "sw": (-1, 0)}  # away from the goal (row 0), along the rows
+
+
+@pytest.mark.parametrize("k", range(12))
+def test_every_assignment_is_the_canonical_conveyor_up_to_a_symmetry(k):
+    """For each assignment, both conditions: the UD slot holds a conveyor with a well-defined drift away from the goal,
+    and the goal-centred axial reflection named by assignment_symmetry transports the canonical environment's dynamics
+    EXACTLY onto the assignment's (E3's _transports_exactly, every (s, a), actions permuted). Its class is E3's rotation
+    class of the UD slot; the per-episode log carries it."""
+    from helplessness.pipeline.episode_sources import REFLECTIONS, assignment_symmetry
+
+    e3_symmetry = _e3_symmetry()
+    sym = assignment_symmetry(k, 1)
+    ud, cd = ASSIGNMENTS[k]
+    assert (sym["ud"], sym["cd"]) == (ud, cd) and REFLECTIONS[sym["reflection"]]["nw"] == ud
+    assert tuple(sym["drift"]) == EXPECTED_DRIFT[ud]
+    assert sym["rotation_class"] == ("A" if ud in ("nw", "se") else "B")
+    layout = two_zones.build_layout(1, "experimental", ud_slot=ud)
+    conveyor = next(z for z in layout.zones if z.appearance.category == ud)
+    assert isinstance(conveyor.dynamics, UncontrollableDeterministic) and tuple(conveyor.dynamics.drift) == EXPECTED_DRIFT[ud]
+    for condition in ("experimental", "reference"):
+        canonical = tensor(two_zones.build_layout(1, condition))
+        moved = tensor(two_zones.build_layout(1, condition, ud_slot=ud))
+        assert e3_symmetry._transports_exactly(canonical, moved, e3_symmetry.REFLECTION_GROUP[sym["reflection"]]), (k, condition)
+
+
+def test_episode_log_carries_the_symmetry_class():
+    from helplessness.pipeline.episode_sources import SYMMETRY_CLASSES, assignment_symmetry
+
+    src = ZoneAssignmentShuffle(fake_worlds(), canonical_assignment(1), 1.0, assignment_generator(11), n_states=3)
+    for i in range(200):
+        src.next_episode(i)
+    log = src.log_arrays()
+    expected = [SYMMETRY_CLASSES.index(assignment_symmetry(int(k), 1)["rotation_class"]) for k in log["episode_assignment"]]
+    assert log["episode_rotation_class"].tolist() == expected and set(expected) == {0, 1}

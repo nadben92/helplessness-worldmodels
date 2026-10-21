@@ -23,6 +23,7 @@ import torch
 
 from helplessness.envs.layouts import two_zones
 from helplessness.envs.layouts.four_zones import QUADRANT_ORDER
+from helplessness.envs.zones import resolve_drift
 from helplessness.pipeline import two_zones as two_zones_world
 
 # the 12 assignments: (UD slot, CD slot), the two other slots neutral; fixed order (index = position in this tuple)
@@ -47,6 +48,46 @@ def canonical_assignment(diagonal: int) -> int:
 def assignment_colors(index: int, diagonal: int, t_inc, t_ctrl) -> dict[str, tuple[int, int, int]]:
     ud, cd = ASSIGNMENTS[index]
     return two_zones.training_colors(diagonal, t_inc, t_ctrl, ud_slot=ud, cd_slot=cd)
+
+
+# the goal-centred axial reflections of the torus (tests/e3/test_e3_symmetry.py's REFLECTION_GROUP), as maps of the
+# quadrant slots; and the quarter turns about the goal (E3's rotations, nw -> ne -> se -> sw)
+REFLECTIONS: dict[str, dict[str, str]] = {
+    "identity": {"nw": "nw", "ne": "ne", "se": "se", "sw": "sw"},
+    "col_reflect": {"nw": "ne", "ne": "nw", "se": "sw", "sw": "se"},
+    "row_reflect": {"nw": "sw", "sw": "nw", "ne": "se", "se": "ne"},
+    "point_reflect": {"nw": "se", "se": "nw", "ne": "sw", "sw": "ne"},
+}
+ROTATION_ORDER = ("nw", "ne", "se", "sw")
+SYMMETRY_CLASSES = ("A", "B")
+
+
+def assignment_symmetry(index: int, diagonal: int) -> dict:
+    """How an assignment relates to the configuration's canonical one (docs/e5/DECISIONS.md (24)).
+
+    reflection      the goal-centred axial reflection that sends the canonical UD slot to this one. Only the UD slot's
+                    dynamics differ from the corridor's (CD and the neutral slots are controllable-deterministic alike),
+                    so this reflection transports the canonical environment's dynamics exactly onto this assignment's,
+                    the conveyor's drift included (tested for the 12, both conditions): every assignment is the
+                    canonical one up to that symmetry, for the dynamics; the images differ (where T_ctrl sits).
+    rotation_class  E3's block factor (envs.layouts.four_zones_pixel.ROTATION_CLASS) of the quarter turn about the goal
+                    that sends the canonical UD slot to this one: "A" for 0 or 180 degrees, "B" for 90 or 270.
+    ud_cd           where the CD slot sits relative to the UD slot: "diagonal" (opposite slots, as in the canonical
+                    layouts), "same_rows" (same row band), "same_columns" (same column band).
+    drift           the conveyor's (row, column) drift, away from the goal, resolved for the UD slot's rows."""
+    ud, cd = ASSIGNMENTS[index]
+    canon_ud = two_zones.roles(diagonal)["ud"]
+    reflection = next(name for name, m in REFLECTIONS.items() if m[canon_ud] == ud)
+    turns = (ROTATION_ORDER.index(ud) - ROTATION_ORDER.index(canon_ud)) % 4
+    if REFLECTIONS["point_reflect"][ud] == cd:
+        relation = "diagonal"
+    elif REFLECTIONS["col_reflect"][ud] == cd:
+        relation = "same_rows"
+    else:
+        relation = "same_columns"
+    drift = resolve_drift(tuple(two_zones.CFG["blocks"][ud]["rows"]), two_zones.GRID_SHAPE, two_zones.GOAL_RC, two_zones.DIRECTION)
+    return {"index": int(index), "ud": ud, "cd": cd, "reflection": reflection, "rotation_class": SYMMETRY_CLASSES[turns % 2],
+            "quarter_turns": int(turns), "ud_cd": relation, "drift": [int(drift[0]), int(drift[1])]}
 
 
 def assignment_world(index: int, conf: dict, condition: str, render_cfg: dict, episode: dict, seed: int):
@@ -105,9 +146,14 @@ class ZoneAssignmentShuffle:
         return self.episode_assignment[-1] if self.episode_assignment else None
 
     def log_arrays(self) -> dict[str, np.ndarray]:
-        return {"episode_start": np.asarray(self.episode_start, dtype=np.int64),
-                "episode_assignment": np.asarray(self.episode_assignment, dtype=np.int8),
-                "episode_drawn": np.asarray(self.episode_drawn, dtype=bool)}
+        """The per-episode log; episode_rotation_class: 0 = "A", 1 = "B" (assignment_symmetry, relative to the canonical
+        assignment) so that the analysis can split by symmetry class."""
+        diagonal = next(d for d in two_zones.DIAGONALS if canonical_assignment(d) == self.canonical)
+        cls = np.array([SYMMETRY_CLASSES.index(assignment_symmetry(k, diagonal)["rotation_class"]) for k in range(len(ASSIGNMENTS))],
+                       dtype=np.int8)
+        assignment = np.asarray(self.episode_assignment, dtype=np.int8)
+        return {"episode_start": np.asarray(self.episode_start, dtype=np.int64), "episode_assignment": assignment,
+                "episode_drawn": np.asarray(self.episode_drawn, dtype=bool), "episode_rotation_class": cls[assignment.astype(np.int64)]}
 
 
 class DynamicsSwitch:
