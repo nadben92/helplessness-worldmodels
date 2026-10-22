@@ -586,3 +586,26 @@ or the statistic not finite -- the heads' losses ABSENT before the switch are no
 wave yet. Complete f = 1 pairs (experimental and reference both switched, no collapse) so far: A; B is incomplete. Waves
 2 (B's baseline, f = 1 C) and 3 (C's baseline, f = 1 D) are full (four runs each, the GPU's four parallel runs), so there
 is no free place: see IMPLEMENTATION_REPORT.md, section 10, for the options.
+
+**(32), updated the same day (user): two waves only; seed B's experimental run replaced.**
+- **No wave 3**: seed C's baseline and seed D are dropped (labels C = 202 and D = 302 stay defined, unused).
+- **`e5_wave2`** = seed B's baseline, experimental and reference (the reference with `--save-resumable-at 100000`, for
+  E8), and two shuffle f = 1 EXPERIMENTAL runs replacing seed B's (locked in): seeds **E = 402** and **F = 502** (B's rule,
+  `e5_setup.SEED_LABELS`), both **measured against seed B's f = 1 reference** of wave 1 (`batches.REFERENCE_SEED_OF`;
+  `measure_probes.py --reference-seed-label B`, refused unless asked; `check_wave.py` pairs them by itself).
+- **Why another seed's reference is legitimate (user).** Already in E4 the experimental run and its reference had
+  different streams (`streams.worldmodel`: the reference's root is [seed, 1]): the reference cancels the REPRESENTATION's
+  bias (what a model trained on fully controllable dynamics believes of the same image), it does not pair the chance of
+  training. Consequence, recorded: the replacements draw their zone assignments from their own stream ([402, 2],
+  [502, 2]), so decision (2)'s shared draws by episode index do not hold for these two pairs -- by the same argument, it
+  is not needed for b.
+- **Probes**: ONE batch after wave 2, `e5_probes_all`, at **K = 300,000** (`batches.PROBES_CHECKPOINT`): every healthy
+  pair of waves 1 and 2 plus seed A's baseline (E4's own pair). At submission (dry run included) a pair is left out,
+  with its reason printed, when one of its runs is not done, never switched, locked in, or lacks its weights at K
+  (`submit_kubeflow.probe_plan`): seed B's own f = 1 pair is left out this way; if both replacements succeed, both are
+  probed (two f = 1 experimental runs against one reference).
+- **`check_wave.py` excludes a locked-in run from every pair** and lists the excluded pairs apart (`EXCLUDED`), with the
+  LOCK-IN and NaN/inf alerts of (32).
+- Tested: the two-wave table, the replacements' commands and pairing, the probe plan (healthy pairs kept; the locked-in
+  and the failed left out; seed A's baseline from E4's runs), the cross-seed guard of `measure_probes.py`.
+- Calendar: IMPLEMENTATION_REPORT.md, section 11.

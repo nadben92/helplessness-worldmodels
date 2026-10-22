@@ -11,7 +11,9 @@ Per run:
                     layout (the smallest of the four; E4's convergence threshold 0.97); shuffle runs: also by zone type,
                     averaged over the 12 assignments, at the last checkpoint measuring every assignment
   success           the agent's success rate and episode length over the last episodes (at the last checkpoint)
-Per pair (experimental - reference, same training and seed):
+Per pair (experimental - reference, same training; the reference's seed is the run's own or batches.REFERENCE_SEED_OF's --
+seed B's f = 1 reference for the replacements E and F, docs/e5/DECISIONS.md (32); with --batch, such a reference from
+another wave is added):
   b                 b at the first step in the zone in the training world, by slot of the canonical layout (fixed walks
                     on the training image, E4's checkpoint record) at the last common checkpoint; shuffle pairs: also by
                     zone type averaged over the 12 assignments; E4's criterion: |b_UD + log2 5| <= 0.15, |b| <= 0.1 at CD
@@ -19,7 +21,8 @@ Per pair (experimental - reference, same training and seed):
   converged at      the checkpoints where that criterion holds (the candidates for the common probe checkpoint)
 A run is flagged ATTENTION when it failed, never switched, had a stretch of 5 evaluations below 1.0 bit after its switch,
 or misses the mass threshold at its last checkpoint; LOCK-IN when it has not switched and its statistic stayed below 0.01
-bit on every evaluation from gradient step 6,100 on (at least 20); NaN/inf when a training loss present in a record or
+bit on every evaluation from gradient step 6,100 on (at least 20) -- a locked-in run is EXCLUDED from every pair (and so
+from the probes), listed apart; NaN/inf when a training loss present in a record or
 the statistic is not finite (the agent heads' losses are ABSENT before the switch -- the console prints them as nan --
 and are not flagged); a pair when it misses E4's criterion at its last checkpoint.
 
@@ -175,17 +178,37 @@ def check_pair(exp: dict, ref: dict) -> dict:
     return out
 
 
-def batch_run_dirs(repo: Path, batch: str) -> list[Path]:
+def newest(repo: Path, label: str, training: str, condition: str, fraction) -> Path | None:
     seed_of = seeds(repo, batches.CONFIGURATION)
+    found = sorted((repo / "results" / e5_names.EXPERIMENT_ID).glob(
+        e5_names.run_glob(batches.CONFIGURATION, training, condition, seed_of[label], fraction)))
+    return found[-1] if found else None
+
+
+def batch_run_dirs(repo: Path, batch: str) -> list[Path]:
+    """The batch's runs, plus the references of another wave its experimental runs are paired with (REFERENCE_SEED_OF)."""
     out = []
     for job, (label, training, fraction, condition) in batches.batch_runs(batch).items():
-        found = sorted((repo / "results" / e5_names.EXPERIMENT_ID).glob(
-            e5_names.run_glob(batches.CONFIGURATION, training, condition, seed_of[label], fraction)))
-        if found:
-            out.append(found[-1])
-        else:
+        d = newest(repo, label, training, condition, fraction)
+        if d is None:
             print(f"{job}: no run found", flush=True)
+        else:
+            out.append(d)
+        ref_label = batches.REFERENCE_SEED_OF.get((label, training))
+        if condition == "experimental" and ref_label is not None:
+            ref = newest(repo, ref_label, training, "reference", fraction)
+            if ref is not None and ref not in out:
+                out.append(ref)
     return out
+
+
+def reference_seed(repo: Path, tag: str, seed: int) -> int:
+    """The seed of the reference an experimental run is measured against (its own, or REFERENCE_SEED_OF's)."""
+    seed_of = seeds(repo, batches.CONFIGURATION)
+    label = next((lab for lab, s in seed_of.items() if s == seed), None)
+    training = "baseline" if tag == "base" else "shuffle" if tag.startswith("sh") else "immunisation"
+    ref_label = batches.REFERENCE_SEED_OF.get((label, training))
+    return seed if ref_label is None else seed_of[ref_label]
 
 
 def fmt(v, nd=3):
@@ -204,11 +227,21 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("give --batch or --runs")
     runs = [read_run(d) for d in dirs]
     run_checks = [check_run(r) for r in runs]
-    pairs = []
+    pairs, excluded = [], []
+    locked = {c["run"] for c in run_checks if c["lock_in"] is not None}
+    repo = args.repo_dir.resolve()
     for exp in (r for r in runs if r["role"] == "experimental"):
-        ref = next((r for r in runs if r["role"] == "reference" and r["tag"] == exp["tag"] and r["seed"] == exp["seed"]), None)
-        if ref is not None:
-            pairs.append(check_pair(exp, ref))
+        ref_seed = reference_seed(repo, exp["tag"], exp["seed"])
+        ref = next((r for r in runs if r["role"] == "reference" and r["tag"] == exp["tag"] and r["seed"] == ref_seed), None)
+        if ref is None:
+            continue
+        if exp["name"] in locked or ref["name"] in locked:  # docs/e5/DECISIONS.md (32): a locked-in run is in no pair
+            excluded.append({"pair": f"{exp['tag']} seed {exp['seed']} (reference seed {ref_seed})",
+                             "reason": "LOCK-IN: " + ", ".join(r["name"] for r in (exp, ref) if r["name"] in locked)})
+            continue
+        pair = check_pair(exp, ref)
+        pair["reference_seed"] = ref_seed
+        pairs.append(pair)
     print("RUNS")
     for c in run_checks:
         sw, col = c["switch"], c["collapse"]
@@ -224,8 +257,12 @@ def main(argv: list[str] | None = None) -> int:
               + (f" | by type over assignments {({t: round(v, 3) for t, v in p['b_step1_by_type_mean_over_assignments'].items()})}"
                  if p.get("b_step1_by_type_mean_over_assignments") else "")
               + f" | converged at {p.get('converged_at')} | {'ATTENTION: ' + '; '.join(p['attention']) if p['attention'] else 'OK'}")
+    if excluded:
+        print("EXCLUDED (locked in: no pair, no probe)")
+        for e in excluded:
+            print(f"  {e['pair']}: {e['reason']}")
     if args.out:
-        args.out.write_text(json.dumps({"runs": run_checks, "pairs": pairs}, indent=1, default=str), encoding="utf-8")
+        args.out.write_text(json.dumps({"runs": run_checks, "pairs": pairs, "excluded_pairs": excluded}, indent=1, default=str), encoding="utf-8")
     return 0
 
 

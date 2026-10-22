@@ -1,20 +1,20 @@
 """E5's batch table (docs/E5_belief_training.md): runs on ONE configuration of E4 (p1-b-d1), each wave on one GPU (one
-compute pod at a time). Standard library only. Seeds: A = 2 (E4's), B = 102, C = 202, D = 302 (e5_setup.configuration).
+compute pod at a time). Standard library only. Seeds: A = 2 (E4's), B = 102, E = 402, F = 502 (e5_setup.configuration;
+C = 202 and D = 302 are defined but unused since the plan of 2026-10-23).
 
-  e5_wave1  shuffle f = 1, seeds A and B, experimental and reference (docs/e5/DECISIONS.md (29): the relaunch after the
-            first wave 1 failed at the separation deadline)
-  e5_wave2  seed B's baseline (the reference keeps its full state at 100,000 steps, BASELINE_REFERENCE_RESUMABLE_AT, for
-            E8's immunisation) and shuffle f = 1 seed C, experimental and reference
-  e5_wave3  TO BE CONFIRMED after wave 1's results: seed C's baseline and shuffle f = 1 seed D, experimental and reference
-            -- 3 seeds of the baseline (A = E4's pair, B, C) and 4 of f = 1 (A, B, C, D), paired by seed
+  e5_wave1  shuffle f = 1, seeds A and B, experimental and reference (docs/e5/DECISIONS.md (29))
+  e5_wave2  seed B's baseline, experimental and reference (the reference keeps its full state at 100,000 steps,
+            BASELINE_REFERENCE_RESUMABLE_AT, for E8), and two shuffle f = 1 EXPERIMENTAL runs, seeds E and F, replacing
+            seed B's experimental run (locked in): both measured against seed B's f = 1 reference (REFERENCE_SEED_OF,
+            docs/e5/DECISIONS.md (32))
+  e5_probes_all  no training: the probes of every healthy pair of waves 1 and 2 and of seed A's baseline (E4's own pair),
+            in ONE batch after wave 2, at K = 300,000 (PROBES_CHECKPOINT); a pair whose run failed, never switched or
+            locked in is left out at submission (submit_kubeflow.py, phase probes)
 
-  e5_probes_all  no training: the probes of every pair (baselines A = E4's pair, B, C; shuffle f = 1 A-D), in ONE batch
-            after wave 3, at one common checkpoint chosen by the convergence criterion (no probe between the waves)
-
-DEFERRED (defined, never submitted): shuffle f = 0.5 (abandoned for E5, (31)) and the immunisation (moved to E8). Every
-run trains E4's full planned budget (300,000 steps) with E5's procedure (same-background switch statistic, deadline
-75,000, late threshold 1.5 bits from 6,100). Batch parameters, set at launch: --configuration (every phase; p1-b-d1 only),
---e4-results (probes of the baseline A).
+Two waves only (2026-10-23): no wave 3. DEFERRED (defined, never submitted): shuffle f = 0.5 (abandoned for E5, (31))
+and the immunisation (moved to E8). Every run trains E4's full planned budget (300,000 steps) with E5's procedure
+(same-background switch statistic, deadline 75,000, late threshold 1.5 bits from 6,100). Batch parameters, set at
+launch: --configuration (every phase; p1-b-d1 only), --e4-results (probes of the baseline A).
 """
 
 from __future__ import annotations
@@ -29,14 +29,15 @@ WAVES: dict[str, dict[str, tuple]] = {
     "e5_wave1": {"A_sh100_experimental": ("A", "shuffle", 1.0, "experimental"), "A_sh100_reference": ("A", "shuffle", 1.0, "reference"),
                  "B_sh100_experimental": ("B", "shuffle", 1.0, "experimental"), "B_sh100_reference": ("B", "shuffle", 1.0, "reference")},
     "e5_wave2": {"B_base_experimental": ("B", "baseline", None, "experimental"), "B_base_reference": ("B", "baseline", None, "reference"),
-                 "C_sh100_experimental": ("C", "shuffle", 1.0, "experimental"), "C_sh100_reference": ("C", "shuffle", 1.0, "reference")},
-    # TO BE CONFIRMED by the user after wave 1's results (docs/e5/DECISIONS.md (31)): submittable, not to be launched before
-    "e5_wave3": {"C_base_experimental": ("C", "baseline", None, "experimental"), "C_base_reference": ("C", "baseline", None, "reference"),
-                 "D_sh100_experimental": ("D", "shuffle", 1.0, "experimental"), "D_sh100_reference": ("D", "shuffle", 1.0, "reference")},
+                 "E_sh100_experimental": ("E", "shuffle", 1.0, "experimental"), "F_sh100_experimental": ("F", "shuffle", 1.0, "experimental")},
     "e5_probes_baseline_A": {},  # probes only: seed A's baseline is E4's own pair, re-probed with E5's protocol
-    # probes only, ONE batch after wave 3 at one common checkpoint (docs/e5/DECISIONS.md (31)): every pair of the campaign
+    # probes only, ONE batch after wave 2 at K = PROBES_CHECKPOINT (docs/e5/DECISIONS.md (31), (32)): every healthy pair
     "e5_probes_all": {},
 }
+# an experimental run measured against the reference of ANOTHER seed (docs/e5/DECISIONS.md (32)): the replacements of seed
+# B's experimental run (locked in) are paired with seed B's f = 1 reference. Absent: the run's own seed.
+REFERENCE_SEED_OF: dict[tuple[str, str], str] = {("E", "shuffle"): "B", ("F", "shuffle"): "B"}
+PROBES_CHECKPOINT = 300000
 DEFERRED: dict[str, dict[str, tuple]] = {
     # f = 0.5: abandoned for E5 (docs/e5/DECISIONS.md (31)), kept defined
     "f050": {"A_sh050_experimental": ("A", "shuffle", 0.5, "experimental"), "A_sh050_reference": ("A", "shuffle", 0.5, "reference"),
@@ -48,11 +49,12 @@ BASELINE_REFERENCE_RESUMABLE_AT = (100000,)
 # the probe pairs of each wave: (seed label, training, fraction)
 PROBE_PAIRS: dict[str, list[tuple]] = {
     "e5_wave1": [("A", "shuffle", 1.0), ("B", "shuffle", 1.0)],
-    "e5_wave2": [("B", "baseline", None), ("C", "shuffle", 1.0)],
-    "e5_wave3": [("C", "baseline", None), ("D", "shuffle", 1.0)],
+    "e5_wave2": [("B", "baseline", None), ("E", "shuffle", 1.0), ("F", "shuffle", 1.0)],
     "e5_probes_baseline_A": [("A", "baseline", None)],
-    "e5_probes_all": [("A", "baseline", None), ("B", "baseline", None), ("C", "baseline", None),
-                      ("A", "shuffle", 1.0), ("B", "shuffle", 1.0), ("C", "shuffle", 1.0), ("D", "shuffle", 1.0)],
+    # every pair of the campaign; at submission, those with a failed, never-switched or locked-in run are left out (seed B's
+    # f = 1 pair, whose experimental run locked in, is replaced by E and F against B's reference)
+    "e5_probes_all": [("A", "baseline", None), ("B", "baseline", None), ("A", "shuffle", 1.0), ("B", "shuffle", 1.0),
+                      ("E", "shuffle", 1.0), ("F", "shuffle", 1.0)],
 }
 BATCHES = WAVES
 BATCH_CPUS = {name: 3 for name in BATCHES}  # as E4: 4 processes, one thread each, on the job's 3 CPUs
@@ -93,6 +95,9 @@ def probe_args(batch: str, configuration: str, checkpoint: int, e4_results: str 
     for seed_label, training, fraction in PROBE_PAIRS[batch]:
         args = ["--config", CONFIG, "--configuration", configuration, "--checkpoint", str(int(checkpoint)), "--find-runs", "results",
                 "--training", training, "--seed-label", seed_label]
+        ref_label = REFERENCE_SEED_OF.get((seed_label, training))
+        if ref_label is not None:
+            args += ["--reference-seed-label", ref_label]
         if fraction is not None:
             args += ["--fraction", str(fraction)]
         if training in ("immunisation", "baseline") and seed_label == "A":

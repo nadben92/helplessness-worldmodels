@@ -86,6 +86,7 @@ def weights_path(run_dir: Path, info: dict, k: int) -> Path:
 def find_pair(args) -> tuple[Path, Path]:
     cfg = e5_setup.load_config(args.config)
     seed = e5_setup.configuration(cfg, args.configuration, args.seed_label)["seed"]
+    ref_seed = seed if args.reference_seed_label is None else e5_setup.configuration(cfg, args.configuration, args.reference_seed_label)["seed"]
     root, cid = args.find_runs, args.configuration
     if args.training == "immunisation":
         exp = e5_setup.find_run(root, cid, "immunisation", None, seed)
@@ -103,11 +104,12 @@ def find_pair(args) -> tuple[Path, Path]:
         return (e5_setup.find_e4_run(args.e4_results, cid, "experimental", need=need),
                 e5_setup.find_e4_run(args.e4_results, cid, "reference", need=need))
     return (e5_setup.find_run(root, cid, args.training, "experimental", seed, args.fraction),
-            e5_setup.find_run(root, cid, args.training, "reference", seed, args.fraction, need=f"checkpoints/agent_env{args.checkpoint:06d}.pt"))
+            e5_setup.find_run(root, cid, args.training, "reference", ref_seed, args.fraction, need=f"checkpoints/agent_env{args.checkpoint:06d}.pt"))
 
 
-def check_pair(exp: dict, ref: dict) -> None:
-    if exp["configuration"] != ref["configuration"] or exp["seed"] != ref["seed"]:
+def check_pair(exp: dict, ref: dict, cross_seed: bool = False) -> None:
+    """cross_seed: the reference may be another seed's (docs/e5/DECISIONS.md (32)); never implicit."""
+    if exp["configuration"] != ref["configuration"] or (exp["seed"] != ref["seed"] and not cross_seed):
         raise SystemExit(f"not a pair: {exp['configuration']} seed {exp['seed']} vs {ref['configuration']} seed {ref['seed']}")
     if ref["condition"] != "reference" or ref["training"] == "immunisation":
         raise SystemExit("the reference run must be a reference (baseline or shuffle)")
@@ -166,6 +168,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--training", choices=e5_setup.TRAININGS, default=None)
     parser.add_argument("--fraction", type=float, default=None)
     parser.add_argument("--seed-label", choices=e5_setup.SEED_LABELS, default=None)
+    parser.add_argument("--reference-seed-label", choices=e5_setup.SEED_LABELS, default=None,
+                        help="--find-runs: the reference of ANOTHER seed (batches.REFERENCE_SEED_OF: seed B's locked-in experimental run "
+                             "replaced by E and F against B's reference, docs/e5/DECISIONS.md (32)); with explicit runs: allow it")
     parser.add_argument("--e4-results", type=Path, default=None, help="E4's results root (the reference of immunisation A)")
     parser.add_argument("--images", nargs="+", default=["all"], help="all, training, extreme, or image indices")
     parser.add_argument("--n-walks", type=int, default=None, help="default: e5.probes.n_walks of --config (150)")
@@ -183,7 +188,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.n_walks is None:
         args.n_walks = int(e5_setup.load_config(args.config)["e5"]["probes"]["n_walks"])
     exp, ref = run_info(args.experimental_run), run_info(args.reference_run)
-    check_pair(exp, ref)
+    check_pair(exp, ref, cross_seed=args.reference_seed_label is not None)
     cfg = exp["cfg"]
     if args.device is not None:
         cfg["runtime"]["device"] = args.device
@@ -232,6 +237,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.save_steps:
         np.savez_compressed(out / "steps.npz", **result["steps"])
     meta = {"configuration": exp["configuration"], "training": exp["training"], "fraction": exp["fraction"], "seed": exp["seed"],
+            "reference_seed": ref["seed"],
             "checkpoint_k": args.checkpoint, "dynamics_switch_step": exp["switch"],
             "weights": {k: str(v) for k, v in weights.items()}, "weights_sha256": {k: sha256(p) for k, p in weights.items()},
             "runs": {"experimental": str(args.experimental_run), "reference": str(args.reference_run)}, "device": str(device),

@@ -24,16 +24,12 @@ def test_waves_after_the_failed_first_wave():
                                          "B_sh100_reference": ("B", "shuffle", 1.0, "reference")}
     assert batches.WAVES["e5_wave2"] == {"B_base_experimental": ("B", "baseline", None, "experimental"),
                                          "B_base_reference": ("B", "baseline", None, "reference"),
-                                         "C_sh100_experimental": ("C", "shuffle", 1.0, "experimental"),
-                                         "C_sh100_reference": ("C", "shuffle", 1.0, "reference")}
-    assert batches.WAVES["e5_wave3"] == {"C_base_experimental": ("C", "baseline", None, "experimental"),
-                                         "C_base_reference": ("C", "baseline", None, "reference"),
-                                         "D_sh100_experimental": ("D", "shuffle", 1.0, "experimental"),
-                                         "D_sh100_reference": ("D", "shuffle", 1.0, "reference")}
-    # paired by seed: f = 1 on A-D, the baseline on B and C (A's is E4's own pair)
-    trained = [spec for w in ("e5_wave1", "e5_wave2", "e5_wave3") for spec in batches.WAVES[w].values()]
-    assert sorted({s[0] for s in trained if s[1] == "shuffle"}) == ["A", "B", "C", "D"]
-    assert sorted({s[0] for s in trained if s[1] == "baseline"}) == ["B", "C"]
+                                         "E_sh100_experimental": ("E", "shuffle", 1.0, "experimental"),
+                                         "F_sh100_experimental": ("F", "shuffle", 1.0, "experimental")}
+    assert "e5_wave3" not in batches.WAVES  # two waves only (docs/e5/DECISIONS.md (32))
+    # the replacements of seed B's locked-in experimental run are measured against seed B's f = 1 reference
+    assert batches.REFERENCE_SEED_OF == {("E", "shuffle"): "B", ("F", "shuffle"): "B"}
+    assert batches.PROBES_CHECKPOINT == 300000
     in_waves = {spec for wave in batches.WAVES.values() for spec in wave.values()}
     assert not any(spec[1] == "immunisation" or spec[2] == 0.5 for spec in in_waves)
     assert {spec[1] for d in batches.DEFERRED.values() for spec in d.values()} == {"shuffle", "immunisation"}
@@ -51,15 +47,14 @@ def test_train_commands():
         assert cmd[cmd.index("--training") + 1] == "shuffle" and cmd[cmd.index("--fraction") + 1] == "1.0"
         assert "--max-env-steps" not in cmd and cmd[cmd.index("--device") + 1] == "cuda"
     w2 = dict(submit.commands("train", "PY", "e5_wave2", "p1-b-d1"))
+    assert sorted(w2) == ["B_base_experimental", "B_base_reference", "E_sh100_experimental", "F_sh100_experimental"]
     ref = w2["B_base_reference"]
     assert ref[ref.index("--save-resumable-at") + 1:ref.index("--device")] == ["100000"]
-    for job in ("B_base_experimental", "C_sh100_experimental", "C_sh100_reference"):
-        assert "--save-resumable-at" not in w2[job]
-    for job, label in (("B_base_experimental", "B"), ("C_sh100_experimental", "C"), ("C_sh100_reference", "C")):
-        assert w2[job][w2[job].index("--seed-label") + 1] == label
-    w3 = dict(submit.commands("train", "PY", "e5_wave3", "p1-b-d1"))
-    assert sorted(w3) == ["C_base_experimental", "C_base_reference", "D_sh100_experimental", "D_sh100_reference"]
-    assert w3["D_sh100_reference"][w3["D_sh100_reference"].index("--fraction") + 1] == "1.0"
+    for job, label, training in (("B_base_experimental", "B", "baseline"), ("E_sh100_experimental", "E", "shuffle"),
+                                 ("F_sh100_experimental", "F", "shuffle")):
+        cmd = w2[job]
+        assert cmd[cmd.index("--seed-label") + 1] == label and cmd[cmd.index("--training") + 1] == training
+        assert "--save-resumable-at" not in cmd and cmd[cmd.index("--condition") + 1] == "experimental"
     with pytest.raises(ValueError):
         submit.commands("train", "PY", "e5_wave1", "")  # the configuration is required
 
@@ -69,9 +64,11 @@ def test_probe_commands():
     assert sorted(jobs) == ["probes_A_sh100_k100000", "probes_B_sh100_k100000"]
     assert all("--e4-results" not in cmd for cmd in jobs.values())
     jobs = dict(submit.commands("probes", "PY", "e5_wave2", "p1-b-d1", checkpoint=100000))
-    assert sorted(jobs) == ["probes_B_base_k100000", "probes_C_sh100_k100000"]
-    jobs = dict(submit.commands("probes", "PY", "e5_wave3", "p1-b-d1", checkpoint=100000))
-    assert sorted(jobs) == ["probes_C_base_k100000", "probes_D_sh100_k100000"]
+    assert sorted(jobs) == ["probes_B_base_k100000", "probes_E_sh100_k100000", "probes_F_sh100_k100000"]
+    for name in ("probes_E_sh100_k100000", "probes_F_sh100_k100000"):
+        cmd = jobs[name]
+        assert cmd[cmd.index("--reference-seed-label") + 1] == "B"
+    assert "--reference-seed-label" not in jobs["probes_B_base_k100000"]
 
 
 def test_config_is_e4_unchanged_plus_e5():
@@ -161,7 +158,7 @@ def test_replay_of_the_corrected_criterion_on_the_failed_wave_1():
 
 
 def test_seeds_c_and_d_and_no_stream_collision():
-    """docs/e5/DECISIONS.md (31), (32): seeds A-E of p1-b-d1 are 2, 102, 202, 302, 402 (A + 100 per label, B's rule), the same in
+    """docs/e5/DECISIONS.md (31), (32): seeds A-F of p1-b-d1 are 2, 102, 202, 302, 402, 502 (A + 100 per label, B's rule), the same in
     e5_setup and in the export's text reading; every stream root of every E4 and E5 run is distinct -- the experimental
     root SeedSequence(seed), the reference's [seed, 1], the assignment stream's [seed, 2] -- except seed A, which IS E4's
     run of p1-b-d1 on purpose (its baseline is E4's pair)."""
@@ -169,7 +166,7 @@ def test_seeds_c_and_d_and_no_stream_collision():
 
     cfg = e5_setup.load_config(REPO_ROOT / "configs" / "e5" / "e5.yaml")
     e5_seeds = {label: e5_setup.configuration(cfg, "p1-b-d1", label)["seed"] for label in e5_setup.SEED_LABELS}
-    assert e5_seeds == {"A": 2, "B": 102, "C": 202, "D": 302, "E": 402}
+    assert e5_seeds == {"A": 2, "B": 102, "C": 202, "D": 302, "E": 402, "F": 502}
     assert submit.seeds(REPO_ROOT, "p1-b-d1") == e5_seeds
     e4_seeds = {c["seed"] for c in cfg["e4"]["configurations"].values()}
     seeds = sorted(e4_seeds | set(e5_seeds.values()))

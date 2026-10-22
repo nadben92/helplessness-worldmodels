@@ -6,14 +6,13 @@ GPU, plus one probes-only batch (`e5_probes_baseline_A`). It is launched from **
 runs and probes and is never touched by E5, except to read E4's results.
 
 Since 2026-10-22 (docs/e5/DECISIONS.md (29)): the first wave 1 (f = 1 and f = 0.5, seed A) failed at the separation
-deadline; the campaign is now:
+deadline; since 2026-10-23 the campaign is two waves (docs/e5/DECISIONS.md (32)):
 
 | Wave | Runs | Expected duration |
 |---|---|---|
-| `e5_wave1` | shuffle f = 1, seeds A and B (exp, ref): 4 runs | about 45-50 h |
-| `e5_wave2` | seed B's baseline (exp, ref; the reference keeps its full state at 100,000 steps, for E8) and shuffle f = 1 seed C (exp, ref): 4 runs | about 45-50 h |
-| `e5_wave3` | TO BE CONFIRMED: seed C's baseline and shuffle f = 1 seed D (exp, ref): 4 runs | about 45-50 h |
-| `e5_probes_baseline_A` | no training: E4's own pair of p1-b-d1 re-probed with E5's probe script (150 walks) | about 15 min |
+| `e5_wave1` | shuffle f = 1, seeds A and B (exp, ref): 4 runs (seed B's experimental run locked in) | about 45-50 h |
+| `e5_wave2` | seed B's baseline (exp, ref; the reference keeps its full state at 100,000 steps, for E8) and two shuffle f = 1 experimental runs, seeds E (402) and F (502), replacing seed B's and measured against seed B's f = 1 reference: 4 runs | about 45-50 h |
+| `e5_probes_all` | no training: every healthy pair of waves 1-2 and seed A's baseline (E4's own pair), at K = 300,000 | a few hours |
 
 Shuffle f = 0.5 is abandoned for E5 (docs/e5/DECISIONS.md (31)); the immunisation moved to E8 (both in `batches.DEFERRED`,
 never submitted). The durations scale E4's 40-45 h for 300,000 steps (four runs in parallel) by the shuffle runs' extra
@@ -202,35 +201,24 @@ Its console log is `$R/console.log` (and the supervisor's copy `logs/kubeflow/<s
 `critic_loss` print as nan before any switch: the agent's heads train only from the switch on (not a numerical
 failure).
 
-## Step 4 -- wave 2 (after wave 1 has finished and is exported: one compute pod at a time)
+## Step 4 -- wave 2 (after wave 1 has finished, is exported and checked: one compute pod at a time)
 
 ```bash
 cd /scratch/helplessness-worldmodels-e5
 python experiments/E5_belief_training/export_batch.py create --batch e5_wave1 --configuration p1-b-d1     # wave 1 first
 python experiments/E5_belief_training/check_wave.py --batch e5_wave1 --out exports/e5_wave1_check.json      # the learning check
-git pull --ff-only && git status --short --untracked-files=no                                                                  # prints nothing
+git pull --ff-only && git status --short --untracked-files=no                                             # prints nothing
 python experiments/E5_belief_training/submit_kubeflow.py --batch e5_wave2 --repo-dir /scratch/helplessness-worldmodels-e5 --dry-run
 python experiments/E5_belief_training/submit_kubeflow.py --batch e5_wave2 --repo-dir /scratch/helplessness-worldmodels-e5
 ```
 
-Four runs: seed B's baseline, experimental and reference, and shuffle f = 1 seed C (202), experimental and reference.
-The dry run lists `B_base_experimental`, `B_base_reference` (with `--save-resumable-at 100000`), `C_sh100_experimental`,
-`C_sh100_reference`. The reference of seed B keeps its full state at 100,000 steps (`checkpoints/resumable_env100000.pt`,
-about 40 MB), from which E8's immunisation will branch. The checks of step 3 apply to the shuffle runs.
+Four runs (the dry run lists them): `B_base_experimental`, `B_base_reference` (with `--save-resumable-at 100000`: its full
+state at 100,000 steps, `checkpoints/resumable_env100000.pt`, for E8's immunisation), `E_sh100_experimental` (seed 402)
+and `F_sh100_experimental` (seed 502) -- two experimental runs replacing seed B's (locked in), both measured against seed
+B's f = 1 reference of wave 1 (`batches.REFERENCE_SEED_OF`; docs/e5/DECISIONS.md (32)). The checks of step 3 apply to
+the shuffle runs; `check_wave.py --batch e5_wave2` pairs E and F with seed B's reference of wave 1 by itself.
 
-## Step 5 -- wave 3: TO BE CONFIRMED by the user after wave 1's results (docs/e5/DECISIONS.md (31))
-
-Only once the user has confirmed it, after wave 2 has finished, is exported and checked:
-
-```bash
-python experiments/E5_belief_training/export_batch.py create --batch e5_wave2 --configuration p1-b-d1
-python experiments/E5_belief_training/check_wave.py --batch e5_wave2 --out exports/e5_wave2_check.json
-python experiments/E5_belief_training/submit_kubeflow.py --batch e5_wave3 --repo-dir /scratch/helplessness-worldmodels-e5 --dry-run
-python experiments/E5_belief_training/submit_kubeflow.py --batch e5_wave3 --repo-dir /scratch/helplessness-worldmodels-e5
-```
-
-Four runs: seed C's baseline and shuffle f = 1 seed D (302), experimental and reference. With waves 1-3: the baseline on
-seeds A (E4's pair), B, C and shuffle f = 1 on A, B, C, D, paired by seed.
+There is no wave 3 (docs/e5/DECISIONS.md (32)).
 
 ## Step 6 -- runs interrupted by the infrastructure: resume them
 
@@ -249,26 +237,28 @@ One run only: add `--resume results/E5_belief_training/<the run's directory name
 
 A run stopped by a training guard (`SeparationNotReachedError`, `CollapseAfterSwitchError`) is a result: report it.
 
-## Step 7 -- the probes: ONE batch after wave 3 (docs/e5/DECISIONS.md (31))
+## Step 7 -- the probes: ONE batch after wave 2, at K = 300,000 (docs/e5/DECISIONS.md (31), (32))
 
-After wave 3 (or wave 2, if wave 3 is not confirmed) has finished, been exported and checked, every pair of the campaign
-is probed in one batch, `e5_probes_all` -- the baselines A (E4's own pair of p1-b-d1, under `--e4-results`), B, C and
-shuffle f = 1 A, B, C, D -- at ONE common checkpoint `K`, chosen by the user from the checks' `converged at` lists (E4's
-criterion; a point of E4's grid, whose weights every run kept):
+After wave 2 has finished, been exported and checked, every healthy pair of waves 1 and 2 is probed in one batch,
+`e5_probes_all`, at K = 300,000 (`batches.PROBES_CHECKPOINT`): seed A's baseline (E4's own pair of p1-b-d1, under
+`--e4-results`), seed B's baseline, shuffle f = 1 seed A, and the replacements E and F against seed B's f = 1 reference.
+At submission (dry run included), a pair is LEFT OUT, with its reason printed, when one of its runs is not `done`, never
+switched, locked in (check_wave.py's criteria) or lacks its weights at K: seed B's own f = 1 pair (its experimental run
+locked in) is left out this way, and a replacement that fails is too; if both replacements succeed, both are probed.
 
 ```bash
 cd /scratch/helplessness-worldmodels-e5
-python experiments/E5_belief_training/submit_kubeflow.py --batch e5_probes_all --phase probes --checkpoint $K     --e4-results /scratch/helplessness-worldmodels-e4/results --repo-dir /scratch/helplessness-worldmodels-e5 --dry-run
-python experiments/E5_belief_training/submit_kubeflow.py --batch e5_probes_all --phase probes --checkpoint $K     --e4-results /scratch/helplessness-worldmodels-e4/results --repo-dir /scratch/helplessness-worldmodels-e5
+python experiments/E5_belief_training/submit_kubeflow.py --batch e5_probes_all --phase probes --checkpoint 300000     --e4-results /scratch/helplessness-worldmodels-e4/results --repo-dir /scratch/helplessness-worldmodels-e5 --dry-run
+python experiments/E5_belief_training/submit_kubeflow.py --batch e5_probes_all --phase probes --checkpoint 300000     --e4-results /scratch/helplessness-worldmodels-e4/results --repo-dir /scratch/helplessness-worldmodels-e5
 ```
 
-Seven jobs (`probes_<seed>_<base|sh100>_k<K>`), two at a time on the GPU; 150 walks, the full grid, the validity of every
-probe and the reconstruction diagnostic (docs/e5/DECISIONS.md (22)). (Wave 3 not confirmed: the jobs of seeds C's baseline
-and D fail at once, their runs missing; the others are unaffected.) Then one export per wave (the probes are included)
-and, locally, `export_batch.py verify` and the aggregation over 2 to 4 seeds per condition:
+The dry run prints the `LEFT OUT <job>: <reason>` lines, then the jobs; two run at a time on the GPU; 150 walks, the full
+grid, the validity of every probe and the reconstruction diagnostic (docs/e5/DECISIONS.md (22)). Then one export per wave
+(the probes are included) and, locally, `export_batch.py verify` and the aggregation over the seeds of each condition (2
+to 3: the replacements count as experimental runs of f = 1 against B's reference):
 
 ```bash
-python experiments/E5_belief_training/analyse_probes.py --root <extracted results root(s)> --checkpoint $K --out <dir>
+python experiments/E5_belief_training/analyse_probes.py --root <extracted results root(s)> --checkpoint 300000 --out <dir>
 ```
 
 **Keep every checkpoint until then.** The probes need every run's `checkpoints/agent_env<K>.pt` on the volume, E4's runs of

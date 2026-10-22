@@ -434,3 +434,33 @@ Ce qu'on peut attendre de chaque option :
   environ 0,56 si chaque run réussit à 0,75.
 - **Avec seulement A, C et D**, la probabilité d'avoir 3 paires complètes est d'environ 0,3 ; elle passe à environ 0,6
   avec E en plus.
+
+## 11. Deux vagues seulement : remplaçants de B exposé, sondes à K = 300 000 (2026-10-23 ; décision (32))
+
+**Ce qui change.**
+
+- La vague 3 est supprimée, ainsi que la baseline C et la graine D.
+- **`e5_wave2`** comprend la baseline B (exposé et référence, la référence sauvegardant son état au pas 100 000) et deux
+  f = 1 exposés de graines **402** (E) et **502** (F). Ils remplacent B exposé, qui s'est verrouillé, et sont mesurés
+  contre la référence f = 1 de la graine 102.
+- **Justification de l'appariement** : la référence annule le biais de représentation, elle n'apparie pas le hasard ;
+  en E4 déjà, exposé et référence avaient des flux différents.
+- **Conséquence** : les tirages d'affectations ne sont plus partagés entre ces paires-là.
+
+**Sondes.** Un seul batch, `e5_probes_all`, à K = 300 000, couvre tous les runs sains des vagues 1 et 2 et la baseline A.
+
+- Les paires écartées sont listées à la soumission ; c'est le cas de la paire f = 1 de la graine B.
+- Si les deux remplaçants réussissent, les deux sont sondés.
+
+**`check_wave.py`.** Il exclut les runs verrouillés des paires et le signale (`EXCLUDED`).
+
+**Calendrier** (45 à 50 h par vague, une demi-journée d'export et de bilan entre deux étapes, un seul pod à la fois) :
+
+| Étape | Estimation |
+|---|---|
+| Fin de la vague 1 | 24 oct., entre 6 h et 11 h. B exposé échoue à la limite de bascule vers le 23 oct. à 5 h, ce qui ne raccourcit pas la vague. |
+| Lancement de la vague 2 | 24 oct. au soir |
+| Fin de la vague 2 | 26 oct. au soir |
+| Lancement des sondes | 27 oct. au matin. 6 paires dont 1 écartée, 2 à la fois sur le GPU, soit quelques heures. |
+| Fin des sondes | 27 oct. dans la journée |
+| Agrégation des sondes en local | 27–28 oct. |

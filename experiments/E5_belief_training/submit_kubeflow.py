@@ -41,6 +41,7 @@ if str(_SRC) not in sys.path:  # the notebook's Python runs this script without 
     sys.path.insert(0, str(_SRC))
 
 import batches
+import check_wave
 import e5_names
 from export_batch import seeds
 from helplessness.cluster import batch_status
@@ -56,7 +57,8 @@ PHASES = ("train", "resume", "probes")
 
 def commands(phase: str, python: str, batch: str, configuration: str, resume: str = "", checkpoint: int | None = None,
              switch_step: int | None = None, post_steps: int | None = None, e4_results: str | None = None,
-             device: str = "cuda", n_walks: int | None = None, resume_runs: dict[str, str] | None = None) -> list[tuple[str, list[str]]]:
+             device: str = "cuda", n_walks: int | None = None, resume_runs: dict[str, str] | None = None,
+             probe_keep: set[str] | None = None) -> list[tuple[str, list[str]]]:
     """The supervisor's jobs. device: cuda on the cluster; cpu only to try the phases locally (--worker --device cpu).
     Phase resume: one run (resume, job "resume") or several (resume_runs: job name -> run directory, jobs
     "resume_<job name>"), each with the single run's command."""
@@ -74,7 +76,8 @@ def commands(phase: str, python: str, batch: str, configuration: str, resume: st
             raise ValueError("probes requires --checkpoint <k>")
         return [(name, [python, "-u", f"{SCRIPT}/measure_probes.py", *args, "--device", device, "--out-dir", RESULTS_SUBDIR, "--save-steps",
                         *([] if n_walks is None else ["--n-walks", str(n_walks)])])
-                for name, args in batches.probe_args(batch, configuration, checkpoint, e4_results)]
+                for name, args in batches.probe_args(batch, configuration, checkpoint, e4_results)
+                if probe_keep is None or name in probe_keep]
     if phase != "train":
         raise ValueError(f"unknown phase {phase!r}")
     return [(job, [python, "-u", f"{SCRIPT}/run_e5.py", *batches.train_args(batch, job, configuration, switch_step, post_steps),
@@ -135,9 +138,50 @@ def _run_e5(repo_dir: str, phase: str, output: str, batch: str, configuration: s
     subprocess.run(args, cwd=repo, check=True)
 
 
+def probe_plan(repo: Path, batch: str, configuration: str, checkpoint: int, e4_results: str | None) -> tuple[set[str], dict[str, str]]:
+    """The probe jobs of the batch whose pair is healthy (docs/e5/DECISIONS.md (32)) and those left out, with the reason: an
+    E5 run not done, never switched or locked in (check_wave.py's checks), or either run without its weights at the
+    checkpoint; seed A's baseline (E4's own pair) needs its two runs' weights at the checkpoint."""
+    keep, excluded = set(), {}
+    need = f"checkpoints/agent_env{int(checkpoint):06d}.pt"
+    for (name, _), (label, training, fraction) in zip(batches.probe_args(batch, configuration, checkpoint, e4_results), batches.PROBE_PAIRS[batch]):
+        if training == "baseline" and label == "A":
+            try:
+                for condition in ("experimental", "reference"):
+                    e5_names.find_e4_run(Path(e4_results or "-"), configuration, condition, need=need)
+                keep.add(name)
+            except FileNotFoundError as err:
+                excluded[name] = str(err)
+            continue
+        ref_label = batches.REFERENCE_SEED_OF.get((label, training), label)
+        dirs = {"experimental": check_wave.newest(repo, label, training, "experimental", fraction),
+                "reference": check_wave.newest(repo, ref_label, training, "reference", fraction)}
+        reasons = []
+        for role, d in dirs.items():
+            if d is None:
+                reasons.append(f"no {role} run")
+                continue
+            c = check_wave.check_run(check_wave.read_run(d))
+            if c["status"] != "done":
+                reasons.append(f"{role} {c['status']}")
+            if c["switch"]["grad_step"] is None:
+                reasons.append(f"{role} never switched")
+            if c["lock_in"] is not None:
+                reasons.append(f"{role} LOCK-IN")
+            if not (d / need).is_file():
+                reasons.append(f"{role} has no {need}")
+        if reasons:
+            excluded[name] = "; ".join(reasons)
+        else:
+            keep.add(name)
+    return keep, excluded
+
+
 def worker(args) -> int:
+    keep = probe_plan(Path(args.repo_dir), args.batch, args.configuration, args.checkpoint, args.e4_results)[0] if args.phase == "probes" else None
     jobs = commands(args.phase, sys.executable, args.batch, args.configuration, args.resume, args.checkpoint, args.switch_step,
-                    args.post_steps, args.e4_results, args.device, args.n_walks, cluster_resume.decode_resume_runs(args.resume_runs))
+                    args.post_steps, args.e4_results, args.device, args.n_walks, cluster_resume.decode_resume_runs(args.resume_runs),
+                    probe_keep=keep)
     max_parallel = args.max_parallel or (batches.PROBES_MAX_PARALLEL if args.phase == "probes" else None)
     return supervise(jobs, Path(args.repo_dir), Path(args.output), max_parallel=max_parallel)
 
@@ -216,8 +260,13 @@ def main(argv: list[str] | None = None) -> int:
     output = Path(args.output).resolve() if args.output else repo / "logs" / "kubeflow" / f"e5-{args.phase}-{args.batch}-{stamp}"
     patch = runtime_patch_secrets(args.volume, args.mount, {})
     max_parallel = args.max_parallel or (batches.PROBES_MAX_PARALLEL if args.phase == "probes" else None)
+    probe_keep = None
+    if args.phase == "probes":  # docs/e5/DECISIONS.md (32): the healthy pairs only, the others listed with their reason
+        probe_keep, excluded = probe_plan(repo, args.batch, args.configuration, args.checkpoint, args.e4_results)
+        for name, reason in excluded.items():
+            print(f"LEFT OUT {name}: {reason}", flush=True)
     jobs = commands(args.phase, "<venv python>", args.batch, args.configuration, args.resume, args.checkpoint, args.switch_step,
-                    args.post_steps, args.e4_results, "cuda", args.n_walks, resume_runs)
+                    args.post_steps, args.e4_results, "cuda", args.n_walks, resume_runs, probe_keep=probe_keep)
     if args.dry_run:
         print(json.dumps({"batch": args.batch, "phase": args.phase, "configuration": args.configuration, "switch_step": args.switch_step,
                           "post_steps": args.post_steps, "cpus": batches.BATCH_CPUS[args.batch], "max_parallel": max_parallel,

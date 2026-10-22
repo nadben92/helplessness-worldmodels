@@ -51,12 +51,15 @@ def test_check_wave_sees_a_collapse_after_the_switch(tmp_path):
     assert any("consecutive evaluations below" in f for f in c["attention"]) and any("quadrant mass" in f for f in c["attention"])
 
 
-def test_single_probe_batch_after_wave_3():
-    jobs = dict(submit.commands("probes", "PY", "e5_probes_all", "p1-b-d1", checkpoint=200000, e4_results="/scratch/e4/results"))
-    assert sorted(jobs) == sorted(f"probes_{label}_{tag}_k200000" for label, tag in
-                                  (("A", "base"), ("B", "base"), ("C", "base"), ("A", "sh100"), ("B", "sh100"), ("C", "sh100"), ("D", "sh100")))
-    assert [cmd for name, cmd in jobs.items() if "--e4-results" in cmd] == [jobs["probes_A_base_k200000"]]
-    assert all(cmd[cmd.index("--checkpoint") + 1] == "200000" for cmd in jobs.values())
+def test_single_probe_batch_after_wave_2():
+    """docs/e5/DECISIONS.md (32): one probe batch after wave 2, at K = 300,000: baselines A (E4's pair) and B; f = 1 A, B and
+    the replacements E and F against B's reference (seed B's own pair is left out at submission: its run locked in)."""
+    jobs = dict(submit.commands("probes", "PY", "e5_probes_all", "p1-b-d1", checkpoint=batches.PROBES_CHECKPOINT,
+                                e4_results="/scratch/e4/results"))
+    assert sorted(jobs) == sorted(f"probes_{label}_{tag}_k300000" for label, tag in
+                                  (("A", "base"), ("B", "base"), ("A", "sh100"), ("B", "sh100"), ("E", "sh100"), ("F", "sh100")))
+    assert [cmd for name, cmd in jobs.items() if "--e4-results" in cmd] == [jobs["probes_A_base_k300000"]]
+    assert all(cmd[cmd.index("--checkpoint") + 1] == "300000" for cmd in jobs.values())
     assert batches.batch_runs("e5_probes_all") == {}
 
 
@@ -78,3 +81,65 @@ def test_lock_in_and_non_finite_alerts(tmp_path):
     assert c["non_finite"] == ["25119: recon_patch"]
     healthy = cw.read_run(run_dir(tmp_path, "ref", 2.3, [3.0] * 20))
     assert cw.check_run(healthy)["lock_in"] is None and cw.check_run(healthy)["non_finite"] == []
+
+
+
+def healthy_run(root, seed: int, tag: str, role: str, *, status="done", switch=True, locked=False, weights=True):
+    name = (f"grid12x12__2zones-p1-b-d1-{tag}__pair-{'experimental' if role == 'exp' else 'control'}__worldmodel-agent-e5__"
+            f"seed{seed:02d}__20261030T000000Z")
+    d = root / "results" / "E5_belief_training" / name
+    (d / "checkpoints").mkdir(parents=True)
+    (d / "meta.yaml").write_text(f"status: {status}" + chr(10) + f"seed: {seed}" + chr(10), encoding="utf-8")
+    mass = {q: 0.99 for q in ("corridor", "nw", "ne", "se", "sw")}
+    walks = {q: {"I_curve": [2.3]} for q in ("nw", "ne", "se", "sw")}
+    stat = 0.001 if locked else 3.0
+    rec = {"env_step": 300000, "grad_step": 179846, "switch_step": 6301 if switch else None, "batch_pair_js": stat, "train": {},
+           "switch_pairs": {"evals": [[s, stat] for s in range(0, 9000, 50)]},
+           "e4": {"real_context": {"mass_true_by_region": mass}, "walks": walks},
+           "e5": {"estimator_switch": {"grad_step": 6301, "env_step": 10760, "rule": "late_threshold"} if switch else {}}}
+    (d / "checkpoints.jsonl").write_text(json.dumps(rec) + chr(10), encoding="utf-8")
+    if weights:
+        (d / "checkpoints" / "agent_env300000.pt").write_bytes(b"w")
+    return d
+
+
+def test_probe_plan_keeps_healthy_pairs_and_pairs_the_replacements_with_b(tmp_path):
+    """docs/e5/DECISIONS.md (32): at submission, the probes keep the healthy pairs only; seed B's own f = 1 pair is left out
+    (its experimental run locked in); E is measured against B's reference; F, failed, is left out; seed A's baseline needs
+    E4's two runs at the checkpoint."""
+    import shutil
+
+    from helplessness.config import REPO_ROOT
+
+    for rel in ("configs/e5/e5.yaml", "configs/e4/e4.yaml"):
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(REPO_ROOT / rel, tmp_path / rel)
+    for role in ("exp", "ref"):
+        healthy_run(tmp_path, 2, "sh100", role)
+        healthy_run(tmp_path, 102, "base", role)
+    healthy_run(tmp_path, 102, "sh100", "exp", status="failed", switch=False, locked=True, weights=False)
+    healthy_run(tmp_path, 102, "sh100", "ref")
+    healthy_run(tmp_path, 402, "sh100", "exp")
+    healthy_run(tmp_path, 502, "sh100", "exp", status="failed", switch=False, locked=True, weights=False)
+    e4 = tmp_path / "e4results" / "E4_generalization_gradient"
+    for role in ("experimental", "control"):
+        ck = e4 / f"grid12x12__2zones-p1-b-d1__pair-{role}__worldmodel-agent-e4__seed02__20261016T144543Z" / "checkpoints"
+        ck.mkdir(parents=True)
+        (ck / "agent_env300000.pt").write_bytes(b"w")
+    keep, excluded = submit.probe_plan(tmp_path, "e5_probes_all", "p1-b-d1", 300000, str(tmp_path / "e4results"))
+    assert keep == {"probes_A_base_k300000", "probes_B_base_k300000", "probes_A_sh100_k300000", "probes_E_sh100_k300000"}
+    assert "LOCK-IN" in excluded["probes_B_sh100_k300000"] and "experimental failed" in excluded["probes_F_sh100_k300000"]
+    assert cw.reference_seed(tmp_path, "sh100", 402) == 102 and cw.reference_seed(tmp_path, "sh100", 2) == 2
+
+
+def test_cross_seed_reference_only_when_asked():
+    """measure_probes.py pairs an experimental run with another seed's reference only when asked
+    (--reference-seed-label: E and F against B's reference, docs/e5/DECISIONS.md (32))."""
+    import pytest
+
+    mp = load_experiment_module("E5_belief_training", "measure_probes.py", "e5_measure_probes_cross_seed")
+    exp = {"configuration": "p1-b-d1", "seed": 402, "condition": "experimental", "training": "shuffle", "fraction": 1.0}
+    ref = {"configuration": "p1-b-d1", "seed": 102, "condition": "reference", "training": "shuffle", "fraction": 1.0}
+    with pytest.raises(SystemExit):
+        mp.check_pair(exp, ref)
+    mp.check_pair(exp, ref, cross_seed=True)

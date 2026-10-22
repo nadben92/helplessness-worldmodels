@@ -37,7 +37,7 @@ from helplessness.config import REPO_ROOT
 from helplessness.pipeline import two_zones_setup
 
 DEFAULT_CONFIG = REPO_ROOT / "configs" / "e5" / "e5.yaml"
-SEED_LABELS = ("A", "B", "C", "D", "E")  # A = E4's seed; the n-th label adds n x e5.seed_b_offset (DECISIONS (31))
+SEED_LABELS = ("A", "B", "C", "D", "E", "F")  # A = E4's seed; the n-th label adds n x e5.seed_b_offset (DECISIONS (31))
 # measurement slots of the run's streams (E3 1-16, E4 20-21)
 SLOT_ASSIGNMENT_REAL_CONTEXT = 22
 SLOT_ASSIGNMENT_FINAL_REAL_CONTEXT = 23
@@ -60,7 +60,7 @@ def load_config(path: str | Path | None = None) -> dict:
 
 def configuration(cfg: dict, config_id: str, seed_label: str) -> dict:
     """E4's configuration (pipeline.two_zones_setup.configuration) with the seed of the label: A = E4's own seed of the
-    configuration, then B, C, D, E = A + 1, 2, 3, 4 x e5.seed_b_offset (p1-b-d1: 2, 102, 202, 302, 402). e4_seed keeps A."""
+    configuration, then B-F = A + 1-5 x e5.seed_b_offset (p1-b-d1: 2, 102, 202, 302, 402, 502). e4_seed keeps A."""
     conf = two_zones_setup.configuration(cfg, config_id)
     if seed_label not in SEED_LABELS:
         raise ValueError(f"seed label must be one of {SEED_LABELS}, got {seed_label!r}")
