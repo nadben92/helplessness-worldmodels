@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import pickle
 import sys
 from pathlib import Path
 
@@ -31,6 +30,7 @@ import torch
 import yaml
 
 from helplessness.agents.worldmodel.loop import LatentEstimator, to_chw_float, unroll_observation
+from helplessness.cluster.resume import load_for_check
 from helplessness.measures.diagnostics import jensen_shannon_categorical
 from helplessness.pipeline.checkpoints import build_rssm
 
@@ -73,12 +73,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, default=None)
     args = parser.parse_args(argv)
     cfg = yaml.safe_load((args.run / "config.yaml").read_text(encoding="utf-8"))
-    state = torch.load(args.run / "checkpoints" / "resume.pt", map_location="cpu", weights_only=False)
+    # entirely on the CPU, the pickles inside included (the replay's CUDA copy of its table), with the notebook's older
+    # torch / numpy: cluster.resume.load_for_check, as the resume check
+    state, replay, _ = load_for_check(args.run / "checkpoints" / "resume.pt")
     device = torch.device(args.device)
     rssm = build_rssm(cfg)
     rssm.load_state_dict(state["rssm"])
     rssm.to(device).eval()
-    replay = pickle.loads(state["replay"])
+    if device.type == "cpu":
+        replay._device_table = replay._device_background = None  # gather from the host tables
+    else:
+        replay.to_device(device)
     rows, _ = replay.obs_rows_and_flags()
     tr = cfg["train"]
     rng = np.random.default_rng(0)
