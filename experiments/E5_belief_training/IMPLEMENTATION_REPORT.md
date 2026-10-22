@@ -358,3 +358,36 @@ Attention : un run f = 0 serait identique bit à bit à la baseline de même gra
 - **Si z ne code pas l'état** alors que la décodabilité est non nulle, l'information passe par h, et une bascule
   n'aiderait pas. Si z code l'affectation sur toutes ses variables (comme au début sous f = 1), c'est le plafond
   structurel de (28), aggravé par la longue phase à lr 1e-3.
+
+## 9. Diagnostic du latent, abandon de f = 0,5, vagues 2 et 3 (2026-10-22 ; décision (31))
+
+**Diagnostic** (`latent_ceiling.py` sur les 4 runs échoués, au pas d'env 125 000) :
+
+- **f = 1 référence.** Partage sain du latent : les variables 3, 5 et 6 codent la position, les 0, 2 et 4 la position et
+  l'affectation, les 1 et 7 surtout l'affectation. Les postérieurs restent mous (netteté de 0,47 à 0,78). La
+  statistique vaut 2,05 bits, mais **4,74 bits une fois affûtée** : le plafond vient du flou des postérieurs, pas d'un
+  manque d'information.
+- **f = 1 exposé.** Une seule classe par variable, avec une netteté de 0,991 : un code saturé unique pour toutes les
+  entrées. C'est la signature de l'effondrement d'E3, celui du pas 13 250.
+- **f = 0,5 (les deux conditions).** Les 8 variables portent un code saturé (0,991) de la seule affectation, sans aucune
+  information sur l'agent : c'est un verrouillage par saturation. La statistique de l'exposé avait commencé à monter
+  (1,28 bit vers 5 000–6 000 pas) avant de retomber.
+- **Cause de la saturation sous f = 0,5** : non établie par ces données.
+
+**Décisions** : f = 0,5 est abandonné pour E5, avec sa formulation de limite de méthode pour le papier dans (31).
+L'immunisation passe en E8. Les places libérées vont à des graines f = 1 supplémentaires : C = 202, D = 302.
+
+**Vagues** :
+
+- `e5_wave2` : baseline B (avec `--save-resumable-at 100000` sur la référence) et f = 1 graine C.
+- `e5_wave3` : baseline C et f = 1 graine D. Elle est soumissible, mais **à confirmer**.
+- Au total : 3 graines pour la baseline et 4 pour f = 1, en design apparié par graine.
+
+**Sondes** : `analyse_probes.py` agrège de 2 à 4 graines par condition.
+
+**Tests** :
+
+- vagues et dry-runs (composition, graines, options) ;
+- graines C et D, et absence de collision de flux ;
+- agrégation des sondes ;
+- identité f = 0 / baseline avec E4 et rejeu du critère toujours verts.

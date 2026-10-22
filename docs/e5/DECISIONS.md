@@ -477,3 +477,59 @@ tests/e5/data, 50 KB).
 f = 0.5: its statistic peaks around 1.3 bits near 5,000-6,000 gradient steps (experimental) and then decays, before any
 long stay at lr 1e-3 -- not the same signature as the f = 1 collapse (gradual, not a single step); the reference never
 separates. Its diagnosis waits for `latent_ceiling.py` on the failed runs (RUN_GPU.md, step 3b.4).
+
+## 2026-10-22 (31) -- the latent of the failed runs; f = 0.5 abandoned; more seeds of f = 1; waves 2 and 3 (user; implementer for the reading and the code)
+
+**`latent_ceiling.py` on the four failed runs** (their resume.pt at environment step 125,000, gradient step 74,846; 100
+batches drawn as training draws them, the "probs" regime; sharpness = mean largest posterior probability, 0.991 = the
+1% unimix's point mass):
+
+| Run | statistic same background / sharpened / different backgrounds | per variable |
+|---|---|---|
+| f = 1 reference | 2.05 / **4.74** / 3.95 bits | vars 3, 5, 6: the agent's position (state within an assignment 2.5-2.9 bits; assignment <= 0.21); vars 0, 2, 4: both (state 1.7-2.1, assignment 0.7-1.0); vars 1, 7: mostly the assignment (1.84; state 0.74-0.88); 8 classes used; sharpness 0.47-0.78 |
+| f = 1 experimental | 0 / 0 / 0 | ONE class per variable, sharpness 0.991: one saturated code for every input |
+| f = 0.5 reference | 0 / 0 / 6.34 | all 8 variables: the assignment only (1.17-2.12 bits; state within an assignment 0.000), 3-7 classes, sharpness 0.991 |
+| f = 0.5 experimental | 0 / 0 / 6.76 | the same (assignment 1.40-1.83 bits; state 0.000), sharpness 0.991 |
+
+Reading (the user's, confirmed with two precisions). f = 1 reference: a healthy split of the latent between the position
+and the assignment; the plateau near 2 bits comes mainly from SOFT posteriors (sharpness about 0.5, 0.78 on the two
+assignment variables), not from missing information: with confident posteriors on their current classes the statistic
+would be 4.74 bits, above E4's threshold. This amends (28): the latent first codes the background (at gradient step
+2,234 every variable coded the assignment), then frees most of its variables for the position, softly; the switch is
+what makes the posteriors hard (straight-through), so switching such a run on the late threshold is sound. f = 1
+experimental: its final state is E3's collapse signature exactly -- one saturated code for every state -- the collapse
+of gradient step 13,250 (its statistic is 0 from 13,250 to the end, (30)). f = 0.5: more precise than "the background is
+coded": every variable carries a deterministic, SATURATED code of the assignment alone (0.991 = the unimix ceiling, 3-7
+classes per variable) and no information on the agent within an assignment. A saturated posterior starves its own
+gradient (E3, 2026-09-24: the softmax saturates, the gradient through the probabilities vanishes, Adam's state is starved),
+so the latent cannot move any more: a lock-in by saturation. Its statistic had begun to rise (1.28 bits near gradient
+steps 5,000-6,000 in the experimental run) and then decayed: the position was starting to be coded and was lost as the
+background code saturated. The cause of the saturation under f = 0.5 and not under f = 1 is not established by these
+data (the user's hypothesis -- the canonical layout in about 54% of the episodes drives an early, confident
+specialisation on recognising the background -- is compatible with them but untested).
+
+**f = 0.5 is abandoned for E5 (user).** Repairing it would change the training procedure: for f = 0.5 alone, the
+comparison between conditions would be confounded; for every run, everything would be redone -- too costly for a
+secondary question. It stays defined (`batches.DEFERRED["f050"]`), to be retried only if time remains at the end and a
+fix applicable to every condition exists. For the paper (a methodological limit): "When the zone assignment was redrawn
+in only half of the episodes, the world model never learned the agent's position: its latent locked onto the
+background, every latent variable saturating on a code of the assignment alone, and the label-free separation criterion
+was never met. Full variability (every episode redrawn) did not show this lock-in. Repairing it would have required
+changing the training procedure for every condition, so we report the partial-variability condition as a limit of the
+method rather than as a result."
+
+**The immunisation is E8** ((29); `docs/E8_immunisation.md`); seed B's baseline reference keeps its full state at
+100,000 steps.
+
+**More seeds of f = 1; waves 2 and 3 (user).** Seeds by B's rule (A + 100 per label): **C = 202, D = 302**
+(`e5_setup.SEED_LABELS` A-D; the export reads the same from the configs' text). No stream collides: every run's roots --
+SeedSequence(seed), [seed, 1] (reference), [seed, 2] (assignments) -- are distinct across E4's eight seeds (1-8) and E5's
+2, 102, 202, 302, seed 2 being E4's p1-b-d1 run on purpose (tested).
+- `e5_wave2`: seed B's baseline (experimental, reference; the reference with `--save-resumable-at 100000`) and shuffle
+  f = 1 seed C (experimental, reference).
+- `e5_wave3`, **to be confirmed after wave 1's results**, submittable: seed C's baseline and shuffle f = 1 seed D.
+- Together: the baseline on 3 seeds (A = E4's pair, B, C) and f = 1 on 4 (A, B, C, D), paired by seed. The switch
+  criterion is the current one, unchanged ((28)-(30)).
+- Probes: every wave's pairs (`batches.PROBE_PAIRS`) with the full grid at 150 walks, plus `e5_probes_baseline_A`;
+  `analyse_probes.py` aggregates b at step 1 probe by probe over 2 to 4 seeds per condition (valid probes only; mean,
+  sd, number of valid seeds; the extreme probes; tested).

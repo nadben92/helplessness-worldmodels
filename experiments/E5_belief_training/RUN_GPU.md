@@ -11,10 +11,11 @@ deadline; the campaign is now:
 | Wave | Runs | Expected duration |
 |---|---|---|
 | `e5_wave1` | shuffle f = 1, seeds A and B (exp, ref): 4 runs | about 45-50 h |
-| `e5_wave2` | seed B's baseline (exp, ref; the reference keeps its full state at 100,000 steps, for E8): 2 runs | about 40-45 h |
+| `e5_wave2` | seed B's baseline (exp, ref; the reference keeps its full state at 100,000 steps, for E8) and shuffle f = 1 seed C (exp, ref): 4 runs | about 45-50 h |
+| `e5_wave3` | TO BE CONFIRMED: seed C's baseline and shuffle f = 1 seed D (exp, ref): 4 runs | about 45-50 h |
 | `e5_probes_baseline_A` | no training: E4's own pair of p1-b-d1 re-probed with E5's probe script (150 walks) | about 15 min |
 
-Shuffle f = 0.5 is out of the campaign until its diagnosis; the immunisation moved to E8 (both in `batches.DEFERRED`,
+Shuffle f = 0.5 is abandoned for E5 (docs/e5/DECISIONS.md (31)); the immunisation moved to E8 (both in `batches.DEFERRED`,
 never submitted). The durations scale E4's 40-45 h for 300,000 steps (four runs in parallel) by the shuffle runs' extra
 checkpoint measures; a wave lasts as long as its longest run.
 
@@ -172,16 +173,33 @@ tar czf exports/e5_ceiling.tar.gz exports/e5_ceiling
 
 Download `exports/e5_ceiling.tar.gz` and send it.
 
-## Step 4 -- wave 2
+## Step 4 -- wave 2 (after wave 1 has finished and is exported: one compute pod at a time)
 
 ```bash
+cd /scratch/helplessness-worldmodels-e5
+python experiments/E5_belief_training/export_batch.py create --batch e5_wave1 --configuration p1-b-d1     # wave 1 first
+git pull --ff-only && git status --short                                                                  # prints nothing
 python experiments/E5_belief_training/submit_kubeflow.py --batch e5_wave2 --repo-dir /scratch/helplessness-worldmodels-e5 --dry-run
 python experiments/E5_belief_training/submit_kubeflow.py --batch e5_wave2 --repo-dir /scratch/helplessness-worldmodels-e5
 ```
 
-Two runs: seed B's baseline, experimental and reference. The reference (`--save-resumable-at 100000`) keeps its full
-state at 100,000 steps (`checkpoints/resumable_env100000.pt`, about 40 MB), from which E8's immunisation of seed B will
-branch.
+Four runs: seed B's baseline, experimental and reference, and shuffle f = 1 seed C (202), experimental and reference.
+The dry run lists `B_base_experimental`, `B_base_reference` (with `--save-resumable-at 100000`), `C_sh100_experimental`,
+`C_sh100_reference`. The reference of seed B keeps its full state at 100,000 steps (`checkpoints/resumable_env100000.pt`,
+about 40 MB), from which E8's immunisation will branch. The checks of step 3 apply to the shuffle runs.
+
+## Step 5 -- wave 3: TO BE CONFIRMED by the user after wave 1's results (docs/e5/DECISIONS.md (31))
+
+Only once the user has confirmed it, after wave 2 has finished and is exported:
+
+```bash
+python experiments/E5_belief_training/export_batch.py create --batch e5_wave2 --configuration p1-b-d1
+python experiments/E5_belief_training/submit_kubeflow.py --batch e5_wave3 --repo-dir /scratch/helplessness-worldmodels-e5 --dry-run
+python experiments/E5_belief_training/submit_kubeflow.py --batch e5_wave3 --repo-dir /scratch/helplessness-worldmodels-e5
+```
+
+Four runs: seed C's baseline and shuffle f = 1 seed D (302), experimental and reference. With waves 1-3: the baseline on
+seeds A (E4's pair), B, C and shuffle f = 1 on A, B, C, D, paired by seed.
 
 ## Step 6 -- runs interrupted by the infrastructure: resume them
 
@@ -223,6 +241,14 @@ python experiments/E5_belief_training/submit_kubeflow.py --batch e5_probes_basel
     --e4-results /scratch/helplessness-worldmodels-e4/results --repo-dir /scratch/helplessness-worldmodels-e5 --dry-run
 python experiments/E5_belief_training/submit_kubeflow.py --batch e5_probes_baseline_A --phase probes --checkpoint 300000 \
     --e4-results /scratch/helplessness-worldmodels-e4/results --repo-dir /scratch/helplessness-worldmodels-e5
-``` Wave 3 needs `--e4-results` (immunisation
-A's reference is E4's reference run of `$CONF`). Locally: `export_batch.py verify <extracted dir>`, then the analyses
-(`rsa_e5.py`, the probes).
+```
+
+Every finished run is probed this way, wave by wave (`--batch e5_wave1 | e5_wave2 | e5_wave3`, the probe pairs of
+`batches.PROBE_PAIRS`; only the baseline A needs `--e4-results`), at the same checkpoint `k` for every condition, chosen
+by the convergence criterion. Locally: `export_batch.py verify <extracted dir>`, then the probes of every condition and
+seed aggregated (2 to 4 seeds per condition; invalid probes left out):
+
+```bash
+python experiments/E5_belief_training/analyse_probes.py --root <extracted results root> --checkpoint <k> --out <dir>
+```
+
