@@ -296,3 +296,63 @@ bibliothèque (`two_zones_setup`, `two_zones_records`, `theme_probe_measure`), p
   - 150 marches, et batch `e5_probes_baseline_A` ;
   - symétrie des 12 affectations, testée et écrite dans les sorties ;
   - budget de 300 000 pas, switch_step = 100 000, limite de bascule de 75 000 pas de gradient.
+
+## 8. Échec de la première vague 1 et relance (2026-10-22 ; décision (29))
+
+**Réglage retenu** : la règle d'E4 (3 bits), plus le seuil tardif de 1,5 bit sur 5 évaluations consécutives, actif à
+partir du pas de gradient 6 100 (`e5.late_switch`). C'est juste au-dessus de la bascule la plus tardive d'E4 (6 001) : les
+8 bascules d'E4 sont inchangées par construction.
+
+**Rejeu sur les séries réelles** (`replay_switch.py`) : *en attente de la copie des fichiers légers des runs échoués*
+(`RUN_GPU.md`, étape 3b.1). Le rejeu est exact jusqu'à la bascule. Pour la graine A, les runs relancés sont en outre
+identiques aux runs échoués jusqu'à leur bascule, puisque même code d'entraînement, mêmes graines et même type de GPU.
+Le rejeu prédira donc exactement leur pas de bascule. Seuls indices disponibles d'ici là, les checkpoints :
+
+| Run | JS à 5 846 | JS à 9 355 | JS à 14 917 |
+|---|---|---|---|
+| f = 1 référence | 1,88 | 1,90 | 2,56 |
+| f = 1 exposé | 1,50 | 2,06 | effondré |
+
+- **f = 1 référence** devrait basculer dès le pas de gradient **6 301** (5 évaluations > 1,5 bit à partir de 6 100).
+- **f = 1 exposé** devrait basculer entre 6 301 et environ 9 000, donc avant l'effondrement, qui a commencé entre 9 355
+  et 14 917.
+
+**Vagues** :
+
+- `e5_wave1` : f = 1, graines A et B, exposé + référence (4 runs).
+- `e5_wave2` : baseline B, exposé + référence (2 runs), la référence sauvegardant son état au pas 100 000 pour E8.
+- f = 0,5 et immunisation : `batches.DEFERRED`, jamais soumis.
+
+**Places libres de la vague 2, propositions** :
+
+1. **f = 1 sur une troisième graine C** (exposé + référence), pour 3 graines de la manipulation principale. C'est la
+   proposition à privilégier si la vague 1 bascule bien.
+2. f = 0,5 sur la graine A avec le seuil tardif à 6 100, si le diagnostic de f = 0,5 le permet.
+3. Rien.
+
+Attention : un run f = 0 serait identique bit à bit à la baseline de même graine (testé), donc il n'apporte rien.
+
+**Attendu de la relance** (environ 0,6 pas de gradient par pas d'env, soit environ 3 800 pas de gradient par heure pour
+6 300 pas d'env par heure) :
+
+- **Bascules au plus tôt** au pas de gradient 6 301, soit environ 10 750 pas d'env, environ **1 h 45 après le
+  démarrage**.
+- **f = 1 exposé, graine A** : entre 1 h 45 et environ 2 h 30.
+- **Graine B** : inconnue, mais même ordre de grandeur si elle plafonne comme la graine A.
+- **Après la bascule**, le taux d'apprentissage passe à 1e-4 et le garde-fou d'effondrement (1,0 bit) prend le relais.
+
+**Diagnostic de f = 0,5 et de l'effondrement de f = 1 exposé.**
+
+- **Groupes de même fond** : exacts sous f = 0,5 (décision (28)). Sous f = 0,5, environ 54 % des épisodes sont
+  canoniques, donc la moitié des paires environ est canonique. Une JS d'environ 0 dit qu'aucun groupe, canonique compris,
+  ne sépare les positions dans z.
+- **Instabilité du régime d'avant la bascule** (lr 1e-3, sans clipping) : précédent d'E3, effondrement tardif à lr 1e-3
+  reproduit de façon déterministe. C'est l'explication la plus probable de l'effondrement brutal de f = 1 exposé (même
+  signature). Pour f = 0,5, la dégradation est lente plutôt qu'en une étape, et elle reste à départager.
+- **Hypothèse h contre z** : la statistique ne lit que les postérieurs de z ; la décodabilité (échantillons durs,
+  h et z) a atteint 0,43–0,45 au pas 9 355 sous f = 0,5. `latent_ceiling.py` donne, variable par variable, l'information
+  de z sur l'affectation et sur l'état à affectation fixée.
+- **Boucle sur les 4 runs arrêtés** : `RUN_GPU.md`, étape 3b.4.
+- **Si z ne code pas l'état** alors que la décodabilité est non nulle, l'information passe par h, et une bascule
+  n'aiderait pas. Si z code l'affectation sur toutes ses variables (comme au début sous f = 1), c'est le plafond
+  structurel de (28), aggravé par la longue phase à lr 1e-3.

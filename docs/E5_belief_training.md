@@ -1,6 +1,9 @@
 # E5 — Manipulating the belief through training
 
-**Status (2026-10-21): ready to launch wave 1, not launched.** Branch `e5`, `e4` merged (E4 closed). Configuration
+**Status (2026-10-22): the first wave 1 (f = 1 and f = 0.5, seed A) failed at the separation deadline; relaunch ready,
+not launched: wave 1 = shuffle f = 1 on seeds A and B, with a late switch threshold (1.5 bits from gradient step 6,100);
+wave 2 = seed B's baseline. Shuffle f = 0.5 deferred until its diagnosis; the immunisation moved to E8
+(docs/e5/DECISIONS.md (28), (29)).** Earlier status (2026-10-21): ready to launch wave 1. Branch `e5`, `e4` merged (E4 closed). Configuration
 **p1-b-d1** (seeds A = 2, B = 102), switch step 100,000, probes at 150 walks with E4's validity criterion
 (docs/e5/DECISIONS.md (21)-(27)). Code and usage:
 `experiments/E5_belief_training/README.md`; launch: `experiments/E5_belief_training/RUN_GPU.md`; decisions:

@@ -1,19 +1,22 @@
 # E5 on the GPU cluster: training, export, probes
 
-E5 trains 12 runs on ONE configuration of E4, **`p1-b-d1`** (docs/e5/DECISIONS.md (21); seeds A = 2, B = 102), in three
-waves of four runs, each wave on one GPU (four runs in parallel), plus one probes-only batch (`e5_probes_baseline_A`). It is launched from **its own clone**, `/scratch/helplessness-worldmodels-e5` (branch
-`e5`): the e4 clone (`/scratch/helplessness-worldmodels-e4`) keeps E4's runs and probes and is never touched by E5,
-except to read E4's results (the reference of immunisation A, the switch step).
+E5 trains on ONE configuration of E4, **`p1-b-d1`** (docs/e5/DECISIONS.md (21); seeds A = 2, B = 102), one wave per
+GPU, plus one probes-only batch (`e5_probes_baseline_A`). It is launched from **its own clone**,
+`/scratch/helplessness-worldmodels-e5` (branch `e5`): the e4 clone (`/scratch/helplessness-worldmodels-e4`) keeps E4's
+runs and probes and is never touched by E5, except to read E4's results.
 
-| Wave | Runs | Needs | Expected duration |
-|---|---|---|---|
-| `e5_wave1` | seed A: shuffle f = 1 (exp, ref), shuffle f = 0.5 (exp, ref) | the configuration | about 45-50 h |
-| `e5_wave2` | seed B: baseline (exp, ref; the reference keeps resumable states), shuffle f = 1 (exp, ref) | the configuration (the switch step if known) | about 45-50 h |
-| `e5_wave3` | seed B: shuffle f = 0.5 (exp, ref); immunisation A (recomputed) and B (branched) | the switch step; wave 2 done | about 45-50 h if S + 175,000 <= 300,000, else about (S + 175,000) / 300,000 x 40-45 h |
-| `e5_probes_baseline_A` | no training: E4's own pair of p1-b-d1 re-probed with E5's probe script (150 walks) | `--e4-results` | about 15 min |
+Since 2026-10-22 (docs/e5/DECISIONS.md (29)): the first wave 1 (f = 1 and f = 0.5, seed A) failed at the separation
+deadline; the campaign is now:
 
-The durations scale E4's 40-45 h for 300,000 steps (four runs in parallel) by the shuffle runs' extra checkpoint
-measures (every assignment at every checkpoint: IMPLEMENTATION_REPORT.md, "cost"); a wave lasts as long as its longest run.
+| Wave | Runs | Expected duration |
+|---|---|---|
+| `e5_wave1` | shuffle f = 1, seeds A and B (exp, ref): 4 runs | about 45-50 h |
+| `e5_wave2` | seed B's baseline (exp, ref; the reference keeps its full state at 100,000 steps, for E8): 2 runs | about 40-45 h |
+| `e5_probes_baseline_A` | no training: E4's own pair of p1-b-d1 re-probed with E5's probe script (150 walks) | about 15 min |
+
+Shuffle f = 0.5 is out of the campaign until its diagnosis; the immunisation moved to E8 (both in `batches.DEFERRED`,
+never submitted). The durations scale E4's 40-45 h for 300,000 steps (four runs in parallel) by the shuffle runs' extra
+checkpoint measures; a wave lasts as long as its longest run.
 
 ## Rules
 
@@ -116,69 +119,69 @@ after it), for the final report:
 python experiments/E5_belief_training/switch_monitor.py final --runs results/E5_belief_training/grid* --out /scratch/e5_switch_final.csv
 ```
 
-## Step 3b -- 2026-10-21: stop and relaunch wave 1 with the late threshold (docs/e5/DECISIONS.md (28))
+## Step 3b -- 2026-10-22: after the failed first wave 1, relaunch it (docs/e5/DECISIONS.md (29))
 
-The first launch of wave 1 (supervisor `logs/kubeflow/e5-train-e5_wave1-20261021T140249396664Z`) ran with the 3-bit
-threshold only; its shuffle runs plateau below it. In the notebook:
+The first wave 1 (supervisor `logs/kubeflow/e5-train-e5_wave1-20261021T140249396664Z`) failed: its four runs stopped at
+the separation deadline (`SeparationNotReachedError`). In this order:
+
+**1. Copy its light files** (the switch statistic at every evaluation is in each run's `checkpoints.jsonl`; no weight):
 
 ```bash
 cd /scratch/helplessness-worldmodels-e5
-OLD=logs/kubeflow/e5-train-e5_wave1-20261021T140249396664Z
-python -c "import json; print(json.load(open('$OLD.submission.json'))['job_id'])"     # JOB = this name
-kubectl get trainjobs                                                                 # JOB is listed, Running
-kubectl delete trainjob <JOB>
-kubectl get pods                                                                      # its pod Terminating, then gone
-python experiments/E5_belief_training/submit_kubeflow.py --status $OLD               # the four jobs no longer running
-mkdir -p results/E5_belief_training_aborted/wave1_20261021
-mv results/E5_belief_training/grid12x12__2zones-p1-b-d1-sh* results/E5_belief_training_aborted/wave1_20261021/
+SUP=logs/kubeflow/e5-train-e5_wave1-20261021T140249396664Z
+mkdir -p exports
+tar czf exports/e5_wave1_failed_light.tar.gz $SUP $SUP.submission.json     results/E5_belief_training/grid12x12__2zones-p1-b-d1-sh*/{config.yaml,meta.yaml,checkpoints.jsonl,console.log,assignments.npz}
+tar tzf exports/e5_wave1_failed_light.tar.gz | wc -l      # 4 runs x 5 files + the supervisor's files
+ls -l exports/e5_wave1_failed_light.tar.gz
 ```
 
-(The aborted runs stay on the volume, out of the way of the new ones; their resume.pt feeds `latent_ceiling.py`.) Then,
-once the user has pushed `e5` with the late threshold:
+Download `exports/e5_wave1_failed_light.tar.gz` from the notebook's file browser and send it.
+
+**2. Move the failed runs out of the way** (after the copy):
+
+```bash
+mkdir -p results/E5_belief_training_aborted/wave1_20261021
+mv results/E5_belief_training/grid12x12__2zones-p1-b-d1-sh* results/E5_belief_training_aborted/wave1_20261021/
+ls results/E5_belief_training/                            # no grid12x12__2zones-p1-b-d1-sh* left
+```
+
+**3. Update the clone** (once the user has pushed `e5`), **dry run, launch**:
 
 ```bash
 git -C /scratch/helplessness-worldmodels-e5 pull --ff-only
 git -C /scratch/helplessness-worldmodels-e5 log --oneline -1
-git -C /scratch/helplessness-worldmodels-e5 status --short                            # prints nothing
-grep -n "late_switch" configs/e5/e5.yaml                                              # threshold_bits: 1.5, after_steps: 10000
+git -C /scratch/helplessness-worldmodels-e5 status --short       # prints nothing
+grep -n "late_switch" configs/e5/e5.yaml                          # threshold_bits: 1.5, after_steps: 6100
 python experiments/E5_belief_training/submit_kubeflow.py --batch e5_wave1 --repo-dir /scratch/helplessness-worldmodels-e5 --dry-run
 python experiments/E5_belief_training/submit_kubeflow.py --batch e5_wave1 --repo-dir /scratch/helplessness-worldmodels-e5
 ```
 
-Then the checks of step 3 (`switch_monitor.py early`); a switch by the late rule shows `[rule late_threshold]` in the
-log's `>>> SWITCH` line. Optional, on the aborted runs (CPU, about 10 minutes each):
+The dry run lists `A_sh100_experimental`, `A_sh100_reference`, `B_sh100_experimental`, `B_sh100_reference`. Then the
+checks of step 3 (`switch_monitor.py early`); a switch by the late rule shows `[rule late_threshold]` in the log's
+`>>> SWITCH` line.
+
+**4. The latent diagnostic of the failed runs** (CPU, in the notebook, while wave 1 trains; about 10 minutes per run):
 
 ```bash
-mkdir -p /scratch/e5_ceiling
-for R in results/E5_belief_training_aborted/wave1_20261021/*; do
-  python experiments/E5_belief_training/latent_ceiling.py $R --batches 100 --out /scratch/e5_ceiling/$(basename $R).json; done
+cd /scratch/helplessness-worldmodels-e5
+mkdir -p exports/e5_ceiling
+for R in results/E5_belief_training_aborted/wave1_20261021/grid*; do
+  python experiments/E5_belief_training/latent_ceiling.py $R --batches 100 --out exports/e5_ceiling/$(basename $R).json; done
+tar czf exports/e5_ceiling.tar.gz exports/e5_ceiling
 ```
+
+Download `exports/e5_ceiling.tar.gz` and send it.
 
 ## Step 4 -- wave 2
 
 ```bash
-python experiments/E5_belief_training/submit_kubeflow.py --batch e5_wave2 [--switch-step $S] \
-    --repo-dir /scratch/helplessness-worldmodels-e5 --dry-run
-python experiments/E5_belief_training/submit_kubeflow.py --batch e5_wave2 [--switch-step $S] \
-    --repo-dir /scratch/helplessness-worldmodels-e5
+python experiments/E5_belief_training/submit_kubeflow.py --batch e5_wave2 --repo-dir /scratch/helplessness-worldmodels-e5 --dry-run
+python experiments/E5_belief_training/submit_kubeflow.py --batch e5_wave2 --repo-dir /scratch/helplessness-worldmodels-e5
 ```
 
-The baseline reference of seed B (`B_base_reference`, `--save-resumable-at candidates [S]`) keeps its full state
-(`checkpoints/resumable_env<N>.pt`, about 25-40 MB each) at E4's grid points from 10,000 to 250,000 and at `S` when
-given: immunisation B branches from the one at `S`. If `S` is not in that list and was not given here, immunisation B
-cannot branch: launch wave 2 with `--switch-step $S`.
-
-## Step 5 -- wave 3 (after wave 2 has finished)
-
-```bash
-python experiments/E5_belief_training/submit_kubeflow.py --batch e5_wave3 --switch-step $S [--post-steps $P] \
-    --repo-dir /scratch/helplessness-worldmodels-e5 --dry-run
-python experiments/E5_belief_training/submit_kubeflow.py --batch e5_wave3 --switch-step $S [--post-steps $P] \
-    --repo-dir /scratch/helplessness-worldmodels-e5
-```
-
-`A_imm` recomputes its phase 1 (E4 kept no full state of its reference); `B_imm` has `--branch-from auto` and starts
-from wave 2's `resumable_env<S>.pt` (it fails at once if that file is missing: report it).
+Two runs: seed B's baseline, experimental and reference. The reference (`--save-resumable-at 100000`) keeps its full
+state at 100,000 steps (`checkpoints/resumable_env100000.pt`, about 40 MB), from which E8's immunisation of seed B will
+branch.
 
 ## Step 6 -- runs interrupted by the infrastructure: resume them
 

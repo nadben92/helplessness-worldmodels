@@ -402,3 +402,45 @@ acts where that experiment switched."
 **Risks that remain.** A shuffle run switched by the late rule could see its statistic fall below 1.0 bit after the
 switch (the collapse guard would then stop it: a result). The f = 0.5 runs may still not reach 1.5 bits before the
 deadline (75,000).
+
+## 2026-10-22 (29) -- the first wave 1 failed; wave 1 = f = 1 on seeds A and B; late threshold from 6,100; f = 0.5 out; the immunisation to E8 (user; implementer for the analysis)
+
+**What happened.** The first wave 1 (p1-b-d1, seed A, f = 1 and f = 0.5, both conditions) was not stopped: its four
+runs failed at the separation deadline (75,000 gradient steps, `SeparationNotReachedError`), before the late threshold
+of (28) was pushed. f = 1 reference: statistic 1.8-2.6 bits throughout, agent's patch reconstructed (0.00016 at the
+end): the plateau of (28). f = 1 experimental: **collapsed while waiting for the switch**, between gradient steps 9,355
+and 14,917: statistic 2.06 -> 3e-11, decodability 0.267 -> 0.005, reconstruction of the agent's patch 0.027 -> 9.06,
+never recovered. f = 0.5, both conditions: statistic about 0 throughout, reconstruction 1.0 (step 9,355) -> 2.2-3.0
+(end), decodability falling: they degrade instead of learning.
+
+**Reading of the collapse (implementer, to be confirmed on the copied logs).** Before the switch the world model trains
+at lr 1e-3 (`train.lr`; 1e-4 from the switch on, `lr_after_switch`), with no gradient clipping (`clip_norm: null`).
+E3 diagnosed and reproduced a late single-step collapse at lr 1e-3 (docs/e3/DECISIONS.md, 2026-09-24): a rare batch
+gives the encoder a gradient about 100 times its usual scale, Adam's second moment (starved by near-zero gradients) turns
+it into a large coordinated step, the posterior falls into a saturated, state-independent code and never comes back --
+the reason the procedure drops the lr to 1e-4 at the switch. E3/E4 never stayed long at lr 1e-3 (E4: at most 6,001
+gradient steps); the shuffled runs stayed tens of thousands. The f = 1 experimental collapse has that signature (an
+abrupt, permanent fall of the statistic and of the reconstruction). **Waiting long before the switch is not safe**: an
+argument for an early late threshold.
+
+**Decisions (user).**
+- **Wave 1 = shuffle f = 1, seeds A (2) and B (102), experimental and reference** (4 runs).
+- **Late threshold from gradient step 6,100** (`e5.late_switch.after_steps`; 1.5 bits on 5 consecutive evaluations
+  unchanged): just above E4's latest switch (6,001), so every E4 switch is unchanged by construction (the late rule
+  never acts before 6,100; E4's eight runs switched by the main rule by 6,001); tests: a run that switches by the main
+  rule is unchanged, f = 0 and the baseline with E5's procedure equal E4 bit for bit.
+- **f = 0.5 out of the campaign for now**, until its diagnosis (`batches.DEFERRED["f050"]`, never submitted).
+- **The immunisation moves to E8** (an annex experiment: prevention, beside the therapy): out of E5's waves
+  (`batches.DEFERRED["e8_immunisation"]`), its code kept; seed B's baseline reference keeps its full state at 100,000
+  steps (`batches.BASELINE_REFERENCE_RESUMABLE_AT`) so that E8 can branch from it.
+- **Wave 2 = seed B's baseline, experimental and reference** (2 runs). Two places are free on its GPU (see the
+  implementation report for the proposals).
+- The failed runs move to `results/E5_belief_training_aborted/wave1_20261021/` after their light files are copied
+  (RUN_GPU.md, step 3b).
+
+**The replay.** `replay_switch.py` replays a criterion on the switch statistic a run recorded at every evaluation
+(`switch_pairs.evals` in checkpoints.jsonl): exact up to the switch, since the training does not depend on the rule
+before it (tested: on a run of the test suite, the replay finds the recorded switch). On the failed runs' series it
+gives, for each run, the switch under the corrected criterion and the rule, the collapse onset (the last stretch below
+the collapse guard's 1.0 bit) and the switch's margin before it, and a grid of thresholds (1.0-2.0 bits) and
+activations (6,100 / 8,000 / 10,000). Results: IMPLEMENTATION_REPORT.md, once the series are copied.

@@ -54,7 +54,8 @@ def test_batch_resume_of_e5(repo, capsys):
     jobs = list(batches.batch_runs("e5_wave1"))
     runs, checks = submit.resume_plan(repo, "e5_wave1", CONF, "")
     assert list(runs) == jobs[:3] and [c["resume_from_env_step"] for c in checks[:3]] == [160000, 170000, 180000] and checks[3]["done"]
-    assert all("seed02" in d for d in runs.values())  # seed A of p1-b-d1
+    seed_of = {"A": "seed02", "B": "seed102"}  # p1-b-d1's seeds A and B; wave 1 holds both (docs/e5/DECISIONS.md (29))
+    assert all(f"__{seed_of[batches.batch_runs('e5_wave1')[job][0]]}__" in str(d) for job, d in runs.items())
     batch_jobs = submit.commands("resume", "PY", "e5_wave1", CONF, resume_runs=runs)
     assert [n for n, _ in batch_jobs] == [f"resume_{n}" for n in jobs[:3]]
     for (_, cmd), d in zip(batch_jobs, runs.values()):

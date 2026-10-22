@@ -15,47 +15,45 @@ submit = load_experiment_module("E5_belief_training", "submit_kubeflow.py", "tes
 e5_setup = load_experiment_module("E5_belief_training", "e5_setup.py", "test_e5_batches_setup")
 
 
-def test_twelve_runs_in_three_waves_of_four():
-    runs = [spec for wave in batches.WAVES.values() for spec in wave.values()]
-    assert len(runs) == 12 and [len(w) for w in batches.WAVES.values()] == [4, 4, 4, 0]  # + the probes-only batch of baseline A
-    assert len(set(runs)) == 12
-    count = {}
-    for label, training, fraction, condition in runs:
-        count[(training, fraction)] = count.get((training, fraction), 0) + 1
-    assert count == {("shuffle", 1.0): 4, ("shuffle", 0.5): 4, ("baseline", None): 2, ("immunisation", None): 2}
-    assert {r[0] for r in batches.WAVES["e5_wave1"].values()} == {"A"}
-    assert {r[0] for r in batches.WAVES["e5_wave2"].values()} == {"B"}
-    assert sorted(r[0] for r in runs if r[1] == "baseline") == ["B", "B"]  # seed A's baseline is E4's own pair
+def test_waves_after_the_failed_first_wave():
+    """docs/e5/DECISIONS.md (29): wave 1 = shuffle f = 1, seeds A and B, both conditions; wave 2 = seed B's baseline; f = 0.5
+    and the immunisation (E8) deferred, never in a wave."""
+    assert batches.WAVES["e5_wave1"] == {"A_sh100_experimental": ("A", "shuffle", 1.0, "experimental"),
+                                         "A_sh100_reference": ("A", "shuffle", 1.0, "reference"),
+                                         "B_sh100_experimental": ("B", "shuffle", 1.0, "experimental"),
+                                         "B_sh100_reference": ("B", "shuffle", 1.0, "reference")}
+    assert batches.WAVES["e5_wave2"] == {"B_base_experimental": ("B", "baseline", None, "experimental"),
+                                         "B_base_reference": ("B", "baseline", None, "reference")}
+    in_waves = {spec for wave in batches.WAVES.values() for spec in wave.values()}
+    assert not any(spec[1] == "immunisation" or spec[2] == 0.5 for spec in in_waves)
+    assert {spec[1] for d in batches.DEFERRED.values() for spec in d.values()} == {"shuffle", "immunisation"}
+    for name in batches.DEFERRED:
+        with pytest.raises(ValueError):
+            batches.batch_runs(name)
 
 
 def test_train_commands():
-    jobs = submit.commands("train", "PY", "e5_wave1", "p1-a-d1")
+    jobs = submit.commands("train", "PY", "e5_wave1", "p1-b-d1")
     assert [n for n, _ in jobs] == list(batches.WAVES["e5_wave1"])
     for _, cmd in jobs:
         assert cmd[:3] == ["PY", "-u", "experiments/E5_belief_training/run_e5.py"]
-        assert cmd[cmd.index("--configuration") + 1] == "p1-a-d1" and cmd[cmd.index("--config") + 1] == "configs/e5/e5.yaml"
+        assert cmd[cmd.index("--configuration") + 1] == "p1-b-d1" and cmd[cmd.index("--config") + 1] == "configs/e5/e5.yaml"
+        assert cmd[cmd.index("--training") + 1] == "shuffle" and cmd[cmd.index("--fraction") + 1] == "1.0"
         assert "--max-env-steps" not in cmd and cmd[cmd.index("--device") + 1] == "cuda"
-    w2 = dict(submit.commands("train", "PY", "e5_wave2", "p1-a-d1", switch_step=125000))
+    w2 = dict(submit.commands("train", "PY", "e5_wave2", "p1-b-d1"))
     ref = w2["B_base_reference"]
-    assert ref[ref.index("--save-resumable-at") + 1:ref.index("--save-resumable-at") + 3] == ["candidates", "125000"]
+    assert ref[ref.index("--save-resumable-at") + 1:ref.index("--device")] == ["100000"]
     assert "--save-resumable-at" not in w2["B_base_experimental"]
-    with pytest.raises(ValueError):
-        submit.commands("train", "PY", "e5_wave3", "p1-a-d1")  # the immunisation needs the switch step
-    w3 = dict(submit.commands("train", "PY", "e5_wave3", "p1-a-d1", switch_step=125000, post_steps=175000))
-    assert "--branch-from" not in w3["A_imm"] and w3["B_imm"][w3["B_imm"].index("--branch-from") + 1] == "auto"
-    for job in ("A_imm", "B_imm"):
-        assert w3[job][w3[job].index("--switch-step") + 1] == "125000" and "--condition" not in w3[job]
     with pytest.raises(ValueError):
         submit.commands("train", "PY", "e5_wave1", "")  # the configuration is required
 
 
 def test_probe_commands():
-    jobs = dict(submit.commands("probes", "PY", "e5_wave3", "p1-a-d1", checkpoint=100000, e4_results="/scratch/e4/results"))
-    assert sorted(jobs) == ["probes_A_imm_k100000", "probes_B_imm_k100000", "probes_B_sh050_k100000"]
-    a = jobs["probes_A_imm_k100000"]
-    assert a[a.index("--e4-results") + 1] == "/scratch/e4/results" and "--e4-results" not in jobs["probes_B_imm_k100000"]
-    with pytest.raises(ValueError):
-        submit.commands("probes", "PY", "e5_wave3", "p1-a-d1", checkpoint=1)  # immunisation A needs E4's results
+    jobs = dict(submit.commands("probes", "PY", "e5_wave1", "p1-b-d1", checkpoint=100000))
+    assert sorted(jobs) == ["probes_A_sh100_k100000", "probes_B_sh100_k100000"]
+    assert all("--e4-results" not in cmd for cmd in jobs.values())
+    jobs = dict(submit.commands("probes", "PY", "e5_wave2", "p1-b-d1", checkpoint=100000))
+    assert sorted(jobs) == ["probes_B_base_k100000"]
 
 
 def test_config_is_e4_unchanged_plus_e5():
@@ -91,7 +89,7 @@ def test_every_e5_run_uses_the_same_background_statistic(spec):
     assert cfg["train"]["latent_estimator"]["switch_pairs"] == "same_background"
     assert cfg["e5"]["switch_max_steps"] == 75000 and cfg["train"]["latent_estimator"]["switch_max_steps"] == 75000
     est = cfg["train"]["latent_estimator"]  # the late threshold (docs/e5/DECISIONS.md (28))
-    assert (est["switch_late_threshold"], est["switch_late_after_steps"]) == (1.5, 10000)
+    assert (est["switch_late_threshold"], est["switch_late_after_steps"]) == (1.5, 6100)
 
 
 def test_configuration_is_p1_b_d1_and_baseline_a_is_reprobed_from_e4(capsys):

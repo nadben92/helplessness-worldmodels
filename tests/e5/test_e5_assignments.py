@@ -256,8 +256,8 @@ def test_late_threshold_switch():
 
 
 def test_late_threshold_changes_no_switch_of_e4():
-    """The late threshold acts from gradient step 10,000 on; every one of E4's eight runs switched by the main rule by
-    6,001 (both waves, their logs; docs/e5/DECISIONS.md (27), (28)), so by construction it changes none of them
+    """The late threshold acts from gradient step 6,100 on (docs/e5/DECISIONS.md (29)); every one of E4's eight runs
+    switched by the main rule by 6,001 (both waves, their logs; (27), (28)), so by construction it changes none of them
     (test_late_threshold_switch: a run that switches by the main rule is unchanged)."""
     from helplessness.config import REPO_ROOT
     import yaml

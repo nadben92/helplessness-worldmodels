@@ -283,3 +283,15 @@ def test_parade_under_shuffle_logs_its_pairs(runs):
     evals = [e for sp in summary for e in sp.get("evals", [])]
     assert evals and max(e[3] for e in evals) > 1
     assert all(e[2] >= 2 for e in evals)
+
+
+def test_replay_of_the_switch_matches_the_recorded_one(runs):
+    """replay_switch.py (docs/e5/DECISIONS.md (29)) replays the run's own rule on its recorded statistic and finds the
+    switch the run made, at the same gradient step (here the mini's forced switch)."""
+    replay = load_experiment_module("E5_belief_training", "replay_switch.py", "test_e5_replay_switch")
+    run = runs["f1_parade_experimental"]
+    evals, records = replay.series(run)
+    rule = replay.main_rule(run)
+    recorded = records[-1]["switch_step"]
+    assert recorded is not None
+    assert replay.replay(evals, rule, None, None) == {"switch_step": recorded, "rule": "threshold"}

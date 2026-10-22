@@ -14,8 +14,8 @@ Phases:
   probes   measure_probes.py at one checkpoint k (--checkpoint; post-switch steps for the immunisation) for every pair
            of the batch (batches.PROBE_PAIRS), batches.PROBES_MAX_PARALLEL at a time. Never launched automatically.
 
-Batch parameters: --configuration (every phase: the E4 configuration of E5), --switch-step (wave 3; optional in wave 2),
---post-steps (wave 3), --e4-results (probes of wave 3: E4's results root, for immunisation A's reference).
+Batch parameters: --configuration (every phase: the E4 configuration of E5), --e4-results (probes of the baseline A: E4's
+results root). --switch-step / --post-steps serve the immunisation only, deferred to E8 (batches.DEFERRED).
 
 E5 is launched from its own clone (/scratch/helplessness-worldmodels-e5, branch e5; the e4 clone keeps E4's runs and
 probes): the checkout must be on branch e5 with no modified tracked file (refused otherwise). Results stay on the volume
@@ -164,8 +164,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repo-dir", default=None, help="the e5 checkout on the persistent volume (required, except with --status)")
     parser.add_argument("--configuration", default=batches.CONFIGURATION,
                         help=f"the E4 configuration of E5 (default and only accepted value: {batches.CONFIGURATION})")
-    parser.add_argument("--switch-step", type=int, default=None, help="the immunisation's switch step (wave 3; optional in wave 2)")
-    parser.add_argument("--post-steps", type=int, default=None, help="the immunisation's steps after the switch (wave 3)")
+    parser.add_argument("--switch-step", type=int, default=None, help="the immunisation's switch step (deferred to E8)")
+    parser.add_argument("--post-steps", type=int, default=None, help="the immunisation's steps after the switch (deferred to E8)")
     parser.add_argument("--e4-results", default=None, help="probes: E4's results root (immunisation A's reference)")
     parser.add_argument("--checkpoint", type=int, default=None, help="phase probes: k (post-switch steps for the immunisation)")
     parser.add_argument("--n-walks", type=int, default=None, help="phase probes: the first N walks only (a quick timing)")
