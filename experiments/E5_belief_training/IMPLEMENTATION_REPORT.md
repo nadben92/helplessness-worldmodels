@@ -400,3 +400,37 @@ L'immunisation passe en E8. Les places libérées vont à des graines f = 1 supp
 - **Conservation des checkpoints** : vérifiée dans le code (aucune suppression ni réécriture d'un fichier de poids).
   Les risques extérieurs au code (purge du volume, `git clean`, suppression manuelle) sont signalés dans `RUN_GPU.md`.
 - **Tests** : `tests/e5/test_e5_check_wave.py`.
+
+## 10. Vague 1 relancée : verrouillage de B exposé (2026-10-23 ; décision (32))
+
+**Ce qu'on observe.**
+
+- **Bascules** : A exposé et A référence à 7 151 et 6 301, comme prévu par le rejeu ; B référence à 6 301.
+- **B exposé (graine 102)** : verrouillé, avec une JS ≤ 0,003 bit depuis le début ; il ira à la limite.
+- **Les NaN de `goal_loss` et `critic_loss`** viennent de pertes non calculées, pas d'une erreur numérique : les têtes
+  de l'agent ne s'entraînent qu'après la bascule. Pour la même raison, `ties 1.000` signale des Q à égalité, donc des
+  actions au hasard.
+- **Log du run** : `results/E5_belief_training/grid12x12__2zones-p1-b-d1-sh100__pair-experimental__worldmodel-agent-e5__seed102__<UTC>/console.log`.
+  Une copie est tenue par le superviseur : `logs/kubeflow/e5-train-e5_wave1-20261022T074754459275Z/B_sh100_experimental.log`.
+
+**Nouvelles alertes de `check_wave.py`** :
+
+- **LOCK-IN** : pas de bascule, et une JS < 0,01 bit sur toutes les évaluations à partir du pas 6 100 (au moins 20).
+- **NaN/inf** : seulement sur des valeurs réellement calculées.
+
+**Compléter f = 1 pour au moins 3 paires complètes.** Seule la paire A est complète à ce jour. Les vagues 2 et 3 sont
+pleines (4 runs chacune), il n'y a donc pas de place libre. La graine E = 402 est définie.
+
+| Option | Contenu | Coût |
+|---|---|---|
+| a (recommandée) | vague 3 = f = 1 graines D et E ; la baseline C passe en vague 4, avec deux places pour remplacer d'éventuels runs verrouillés | une vague de plus, si elle est nécessaire |
+| b | vague 3 à 6 runs sur un seul GPU (baseline C, f = 1 D, f = 1 E) | ralentissement non mesuré, de l'ordre de 1,5×, avec 3 CPU pour 6 processus |
+| c | trancher après le bilan de la vague 2 : graine E en vague 4 seulement si la paire C est incomplète | — |
+
+Ce qu'on peut attendre de chaque option :
+
+- **Option a** : si la paire C est complète, la vague 3 donne deux chances d'obtenir la troisième paire.
+- **Le taux d'échec est mal connu** (1 run sur 4 en f = 1). Une paire n'est complète que si ses deux runs passent, soit
+  environ 0,56 si chaque run réussit à 0,75.
+- **Avec seulement A, C et D**, la probabilité d'avoir 3 paires complètes est d'environ 0,3 ; elle passe à environ 0,6
+  avec E en plus.

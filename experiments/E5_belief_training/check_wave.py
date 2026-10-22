@@ -18,7 +18,10 @@ Per pair (experimental - reference, same training and seed):
                     and in the corridor-like slots, mass >= 0.97 in the four quadrants of both runs
   converged at      the checkpoints where that criterion holds (the candidates for the common probe checkpoint)
 A run is flagged ATTENTION when it failed, never switched, had a stretch of 5 evaluations below 1.0 bit after its switch,
-or misses the mass threshold at its last checkpoint; a pair when it misses E4's criterion at its last checkpoint.
+or misses the mass threshold at its last checkpoint; LOCK-IN when it has not switched and its statistic stayed below 0.01
+bit on every evaluation from gradient step 6,100 on (at least 20); NaN/inf when a training loss present in a record or
+the statistic is not finite (the agent heads' losses are ABSENT before the switch -- the console prints them as nan --
+and are not flagged); a pair when it misses E4's criterion at its last checkpoint.
 
 Usage, from the e5 checkout (notebook) or the repo root (an extracted export):
   python experiments/E5_belief_training/check_wave.py --batch e5_wave1 [--repo-dir .] [--out <file.json>]
@@ -42,6 +45,9 @@ LOG2_5 = math.log2(5)
 ROLES = {"ud": "nw", "cd": "se", "neutral": "ne", "other": "sw"}
 QUADRANTS = ("nw", "ne", "se", "sw")
 MASS_MIN, B_UD_TOL, B_CD_MAX, COLLAPSE_BITS, COLLAPSE_CONSECUTIVE = 0.97, 0.15, 0.1, 1.0, 5
+# lock-in (docs/e5/DECISIONS.md (32)): no switch, and the switch statistic below LOCK_BITS on every evaluation from the
+# late threshold's activation on (LOCK_AFTER) over at least LOCK_MIN_EVALS evaluations
+LOCK_BITS, LOCK_AFTER, LOCK_MIN_EVALS = 0.01, 6100, 20
 
 
 def read_run(run_dir: Path) -> dict:
@@ -70,6 +76,29 @@ def collapse_of(run: dict, switch_grad: int | None) -> dict:
         longest = max(longest, streak)
     return {"evaluations_after_switch": len(after), "longest_below_1bit": longest,
             "min_after_switch": min(after) if after else None, "last": evals[-1][1] if evals else None}
+
+
+def lock_in_of(run: dict, switched: bool) -> dict | None:
+    """Not switched, and the statistic below LOCK_BITS on every evaluation from LOCK_AFTER on: the latent locked on the
+    background (docs/e5/DECISIONS.md (31), (32))."""
+    after = [float(e[1]) for r in run["records"] for e in (r.get("switch_pairs") or {}).get("evals", []) if int(e[0]) >= LOCK_AFTER]
+    if switched or len(after) < LOCK_MIN_EVALS:
+        return None
+    return {"evaluations": len(after), "max": max(after)} if max(after) < LOCK_BITS else None
+
+
+def non_finite_of(run: dict) -> list[str]:
+    """Values that are NaN or infinite where a number was COMPUTED: the training losses present in a checkpoint record and
+    the switch statistic. The agent heads' losses are absent before the switch (the heads train from it on; the console
+    prints them as nan): absent is not flagged."""
+    out = []
+    for r in run["records"]:
+        bad = sorted(k for k, v in (r.get("train") or {}).items() if isinstance(v, (int, float)) and not math.isfinite(v))
+        if r.get("batch_pair_js") is not None and not math.isfinite(float(r["batch_pair_js"])):
+            bad.append("batch_pair_js")
+        if bad:
+            out.append(f"{r['env_step']}: {', '.join(bad)}")
+    return out
 
 
 def mass_of(record: dict) -> dict:
@@ -103,7 +132,14 @@ def check_run(run: dict) -> dict:
     last = run["records"][-1] if run["records"] else None
     mass = mass_of(last) if last else {}
     k_all, mo = mean_over_assignments(run)
+    lock = lock_in_of(run, sw["grad_step"] is not None)
+    nan = non_finite_of(run)
     flags = []
+    if lock is not None:
+        flags.append(f"LOCK-IN: no switch, statistic < {LOCK_BITS} bit on all {lock['evaluations']} evaluations from {LOCK_AFTER} on "
+                     f"(max {lock['max']:.4f})")
+    if nan:
+        flags.append(f"NaN/inf at checkpoint(s) {'; '.join(nan[:3])}" + (" ..." if len(nan) > 3 else ""))
     if run["meta"].get("status") != "done":
         flags.append(f"status {run['meta'].get('status')}: {run['meta'].get('error', '')[:120]}")
     if sw["grad_step"] is None:
@@ -116,7 +152,7 @@ def check_run(run: dict) -> dict:
             "last_env_step": last["env_step"] if last else None, "switch": sw, "collapse": col, "mass_by_quadrant": mass,
             "mass_by_type_mean_over_assignments": None if mo is None else {"env_step": k_all, **mo.get("mass_true_by_type", {})},
             "success_rate": last.get("success_rate") if last else None, "episode_length": last.get("episode_length") if last else None,
-            "attention": flags}
+            "lock_in": lock, "non_finite": nan, "attention": flags}
 
 
 def check_pair(exp: dict, ref: dict) -> dict:

@@ -161,7 +161,7 @@ def test_replay_of_the_corrected_criterion_on_the_failed_wave_1():
 
 
 def test_seeds_c_and_d_and_no_stream_collision():
-    """docs/e5/DECISIONS.md (31): seeds A-D of p1-b-d1 are 2, 102, 202, 302 (A + 100 per label, B's rule), the same in
+    """docs/e5/DECISIONS.md (31), (32): seeds A-E of p1-b-d1 are 2, 102, 202, 302, 402 (A + 100 per label, B's rule), the same in
     e5_setup and in the export's text reading; every stream root of every E4 and E5 run is distinct -- the experimental
     root SeedSequence(seed), the reference's [seed, 1], the assignment stream's [seed, 2] -- except seed A, which IS E4's
     run of p1-b-d1 on purpose (its baseline is E4's pair)."""
@@ -169,7 +169,7 @@ def test_seeds_c_and_d_and_no_stream_collision():
 
     cfg = e5_setup.load_config(REPO_ROOT / "configs" / "e5" / "e5.yaml")
     e5_seeds = {label: e5_setup.configuration(cfg, "p1-b-d1", label)["seed"] for label in e5_setup.SEED_LABELS}
-    assert e5_seeds == {"A": 2, "B": 102, "C": 202, "D": 302}
+    assert e5_seeds == {"A": 2, "B": 102, "C": 202, "D": 302, "E": 402}
     assert submit.seeds(REPO_ROOT, "p1-b-d1") == e5_seeds
     e4_seeds = {c["seed"] for c in cfg["e4"]["configurations"].values()}
     seeds = sorted(e4_seeds | set(e5_seeds.values()))

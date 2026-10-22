@@ -189,6 +189,19 @@ training world by slot (shuffle: also by zone type over the assignments) and the
 criterion holds -- the candidates for the common probe checkpoint. `ATTENTION` lines go to the user before the next wave
 is launched. Send `exports/<wave>_check.json` with the export.
 
+A run flagged `LOCK-IN` (no switch, statistic below 0.01 bit from gradient step 6,100 on; docs/e5/DECISIONS.md (32))
+fails at the deadline: leave it to its end, then, on the CPU (about 10 minutes), the latent diagnostic -- e.g. wave 1's
+seed B experimental run:
+
+```bash
+R=$(ls -d results/E5_belief_training/grid12x12__2zones-p1-b-d1-sh100__pair-experimental__worldmodel-agent-e5__seed102__* | tail -1)
+python experiments/E5_belief_training/latent_ceiling.py $R --batches 100 --out exports/$(basename $R)_ceiling.json
+```
+
+Its console log is `$R/console.log` (and the supervisor's copy `logs/kubeflow/<supervisor>/<job>.log`). Its `goal_loss` and
+`critic_loss` print as nan before any switch: the agent's heads train only from the switch on (not a numerical
+failure).
+
 ## Step 4 -- wave 2 (after wave 1 has finished and is exported: one compute pod at a time)
 
 ```bash

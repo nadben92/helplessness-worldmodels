@@ -48,15 +48,15 @@ def sha256(path: Path) -> str:
 
 
 def seeds(repo: Path, configuration: str) -> dict[str, int]:
-    """Seeds A to D of the configuration, read from the configs' text (no yaml here): A = its seed in configs/e4/e4.yaml
-    (E5's base), B, C, D = A + 1, 2, 3 x e5.seed_b_offset (configs/e5/e5.yaml; e5_setup.configuration's rule)."""
+    """Seeds A to E of the configuration, read from the configs' text (no yaml here): A = its seed in configs/e4/e4.yaml
+    (E5's base), B-E = A + 1-4 x e5.seed_b_offset (configs/e5/e5.yaml; e5_setup.configuration's rule)."""
     e5 = (repo / batches.CONFIG).read_text(encoding="utf-8")
     base = re.search(r"^base:\s*(\S+)", e5, re.M).group(1)
     offset = int(re.search(r"^\s*seed_b_offset:\s*(\d+)", e5, re.M).group(1))
     m = re.search(rf"^\s*{re.escape(configuration)}:\s*\{{[^}}]*seed:\s*(\d+)", (repo / base).read_text(encoding="utf-8"), re.M)
     if m is None:
         raise SystemExit(f"configuration {configuration!r} not found in {base}")
-    return {label: int(m.group(1)) + i * offset for i, label in enumerate("ABCD")}
+    return {label: int(m.group(1)) + i * offset for i, label in enumerate("ABCDE")}
 
 
 def meta_fields(path: Path) -> dict:

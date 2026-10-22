@@ -548,3 +548,41 @@ weight file (`agent_env<N>.pt` is written once under its step's name, by an atom
 training; `make_run_dir` refuses an existing directory; the probes write new directories); E4's runs of p1-b-d1 must stay
 on the volume too (seed A's baseline). What the code cannot rule out -- a purge of the volume by the cluster, `git clean`
 in a checkout (`results/` is untracked), a manual deletion -- is written in RUN_GPU.md (step 7).
+
+## 2026-10-23 (32) -- the relaunched wave 1: one f = 1 run locks in; the lock-in is a seed-dependent failure mode of the shuffle (user; implementer for the reading and the code)
+
+**Observed (user).** Seed A (2): experimental and reference switched at gradient steps 7,151 and 6,301, as the replay
+predicted ((30)); seed B (102): the reference switched at 6,301; decodability about 0.85 after the switch. Seed B's
+EXPERIMENTAL run does not switch: its statistic has stayed <= 0.003 bit from the start -- the lock-in seen under f = 0.5
+-- and it will go to the deadline (75,000 gradient steps).
+
+**The NaN of its console is not numerical.** The line prints `goal_loss {last.get('goal_loss', nan)}` and
+`critic_loss`, and the agent's heads (goal head, critic) train only from the estimator switch on (`run_one`: `if
+switch.switched: train_heads_step(...)`): a run that has not switched has no such loss, printed as nan; with untrained
+heads every Q value is tied, hence `ties 1.000` (random actions). E4's runs printed the same before their switch. The
+run's log: `results/E5_belief_training/grid12x12__2zones-p1-b-d1-sh100__pair-experimental__worldmodel-agent-e5__seed102__<UTC>/console.log`
+in the e5 checkout, and the supervisor's copy `logs/kubeflow/e5-train-e5_wave1-20261022T074754459275Z/B_sh100_experimental.log`.
+After its failure, `latent_ceiling.py` on it (RUN_GPU.md) is to confirm the lock-in (every variable a saturated code of
+the assignment, no information on the agent).
+
+**The lock-in is a seed-dependent failure mode of the shuffle, not a property of f = 0.5.** It hit both f = 0.5 runs
+(2/2) and one of the four f = 1 runs of the relaunched wave 1 (1/4: seed B, experimental); the other three f = 1 runs
+switched and learnt. (The first wave 1's f = 1 runs, before the late threshold, did not lock in: their reference
+plateaued, their experimental run collapsed at 13,250.) Decision (31)'s formulation for the paper becomes (to be
+confirmed by `latent_ceiling.py` on seed B's experimental run):
+
+"Under shuffled zone assignments, the world model's latent could lock onto the background before learning the agent's
+position: every latent variable saturated on a code of the assignment alone, and the label-free separation criterion
+was never met. This failure depended on the seed: it hit one of four runs with full variability (every episode
+redrawn) and both runs with partial variability (half of the episodes redrawn). Runs that locked in never reached the
+learning criterion and are excluded from the comparison; partial variability, where it hit every run, is reported as a
+limit of the method rather than as a result."
+
+**Alerts in `check_wave.py`.** LOCK-IN: a run that has not switched and whose statistic stayed below 0.01 bit on every
+evaluation from gradient step 6,100 on (at least 20 evaluations); NaN/inf: a training loss present in a checkpoint record
+or the statistic not finite -- the heads' losses ABSENT before the switch are not flagged. Tested.
+
+**Completing f = 1 (proposal, the user decides).** Seed E = 402 (B's rule) is defined (`e5_setup.SEED_LABELS`), in no
+wave yet. Complete f = 1 pairs (experimental and reference both switched, no collapse) so far: A; B is incomplete. Waves
+2 (B's baseline, f = 1 C) and 3 (C's baseline, f = 1 D) are full (four runs each, the GPU's four parallel runs), so there
+is no free place: see IMPLEMENTATION_REPORT.md, section 10, for the options.

@@ -58,3 +58,23 @@ def test_single_probe_batch_after_wave_3():
     assert [cmd for name, cmd in jobs.items() if "--e4-results" in cmd] == [jobs["probes_A_base_k200000"]]
     assert all(cmd[cmd.index("--checkpoint") + 1] == "200000" for cmd in jobs.values())
     assert batches.batch_runs("e5_probes_all") == {}
+
+
+def test_lock_in_and_non_finite_alerts(tmp_path):
+    """docs/e5/DECISIONS.md (32): a run that never switched with its statistic below 0.01 bit from gradient step 6,100 on is
+    flagged LOCK-IN; a non-finite computed loss is flagged; the heads' losses ABSENT before the switch are not."""
+    d = tmp_path / "grid12x12__2zones-p1-b-d1-sh100__pair-experimental__worldmodel-agent-e5__seed102__20261030T000000Z"
+    d.mkdir()
+    (d / "meta.yaml").write_text("status: running\nseed: 102\n", encoding="utf-8")
+    mass = {q: 0.1 for q in ("corridor", "nw", "ne", "se", "sw")}
+    walks = {q: {"I_curve": [0.5]} for q in ("nw", "ne", "se", "sw")}
+    recs = [{"env_step": 10000, "grad_step": 5846, "switch_step": None, "batch_pair_js": 0.002, "train": {"recon_patch": 2.0},
+             "switch_pairs": {"evals": [[s, 0.002] for s in range(0, 5900, 50)]}, "e4": {"real_context": {"mass_true_by_region": mass}, "walks": walks}},
+            {"env_step": 25119, "grad_step": 14917, "switch_step": None, "batch_pair_js": 0.001, "train": {"recon_patch": float("nan")},
+             "switch_pairs": {"evals": [[s, 0.001] for s in range(5900, 14950, 50)]}, "e4": {"real_context": {"mass_true_by_region": mass}, "walks": walks}}]
+    (d / "checkpoints.jsonl").write_text("".join(json.dumps(r) + "\n" for r in recs), encoding="utf-8")
+    c = cw.check_run(cw.read_run(d))
+    assert c["lock_in"] is not None and any(f.startswith("LOCK-IN") for f in c["attention"])
+    assert c["non_finite"] == ["25119: recon_patch"]
+    healthy = cw.read_run(run_dir(tmp_path, "ref", 2.3, [3.0] * 20))
+    assert cw.check_run(healthy)["lock_in"] is None and cw.check_run(healthy)["non_finite"] == []
