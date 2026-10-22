@@ -303,19 +303,21 @@ bibliothèque (`two_zones_setup`, `two_zones_records`, `theme_probe_measure`), p
 partir du pas de gradient 6 100 (`e5.late_switch`). C'est juste au-dessus de la bascule la plus tardive d'E4 (6 001) : les
 8 bascules d'E4 sont inchangées par construction.
 
-**Rejeu sur les séries réelles** (`replay_switch.py`) : *en attente de la copie des fichiers légers des runs échoués*
-(`RUN_GPU.md`, étape 3b.1). Le rejeu est exact jusqu'à la bascule. Pour la graine A, les runs relancés sont en outre
-identiques aux runs échoués jusqu'à leur bascule, puisque même code d'entraînement, mêmes graines et même type de GPU.
-Le rejeu prédira donc exactement leur pas de bascule. Seuls indices disponibles d'ici là, les checkpoints :
+**Rejeu sur les séries réelles** (`replay_switch.py`, décision (30)) : les 4 runs échoués ont chacun 1 497
+évaluations, sans trou.
 
-| Run | JS à 5 846 | JS à 9 355 | JS à 14 917 |
+| Run | Règle d'E4 seule | Critère corrigé (1,5 bit dès 6 100) | Effondrement |
 |---|---|---|---|
-| f = 1 référence | 1,88 | 1,90 | 2,56 |
-| f = 1 exposé | 1,50 | 2,06 | effondré |
+| f = 1 référence | aucune bascule | **6 301** (seuil tardif) | aucun |
+| f = 1 exposé | aucune bascule | **7 151** (seuil tardif) | **13 250**, en une évaluation |
+| f = 0,5 référence | aucune bascule | aucune bascule | — |
+| f = 0,5 exposé | aucune bascule | aucune bascule | sous 1 bit dès 6 550 |
 
-- **f = 1 référence** devrait basculer dès le pas de gradient **6 301** (5 évaluations > 1,5 bit à partir de 6 100).
-- **f = 1 exposé** devrait basculer entre 6 301 et environ 9 000, donc avant l'effondrement, qui a commencé entre 9 355
-  et 14 917.
+- La bascule de f = 1 exposé précède son effondrement de **6 099** pas de gradient.
+- Pour la graine 2, ce sont les pas de bascule exacts des runs relancés, identiques aux runs échoués jusqu'à la bascule.
+- Grille : tous les réglages font basculer f = 1 exposé avant l'effondrement ; aucun ne fait basculer f = 0,5.
+- Réglage gardé : 1,5 bit dès 6 100.
+- Test de non-régression : `test_replay_of_the_corrected_criterion_on_the_failed_wave_1`.
 
 **Vagues** :
 

@@ -444,3 +444,36 @@ before it (tested: on a run of the test suite, the replay finds the recorded swi
 gives, for each run, the switch under the corrected criterion and the rule, the collapse onset (the last stretch below
 the collapse guard's 1.0 bit) and the switch's margin before it, and a grid of thresholds (1.0-2.0 bits) and
 activations (6,100 / 8,000 / 10,000). Results: IMPLEMENTATION_REPORT.md, once the series are copied.
+
+## 2026-10-22 (30) -- the replay on the failed wave 1's series: the late threshold from 6,100 at 1.5 bits is kept (implementer; user's request)
+
+`replay_switch.py` on the four failed runs (seed 2; the same-background statistic at every evaluation, 1,497 evaluations
+from 0 to 74,800, no gap; E4's main rule: 3 bits on 5 consecutive evaluations from 500; the deadline 75,000):
+
+| Run | E4's rule alone | corrected criterion (1.5 bits from 6,100) | statistic (mean +/- sd) | collapse |
+|---|---|---|---|---|
+| f = 1 reference | no switch | **6,301**, late threshold | 1.84 +/- 0.14 bits (5,000-13,500), max 3.25 | none |
+| f = 1 experimental | no switch | **7,151**, late threshold | 1.49 +/- 0.08 (6,100-7,500), 1.89 +/- 0.19 (7,500-13,000) | **13,250**: from 1.37 to 0.0 in one evaluation |
+| f = 0.5 reference | no switch | no switch | about 0 throughout (max 0.058) | -- |
+| f = 0.5 experimental | no switch | no switch | up to 1.28 (5,000-6,100), then down: 0.33 (6,100-7,500), 0.06 (7,500-13,000), 0.004 after | below 1 bit for good from 6,550 |
+
+The f = 1 experimental collapse is abrupt: 1.44 / 1.37 bits at 13,150 / 13,200, 0.0 from 13,250 on; the reconstruction
+error on the agent's patch goes from 0.007 (gradient step 13,046) to 8.97 (13,646) and stays -- E3's single-step
+collapse at lr 1e-3. **The corrected criterion would have switched it at 7,151, 6,099 gradient steps before the
+collapse**, after which the lr is 1e-4. For seed 2, the relaunched runs are identical to the failed ones up to their
+switch (same code up to it, same seeds, same device type), so these are their switch steps.
+
+Grid (late threshold 1.0-2.0 bits x activation 6,100 / 8,000 / 10,000): every setting switches the f = 1 experimental
+run before its collapse; at 6,100 the thresholds 1.0 and 1.25 switch it at 6,301, 1.5 at 7,151, 1.75 at 9,101, 2.0 at
+12,051 (900 steps before the collapse); the reference switches at 6,301 for every threshold up to 1.75 (12,451 at 2.0).
+A later activation only delays the switches (8,201 / 10,201). No setting makes f = 0.5 switch. **Kept: 1.5 bits from
+6,100** -- earliest activation compatible with E4's identity by construction; 1.5 bits keeps 0.5 bit above the collapse
+guard and switches both seed-2 runs within 1,050 steps of the activation, 6,099 steps before the collapse. A lower
+threshold (1.25) would switch the experimental run 850 steps earlier but sits only 0.25 bit above the guard; it stays an
+option if seed B plateaus between 1.25 and 1.5 (read in wave 1's first hours). Non-regression test on these series:
+`tests/e5/test_e5_batches.py::test_replay_of_the_corrected_criterion_on_the_failed_wave_1` (the two f = 1 series in
+tests/e5/data, 50 KB).
+
+f = 0.5: its statistic peaks around 1.3 bits near 5,000-6,000 gradient steps (experimental) and then decays, before any
+long stay at lr 1e-3 -- not the same signature as the f = 1 collapse (gradual, not a single step); the reference never
+separates. Its diagnosis waits for `latent_ceiling.py` on the failed runs (RUN_GPU.md, step 3b.4).

@@ -113,3 +113,29 @@ def test_configuration_is_p1_b_d1_and_baseline_a_is_reprobed_from_e4(capsys):
     cfg = e5_setup.load_config()
     assert cfg["e5"]["probes"]["n_walks"] == 150 and cfg["e4"]["checkpoint"]["n_walks"] == 100  # training-time walks: E4's
     assert e5_setup.configuration(cfg, "p1-b-d1", "A")["seed"] == 2 and e5_setup.configuration(cfg, "p1-b-d1", "B")["seed"] == 102
+
+
+def test_replay_of_the_corrected_criterion_on_the_failed_wave_1():
+    """docs/e5/DECISIONS.md (29), (30): non-regression on the real series of the first wave 1's f = 1 runs (seed 2; the
+    same-background statistic at every evaluation, tests/e5/data). E4's main rule alone never switches (the runs failed
+    at the deadline); the corrected criterion of configs/e5/e5.yaml switches the reference at 6,301 and the experimental
+    run at 7,151, both by the late threshold, and the experimental run's collapse (an abrupt fall to 0 at 13,250, the
+    single-step collapse E3 met at lr 1e-3) comes 6,099 gradient steps after its switch."""
+    import json
+    from pathlib import Path
+
+    replay = load_experiment_module("E5_belief_training", "replay_switch.py", "test_e5_replay_wave1")
+    data = json.loads((Path(__file__).parent / "data" / "e5_wave1_f1_switch_series.json").read_text(encoding="utf-8"))
+    cfg = e5_setup.load_config(REPO_ROOT / "configs" / "e5" / "e5.yaml")
+    late = cfg["e5"]["late_switch"]
+    rule = {"threshold_bits": 3.0, "consecutive": 5, "eval_every": 50, "min_steps": 500, "collapse_threshold_bits": 1.0,
+            "max_steps": cfg["e5"]["switch_max_steps"]}
+    expected = {"reference": 6301, "experimental": 7151}
+    for role, run in data["runs"].items():
+        evals = [(int(s), float(v)) for s, v in run["evals"]]
+        assert len(evals) == 1497 and replay.gaps(evals) == []
+        assert replay.replay(evals, rule, None, None) == {"switch_step": None, "rule": None}
+        assert replay.replay(evals, rule, late["threshold_bits"], late["after_steps"]) == {"switch_step": expected[role], "rule": "late_threshold"}
+    exp = [(int(s), float(v)) for s, v in data["runs"]["experimental"]["evals"]]
+    assert replay.collapse_onset(exp, 1.0) == 13250 and 13250 - expected["experimental"] == 6099
+    assert replay.collapse_onset([(int(s), float(v)) for s, v in data["runs"]["reference"]["evals"]], 1.0) is None
