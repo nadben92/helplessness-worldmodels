@@ -533,3 +533,18 @@ SeedSequence(seed), [seed, 1] (reference), [seed, 2] (assignments) -- are distin
 - Probes: every wave's pairs (`batches.PROBE_PAIRS`) with the full grid at 150 walks, plus `e5_probes_baseline_A`;
   `analyse_probes.py` aggregates b at step 1 probe by probe over 2 to 4 seeds per condition (valid probes only; mean,
   sd, number of valid seeds; the extreme probes; tested).
+
+**(31), completed the same day (user): no probe between the waves; one probe batch after wave 3.** Between two waves:
+the export and the learning check only -- `check_wave.py --batch <wave>`, one command, one line per run (status; the
+estimator switch and its rule; after it, the longest stretch of the switch statistic below the collapse guard's 1 bit,
+its lowest and last value; the smallest quadrant mass at the last checkpoint, by zone type over the 12 assignments for
+the shuffle runs; the success rate) and one per pair (b at step 1 in the training world by slot, and by zone type over
+the assignments under shuffle; the checkpoints where E4's convergence criterion holds), from the light files only, with
+the standard library (the notebook). The probes of every wave and of seed A's baseline go in ONE batch after wave 3,
+`e5_probes_all` (baselines A = E4's pair, B, C; shuffle f = 1 A-D: 7 pairs), at ONE common checkpoint chosen from the
+checks' convergence lists (a point of E4's grid). Checkpoints until then: nothing in the code deletes or overwrites a
+weight file (`agent_env<N>.pt` is written once under its step's name, by an atomic write of that file only; only
+`resume.pt` and `latest.json` are rewritten; a resumed run rewrites the checkpoints after its resume point with the same
+training; `make_run_dir` refuses an existing directory; the probes write new directories); E4's runs of p1-b-d1 must stay
+on the volume too (seed A's baseline). What the code cannot rule out -- a purge of the volume by the cluster, `git clean`
+in a checkout (`results/` is untracked), a manual deletion -- is written in RUN_GPU.md (step 7).

@@ -151,7 +151,7 @@ ls results/E5_belief_training/                            # no grid12x12__2zones
 ```bash
 git -C /scratch/helplessness-worldmodels-e5 pull --ff-only
 git -C /scratch/helplessness-worldmodels-e5 log --oneline -1
-git -C /scratch/helplessness-worldmodels-e5 status --short       # prints nothing
+git -C /scratch/helplessness-worldmodels-e5 status --short --untracked-files=no   # prints nothing (results/ is untracked)
 grep -n "late_switch" configs/e5/e5.yaml                          # threshold_bits: 1.5, after_steps: 6100
 python experiments/E5_belief_training/submit_kubeflow.py --batch e5_wave1 --repo-dir /scratch/helplessness-worldmodels-e5 --dry-run
 python experiments/E5_belief_training/submit_kubeflow.py --batch e5_wave1 --repo-dir /scratch/helplessness-worldmodels-e5
@@ -173,12 +173,29 @@ tar czf exports/e5_ceiling.tar.gz exports/e5_ceiling
 
 Download `exports/e5_ceiling.tar.gz` and send it.
 
+## Between two waves: export and learning check only (docs/e5/DECISIONS.md (31))
+
+No probe between the waves. Once a wave has finished: its export (`export_batch.py create`), then ONE command that prints
+the learning check, one line per run and per pair, from the light files:
+
+```bash
+python experiments/E5_belief_training/check_wave.py --batch <wave> --out exports/<wave>_check.json
+```
+
+Per run: status; the estimator switch (gradient and environment steps, rule); after it, the longest stretch of the
+switch statistic below 1 bit (5 = the collapse guard), its lowest and last value; the smallest quadrant mass at the last
+checkpoint (shuffle runs: also by zone type over the 12 assignments); the success rate. Per pair: b at step 1 in the
+training world by slot (shuffle: also by zone type over the assignments) and the checkpoints where E4's convergence
+criterion holds -- the candidates for the common probe checkpoint. `ATTENTION` lines go to the user before the next wave
+is launched. Send `exports/<wave>_check.json` with the export.
+
 ## Step 4 -- wave 2 (after wave 1 has finished and is exported: one compute pod at a time)
 
 ```bash
 cd /scratch/helplessness-worldmodels-e5
 python experiments/E5_belief_training/export_batch.py create --batch e5_wave1 --configuration p1-b-d1     # wave 1 first
-git pull --ff-only && git status --short                                                                  # prints nothing
+python experiments/E5_belief_training/check_wave.py --batch e5_wave1 --out exports/e5_wave1_check.json      # the learning check
+git pull --ff-only && git status --short --untracked-files=no                                                                  # prints nothing
 python experiments/E5_belief_training/submit_kubeflow.py --batch e5_wave2 --repo-dir /scratch/helplessness-worldmodels-e5 --dry-run
 python experiments/E5_belief_training/submit_kubeflow.py --batch e5_wave2 --repo-dir /scratch/helplessness-worldmodels-e5
 ```
@@ -190,10 +207,11 @@ about 40 MB), from which E8's immunisation will branch. The checks of step 3 app
 
 ## Step 5 -- wave 3: TO BE CONFIRMED by the user after wave 1's results (docs/e5/DECISIONS.md (31))
 
-Only once the user has confirmed it, after wave 2 has finished and is exported:
+Only once the user has confirmed it, after wave 2 has finished, is exported and checked:
 
 ```bash
 python experiments/E5_belief_training/export_batch.py create --batch e5_wave2 --configuration p1-b-d1
+python experiments/E5_belief_training/check_wave.py --batch e5_wave2 --out exports/e5_wave2_check.json
 python experiments/E5_belief_training/submit_kubeflow.py --batch e5_wave3 --repo-dir /scratch/helplessness-worldmodels-e5 --dry-run
 python experiments/E5_belief_training/submit_kubeflow.py --batch e5_wave3 --repo-dir /scratch/helplessness-worldmodels-e5
 ```
@@ -218,37 +236,33 @@ One run only: add `--resume results/E5_belief_training/<the run's directory name
 
 A run stopped by a training guard (`SeparationNotReachedError`, `CollapseAfterSwitchError`) is a result: report it.
 
-## Step 7 -- export, probes, export again
+## Step 7 -- the probes: ONE batch after wave 3 (docs/e5/DECISIONS.md (31))
+
+After wave 3 (or wave 2, if wave 3 is not confirmed) has finished, been exported and checked, every pair of the campaign
+is probed in one batch, `e5_probes_all` -- the baselines A (E4's own pair of p1-b-d1, under `--e4-results`), B, C and
+shuffle f = 1 A, B, C, D -- at ONE common checkpoint `K`, chosen by the user from the checks' `converged at` lists (E4's
+criterion; a point of E4's grid, whose weights every run kept):
 
 ```bash
-python experiments/E5_belief_training/export_batch.py create --batch <wave> --configuration p1-b-d1
-python experiments/E5_belief_training/submit_kubeflow.py --batch <wave> --phase probes --checkpoint <k> \
-    [--e4-results /scratch/helplessness-worldmodels-e4/results] --repo-dir /scratch/helplessness-worldmodels-e5 --dry-run
-python experiments/E5_belief_training/submit_kubeflow.py --batch <wave> --phase probes --checkpoint <k> \
-    [--e4-results /scratch/helplessness-worldmodels-e4/results] --repo-dir /scratch/helplessness-worldmodels-e5
-python experiments/E5_belief_training/export_batch.py create --batch <wave> --configuration p1-b-d1
+cd /scratch/helplessness-worldmodels-e5
+python experiments/E5_belief_training/submit_kubeflow.py --batch e5_probes_all --phase probes --checkpoint $K     --e4-results /scratch/helplessness-worldmodels-e4/results --repo-dir /scratch/helplessness-worldmodels-e5 --dry-run
+python experiments/E5_belief_training/submit_kubeflow.py --batch e5_probes_all --phase probes --checkpoint $K     --e4-results /scratch/helplessness-worldmodels-e4/results --repo-dir /scratch/helplessness-worldmodels-e5
 ```
 
-`k` is in environment steps for baseline and shuffle, in steps AFTER THE SWITCH for the immunisation (whose weights are
-at `switch + k`; its reference is the baseline reference of its seed at `k`). The probes use 150 walks
-(`e5.probes.n_walks`) and write, beside E4's files, the validity of every probe (`valid`, `validity_summary.json`) and the
-reconstruction diagnostic (`reconstruction.csv`; docs/e5/DECISIONS.md (22)).
-
-Seed A's baseline (E4's own pair of p1-b-d1) is re-probed once with the same protocol:
+Seven jobs (`probes_<seed>_<base|sh100>_k<K>`), two at a time on the GPU; 150 walks, the full grid, the validity of every
+probe and the reconstruction diagnostic (docs/e5/DECISIONS.md (22)). (Wave 3 not confirmed: the jobs of seeds C's baseline
+and D fail at once, their runs missing; the others are unaffected.) Then one export per wave (the probes are included)
+and, locally, `export_batch.py verify` and the aggregation over 2 to 4 seeds per condition:
 
 ```bash
-python experiments/E5_belief_training/submit_kubeflow.py --batch e5_probes_baseline_A --phase probes --checkpoint 300000 \
-    --e4-results /scratch/helplessness-worldmodels-e4/results --repo-dir /scratch/helplessness-worldmodels-e5 --dry-run
-python experiments/E5_belief_training/submit_kubeflow.py --batch e5_probes_baseline_A --phase probes --checkpoint 300000 \
-    --e4-results /scratch/helplessness-worldmodels-e4/results --repo-dir /scratch/helplessness-worldmodels-e5
+python experiments/E5_belief_training/analyse_probes.py --root <extracted results root(s)> --checkpoint $K --out <dir>
 ```
 
-Every finished run is probed this way, wave by wave (`--batch e5_wave1 | e5_wave2 | e5_wave3`, the probe pairs of
-`batches.PROBE_PAIRS`; only the baseline A needs `--e4-results`), at the same checkpoint `k` for every condition, chosen
-by the convergence criterion. Locally: `export_batch.py verify <extracted dir>`, then the probes of every condition and
-seed aggregated (2 to 4 seeds per condition; invalid probes left out):
-
-```bash
-python experiments/E5_belief_training/analyse_probes.py --root <extracted results root> --checkpoint <k> --out <dir>
-```
-
+**Keep every checkpoint until then.** The probes need every run's `checkpoints/agent_env<K>.pt` on the volume, E4's runs of
+p1-b-d1 included (`/scratch/helplessness-worldmodels-e4/results/E4_generalization_gradient/`). Nothing in the code deletes
+or overwrites them: each is written once under its own step's name (an atomic write of that file only); `resume.pt` and
+`latest.json` are the only files rewritten; a resumed run re-trains from its last resume point and rewrites the
+checkpoints after it with the same training. Never delete or move a run directory of E4 or E5 (the failed first wave 1
+was moved to `results/E5_belief_training_aborted/`, not deleted), never run `git clean` in the checkouts (`results/` is
+untracked), and check the volume's space before each wave (`df -h /scratch`). Whether UCL ARC purges old files on this
+volume is not something the repository can tell: ask ARC if unsure.

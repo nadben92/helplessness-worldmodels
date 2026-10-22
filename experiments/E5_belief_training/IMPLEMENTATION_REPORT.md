@@ -391,3 +391,12 @@ L'immunisation passe en E8. Les places libérées vont à des graines f = 1 supp
 - graines C et D, et absence de collision de flux ;
 - agrégation des sondes ;
 - identité f = 0 / baseline avec E4 et rejeu du critère toujours verts.
+
+**Complément du jour (31).** Il n'y a pas de sondes entre les vagues.
+
+- **Entre deux vagues** : export, puis `check_wave.py --batch <vague>`, qui donne une ligne par run et par paire
+  (bascule et règle, effondrement, masse des quadrants, succès, b dans le monde d'entraînement, checkpoints convergés).
+- **Après la vague 3** : un seul batch de sondes, `e5_probes_all` (7 paires), à un checkpoint commun.
+- **Conservation des checkpoints** : vérifiée dans le code (aucune suppression ni réécriture d'un fichier de poids).
+  Les risques extérieurs au code (purge du volume, `git clean`, suppression manuelle) sont signalés dans `RUN_GPU.md`.
+- **Tests** : `tests/e5/test_e5_check_wave.py`.

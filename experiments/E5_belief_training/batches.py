@@ -8,6 +8,9 @@ compute pod at a time). Standard library only. Seeds: A = 2 (E4's), B = 102, C =
   e5_wave3  TO BE CONFIRMED after wave 1's results: seed C's baseline and shuffle f = 1 seed D, experimental and reference
             -- 3 seeds of the baseline (A = E4's pair, B, C) and 4 of f = 1 (A, B, C, D), paired by seed
 
+  e5_probes_all  no training: the probes of every pair (baselines A = E4's pair, B, C; shuffle f = 1 A-D), in ONE batch
+            after wave 3, at one common checkpoint chosen by the convergence criterion (no probe between the waves)
+
 DEFERRED (defined, never submitted): shuffle f = 0.5 (abandoned for E5, (31)) and the immunisation (moved to E8). Every
 run trains E4's full planned budget (300,000 steps) with E5's procedure (same-background switch statistic, deadline
 75,000, late threshold 1.5 bits from 6,100). Batch parameters, set at launch: --configuration (every phase; p1-b-d1 only),
@@ -31,6 +34,8 @@ WAVES: dict[str, dict[str, tuple]] = {
     "e5_wave3": {"C_base_experimental": ("C", "baseline", None, "experimental"), "C_base_reference": ("C", "baseline", None, "reference"),
                  "D_sh100_experimental": ("D", "shuffle", 1.0, "experimental"), "D_sh100_reference": ("D", "shuffle", 1.0, "reference")},
     "e5_probes_baseline_A": {},  # probes only: seed A's baseline is E4's own pair, re-probed with E5's protocol
+    # probes only, ONE batch after wave 3 at one common checkpoint (docs/e5/DECISIONS.md (31)): every pair of the campaign
+    "e5_probes_all": {},
 }
 DEFERRED: dict[str, dict[str, tuple]] = {
     # f = 0.5: abandoned for E5 (docs/e5/DECISIONS.md (31)), kept defined
@@ -46,6 +51,8 @@ PROBE_PAIRS: dict[str, list[tuple]] = {
     "e5_wave2": [("B", "baseline", None), ("C", "shuffle", 1.0)],
     "e5_wave3": [("C", "baseline", None), ("D", "shuffle", 1.0)],
     "e5_probes_baseline_A": [("A", "baseline", None)],
+    "e5_probes_all": [("A", "baseline", None), ("B", "baseline", None), ("C", "baseline", None),
+                      ("A", "shuffle", 1.0), ("B", "shuffle", 1.0), ("C", "shuffle", 1.0), ("D", "shuffle", 1.0)],
 }
 BATCHES = WAVES
 BATCH_CPUS = {name: 3 for name in BATCHES}  # as E4: 4 processes, one thread each, on the job's 3 CPUs
