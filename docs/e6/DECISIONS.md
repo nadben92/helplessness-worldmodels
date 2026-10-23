@@ -136,3 +136,85 @@ test) and by agent (finer), the curve fitted without the group, its points' resi
 from the phenotype by inverting that curve). Localisation: E4's nearest-template rule at step 1, threshold 0.9 for
 "poorly localised" (`e6.analysis.localisation_min`). The development agents' conditions (dev_pair1, dev_pair2) are
 artificial labels on E4's four baseline configurations, only to exercise the per-condition code.
+
+## 2026-10-23 (44) -- one main phenotype (user, after the first report)
+
+The first exit time does not separate a directed agent from a wandering one (from the zone's centre, the shortest path
+to the goal follows the inside of the quadrant to its corner nearest the goal): it stays in the rows (`exit_median_km`,
+`exit_censored_share`; points.csv), out of the curves and the figures. **Main phenotype: the directed share in the zone.**
+No time to the goal (it carries the same information). Secondary, unchanged: recovery latency j_theta (with its
+censoring), share of steps in the zone, stay share, revisit share. The roles are in the config
+(`e6.analysis.phenotypes`: primary, secondary, logged), not in the library. E6's protocol is unchanged (starts, epsilon,
+H, images): its rerun gives the first report's values again.
+
+## 2026-10-23 (45) -- localisation against behaviour; the nature of the errors (user's questions; implementer for the measures)
+
+Every step now records the decoded positions (`decoded_template`: E4's nearest-template rule, the localisation of the
+checks; `decoded_cell`: the cell nearest to the agent's colour). Reported (`analyse_e6.py`, `localisation_*.csv`): the
+localisation in the zone (mean over the steps taken in it) of every (agent, image) next to b and the directed share; the
+correlation of the directed share with it across the exposed models (valid pairs, all, and b < -1); within each agent,
+the directed share of the steps well and badly localised (`measures.localisation_errors.steps_by_localisation`). The errors
+(`error_nature`, former UD slot only, where the conveyor is defined): the share on the cell where the exposed TRAINING
+dynamics would have taken the agent from its PREVIOUS state, conveyor[s_{t-1}] (the conveyor ignores the action, checked);
+steps where the agent moved exactly as the conveyor would have are left out (no error can land on its cell); against
+chance, the share on that cell among the errors that fall on one of the four neighbours of s_t when the conveyor's cell
+is one of them (chance 1/4, Wilson interval). **Added after seeing the data (post hoc, flagged)**: the share of the errors
+by region of the decoded cell and on the homologous cell of the other quadrants -- in the b-orientation configurations
+most errors fall in the CD quadrant, not near the agent.
+
+## 2026-10-23 (46) -- separating b's gap with E4's probe (user; implementer for the measure)
+
+`frozen_setup.fresh_split`: b at the first step of an episode started from the initial state (no context), at the
+centre (the 9 starts) and on the border (E4's 16 entry states), each model's I with the same function, seed and draws
+(`fresh_start_controllability`). place_effect = b_fresh_border - b_fresh_center (both fresh); history_effect =
+b_step1_probe - b_fresh_border (both on the border: E4's corridor walk against no context). Reported, nothing corrected.
+
+## 2026-10-23 (47) -- the constrained correction (manipulation A) (user's loss; implementer for D_pos and the sweep)
+
+L(d) = sum_a KL(target_a || prior_a(d)) + lam |d|^2 + mu_pos D_pos(d) + mu_goal (p_goal(h + d, z) - p_goal(h, z))^2
+(`probing.belief_steering.constraint_terms`, optimise_delta's `extra`; mu_pos = mu_goal = 0 gives the first report's
+correction step for step -- tested, and checked on the real runs: max |difference| 0.0 on the four agents).
+
+**D_pos: the soft position read in the decoded image**, KL(pos(h) || pos(h + d)), pos = softmax over the cells of -(the
+smallest squared distance of a cell's pixels to the agent's colour) / tau, tau = 0.02. Why: the localisation that must not
+move is read from the DECODER (phase 0: the decoder reads h; the posterior's mode identifies the state but the decoded
+position depends on h), so the constraint reads the same decoder output; it needs no training (a linear probe trained on
+the references' (h, z) would read the references' code, not what the exposed model's decoder draws), and its argmax is
+exactly E4's agent-cell rule (`decoded_agent_cell`, tested). Checked against the localisation of the checks (the
+nearest-template rule) on E6's episodes: on the 14 valid pairs the two rules' accuracies differ by at most 0.05 (most by
+< 0.01); they disagree on p2-a's two invalid images, where the template rule fails (E4's finding). p_goal: the goal head
+through a forward pass that keeps the gradient (its own forward detaches the input).
+
+Sweep (`run_e7_constrained.py`, e7.constrained): lam in {0.01, 0.1, 1, 10} x mu_pos in {0, 1, 10, 100}; mu_goal: the
+smallest of {0, 10, 1e2, 1e3, 1e4, 1e5} keeping max |dp_goal| <= 0.05 at the most permissive setting (lam = 0.01,
+mu_pos = 0), per agent, reported. Situations: 4 contexts per state of the training image's zone (the position term decodes
+at every Adam step: 10 contexts would take about 4 h per agent on a CPU), the same walk generator, 1,000 Adam steps and
+the same plateau rule. **Every context is corrected, localised or not** (unlike (42), which restricts the direction
+estimation to localised situations): the localisation without intervention is then the exposed model's own (below 1),
+the reference line the design asks for. Per setting: gain of b = the mean shift of I_s (the reference's I is unchanged),
+the localisation under intervention, p_goal's shift, and the random control: each situation's own random direction at
+the norm of its correction. Specific: the paired gain minus the control's has a 95% bootstrap interval above 0 and is at
+least half the gain (`specific_share`). Kept: specific and localisation under intervention >= the exposed model's without
+- 0.02 (`loc_tol`).
+
+## 2026-10-23 (48) -- applying A (implementer)
+
+For an agent's best kept setting (the largest specific gain; `apply_settings: all` for every kept one -- the constrained
+stepwise mode decodes at every Adam step of every episode step), E6's episodes with, at every step in the zone: mode
+constrained_direction (h + v_hat, v_hat = the setting's estimation-half mean correction at their mean norm) and mode
+constrained_stepwise (the constrained correction optimised on the current h, at most 300 Adam steps), alpha in {0, 1}.
+
+## 2026-10-23 (49) -- the induction in the references (manipulation B) (user; implementer for the grid)
+
+The reference's reverse direction of `run_e7_directions.py` (target: the exposed training dynamics, the conveyor;
+unconstrained, as in the first report) and its random control at the same norm, alpha in {0, 0.1, 0.2, 0.3, 0.4, 0.5,
+0.75, 1} (`e7.induction.alphas`), on the images whose zone is the former UD slot. Checks: b, the directed share, the
+localisation and p_goal under intervention against the reference without (`reverse_none`). "b decreases monotonically
+with alpha": no rise larger than 0.02 bit between consecutive alphas.
+
+## 2026-10-23 (50) -- the agents file (user)
+
+`configs/e6/agents_e5.yaml` follows the two-wave plan: baseline A (E4's pair, trained: active), baseline B and f = 1 seed
+A (commented out with a TODO until trained), and the relaunch of the failed f = 1 run. (32) relaunched it as TWO runs,
+seeds E = 402 and F = 502, both against seed B's f = 1 reference: both are listed (commented, TODO), the user keeps the one(s)
+that learnt. `batches.agent_ids` ignores comments.
