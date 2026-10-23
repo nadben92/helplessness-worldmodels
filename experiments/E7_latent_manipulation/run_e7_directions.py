@@ -12,7 +12,8 @@ Tasks:
 For each situation the correction d (probing.belief_steering.optimise_delta) and I_s at h and at h + d. Then, per task:
 the common direction v = the mean of the estimation half's corrections on e7.direction_images, scaled to their mean norm
 (v_hat); alignment (leave-one-out cosines, null of isotropic vectors with the same norms); efficacy on the test half
-(the shift of I_s with v_hat against each situation's own optimum; a random direction of the same norm as control);
+(the shift of I_s with v_hat against each situation's own optimum, on the direction images' test half -- every image's in
+by_image; a random direction of the same norm as control);
 stability (random restarts on a subset). Nothing here decides whether the direction exists: the numbers are reported.
 
 Outputs: <out-dir>/E7_latent_manipulation/e7dir__<agent id>__<UTC>/: directions.npz (v, v_hat, the random direction,
@@ -158,9 +159,10 @@ def run_agent(cfg, e6, e7, agent, device, images_only, log=print) -> tuple[dict,
                 db_v, db_opt, db_r = I_v - s["I0"][ok_test], s["I_opt"][ok_test] - s["I0"][ok_test], I_r - s["I0"][ok_test]
                 img["efficacy"] = ld.efficacy(db_v, db_opt)
                 img["random_db_mean"] = float(np.nanmean(db_r))
-                db_v_all.append(db_v)
-                db_opt_all.append(db_opt)
-                db_r_all.append(db_r)
+                if k[1] in e7["direction_images"]:  # the efficacy of v is read where v was estimated
+                    db_v_all.append(db_v)
+                    db_opt_all.append(db_opt)
+                    db_r_all.append(db_r)
             task_sum["by_image"][k[1]] = img
             for i in range(len(s["states"])):
                 sit_rows.append({"task": task, "image": k[1], "state": int(s["states"][i]), "half": s["half"][i], "side": s["side"][i], "kind": s["kind"][i],
@@ -169,7 +171,7 @@ def run_agent(cfg, e6, e7, agent, device, images_only, log=print) -> tuple[dict,
             arrays[f"{task}__{k[1]}__delta"] = d
             arrays[f"{task}__{k[1]}__states"] = s["states"]
             arrays[f"{task}__{k[1]}__half"] = s["half"]
-        if db_v_all:
+        if db_v_all:  # the test half of the direction images (by_image: every image)
             task_sum["efficacy_test"] = ld.efficacy(np.concatenate(db_v_all), np.concatenate(db_opt_all))
             task_sum["random_db_mean_test"] = float(np.nanmean(np.concatenate(db_r_all)))
         # stability: random restarts on a subset of the direction images' estimation situations
