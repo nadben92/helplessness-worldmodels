@@ -1,0 +1,85 @@
+agent:
+  id: p1-b-d1_e4
+  condition: dev_pair1
+  configuration: p1-b-d1
+  seed: 2
+weights:
+  experimental: scratch\e4x\all\results\E4_generalization_gradient\grid12x12__2zones-p1-b-d1__pair-experimental__worldmodel-agent-e4__seed02__20261016T144543Z\checkpoints\agent_env300000.pt
+  reference: scratch\e4x\all\results\E4_generalization_gradient\grid12x12__2zones-p1-b-d1__pair-control__worldmodel-agent-e4__seed02__20261016T144543Z\checkpoints\agent_env300000.pt
+weights_sha256:
+  experimental: fc8132011811380017a997c10367280560ee28e2dc975658eb13786208dc71bd
+  reference: b738b3fec664fe6b01d808813596c94ed420b3199b7c12a80e0f459d310d9d1b
+agents_file: configs\e6\agents_dev_e4.yaml
+config: C:\Users\nadim\Desktop\v1_ucl\configs\e6\e6.yaml
+config_bases:
+- configs/e4/e4.yaml
+e6:
+  seed: 6006
+  images:
+  - name: training
+    axis: training
+    position: ud
+  - name: position_only
+    axis: position_only
+    k: 0
+    position: ud
+  - name: theme_only
+    axis: segment
+    k: 0
+    position: neutral
+  - name: neutral
+    axis: training
+    position: neutral
+  n_reps: 20
+  horizon: 36
+  epsilon: null
+  measure: all
+  draws: 16
+  fresh_samples: 8
+  validity:
+    n_walks: 150
+  phenotypes:
+    k_revisit: 4
+    n_min: 20
+    n_boot: 200
+  analysis:
+    include_references: true
+    grid_step: 0.01
+    n_boot: 1000
+    window: 0.25
+    min_delta_share: 0.02
+    localisation_min: 0.9
+    min_points_per_condition: 4
+  margin: 0.001
+device: cpu
+torch_threads: 1
+torch_version: 2.14.0+cpu
+seconds: 1630.6737836003304
+timings:
+  training:
+    episodes_s: 175.57080830074847
+    reference_fresh_s: 83.38873860053718
+    validity_s: 348.1742185987532
+  position_only:
+    episodes_s: 153.0369614008814
+    reference_fresh_s: 69.71130799874663
+    validity_s: 264.6610329002142
+  theme_only:
+    episodes_s: 54.254112001508474
+    reference_fresh_s: 44.27974749915302
+    validity_s: 154.3681607004255
+  neutral:
+    episodes_s: 53.76289620064199
+    reference_fresh_s: 46.158628799021244
+    validity_s: 162.2657904010266
+code:
+  git_commit: 1d765d791cf4149b853f6aee540b881429b4c8c7
+  git_dirty: true
+  git_n_changed_paths: 22
+  source_sha256: 2ffefeb2572500e0727be7962582f19e16d86e705b61f9c834302cdab9a10b2c
+  source_n_files: 371
+  source_scope:
+  - src
+  - experiments
+  - configs
+  - pyproject.toml
