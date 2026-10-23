@@ -116,8 +116,11 @@ def plot_phenotype(res: dict, grid, path: Path) -> None:
         ax.set_axisbelow(True)
         if not per_condition:
             ax.fill_between(grid, main["band_lo"], main["band_hi"], color="#c3c2b7", alpha=0.5, lw=0, label="95% band (agents)")
-            ax.step(main["fit"]["x"], main["fit"]["fitted"], where="mid", color="#7a7a75", lw=1, label="isotonic")
-            ax.plot(grid, main["curve"], color="#2b2b29", lw=2, label="smooth")
+            ax.plot(main["fit"]["x"], main["fit"]["fitted"], "o", color="#7a7a75", ms=3, label="isotonic fit (at the points)")
+            # the smooth curve is solid where a point lies within 0.25 bit, dashed across the gaps (interpolation only)
+            near = np.min(np.abs(grid[:, None] - pts["b"][None, :]), axis=1) <= 0.25
+            ax.plot(grid, np.where(near, main["curve"], np.nan), color="#2b2b29", lw=2, label="smooth (data within 0.25 bit)")
+            ax.plot(grid, np.where(~near, main["curve"], np.nan), color="#2b2b29", lw=1.2, ls="--", label="smooth (no data: interpolated)")
         else:
             for c, d in res["by_condition"].items():
                 if "curve" in d:
@@ -133,7 +136,7 @@ def plot_phenotype(res: dict, grid, path: Path) -> None:
     axes[0].set_ylabel(LABELS.get(res["phenotype"], res["phenotype"]))
     handles, labels = axes[1].get_legend_handles_labels()
     h0, l0 = axes[0].get_legend_handles_labels()
-    fig.legend(h0[:3] + handles, l0[:3] + labels, loc="lower center", ncol=4, fontsize=8, frameon=False)
+    fig.legend(h0[:4] + handles, l0[:4] + labels, loc="lower center", ncol=4, fontsize=8, frameon=False)
     fig.tight_layout(rect=(0, 0.12, 1, 1))
     fig.savefig(path, dpi=130)
     plt.close(fig)
@@ -217,6 +220,8 @@ def main(argv: list[str] | None = None) -> int:
         summary["phenotypes"][name] = {"primary": name in PRIMARY, "n_points": res["n_points"], "n_agents": m["n_clusters"],
                                        "increasing": m["increasing"], "spearman": m["spearman"], "spearman_ci": m["spearman_ci"],
                                        "invertible_range": m["strict"]["invertible_range"], "invertible_share": m["strict"]["invertible_share"],
+                                       # the strict range is read on the smooth curves: across a gap without points it is interpolation
+                                       "largest_gap_in_b": float(np.max(np.diff(np.unique(res["points"]["b"])))),
                                        "localisation": loc, "n_censored_points": int(res["points"]["censored"].sum()),
                                        "by_condition": {c: {k: v for k, v in d.items() if k != "curve"} for c, d in res["by_condition"].items()}}
         plot_phenotype(res, grid, args.out / "figures" / f"cloud_{name}.png")
