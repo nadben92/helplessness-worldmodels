@@ -39,3 +39,15 @@ def test_wilson_and_neighbours():
     assert lo < 0.5 < hi
     n = le.torus_neighbours((12, 12))
     assert n[0].tolist() == [132, 1, 12, 11]
+
+
+def test_homologous_cells_of_other_quadrants():
+    zone = np.zeros(144, dtype=bool)
+    zone[[13, 14]] = True                                   # (1, 1), (1, 2)
+    states = np.array([[13, 14, 13, 13]])
+    decoded = np.array([[13.0, 14 + 6 * 12 + 6, 13 + 6]])  # t = 1 -> (7, 8): diagonal; t = 2 -> (1, 7): right
+    out = le.error_nature(states, np.array([3]), zone, decoded, np.arange(144), le.torus_neighbours((12, 12)))
+    assert out["n_errors"] == 2 and out["share_on_homologous_diagonal"] == 0.5 and out["share_on_homologous_right"] == 0.5
+    regions = np.where(np.arange(144) // 12 < 6, "north", "south")
+    out = le.error_nature(states, np.array([3]), zone, decoded, np.arange(144), le.torus_neighbours((12, 12)), regions=regions)
+    assert out["share_in_north"] == 0.5 and out["share_in_south"] == 0.5

@@ -13,7 +13,11 @@ action) and neighbours (n_states, 4) the four torus neighbours of every state.
                          where conveyor[s_{t-1}] == s_t, i.e. the agent moved as the conveyor would have, are left out:
                          no error can land there), the share on any of the four neighbours of s_t, and among the errors on
                          a neighbour while conveyor[s_{t-1}] is a neighbour of s_t, the share on it against the chance
-                         level 1/4 (errors spread uniformly over the four neighbours), with a binomial interval.
+                         level 1/4 (errors spread uniformly over the four neighbours), with a binomial interval; and the
+                         share of the errors on the HOMOLOGOUS cell of each other quadrant (the same position within the
+                         quadrant: offsets (0, 6), (6, 0), (6, 6) on the 12 x 12 torus); with `regions` (n_states,) labels,
+                         the share of the errors in each region (the zone itself, another quadrant, the corridor): a drift
+                         stays in the zone, a confusion of quadrants does not.
 """
 
 from __future__ import annotations
@@ -47,12 +51,18 @@ def wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
     return float(centre - half), float(centre + half)
 
 
+HOMOLOGOUS_OFFSETS = {"right": (0, 6), "below": (6, 0), "diagonal": (6, 6)}
+
+
 def error_nature(states: np.ndarray, length: np.ndarray, zone: np.ndarray, decoded: np.ndarray, conveyor: np.ndarray,
-                 neighbours: np.ndarray) -> dict:
+                 neighbours: np.ndarray, grid_shape: tuple[int, int] = (12, 12), regions: np.ndarray | None = None) -> dict:
     """Module docstring. Counts and shares, with the chance level of the neighbour test."""
     inz = zp.in_zone_steps(states, length, zone)
     H = decoded.shape[1]
     n_err = n_eligible = on_conv = on_neigh = n_neigh_test = conv_in_neigh = 0
+    R, C = grid_shape
+    homologous = {name: 0 for name in HOMOLOGOUS_OFFSETS}
+    in_region: dict[str, int] = {}
     for i in range(states.shape[0]):
         for t in range(1, min(int(length[i]), H)):
             d = decoded[i, t]
@@ -62,6 +72,11 @@ def error_nature(states: np.ndarray, length: np.ndarray, zone: np.ndarray, decod
             n_err += 1
             neigh = set(int(v) for v in neighbours[s])
             on_neigh += d in neigh
+            if regions is not None:
+                in_region[str(regions[d])] = in_region.get(str(regions[d]), 0) + 1
+            r, col = divmod(s, C)
+            for name, (dr, dc) in HOMOLOGOUS_OFFSETS.items():
+                homologous[name] += d == ((r + dr) % R) * C + (col + dc) % C
             c = int(conveyor[prev])
             if c == s:
                 continue
@@ -74,7 +89,9 @@ def error_nature(states: np.ndarray, length: np.ndarray, zone: np.ndarray, decod
     return {"n_errors": n_err, "share_on_neighbour": share(on_neigh, n_err), "n_eligible": n_eligible,
             "share_on_conveyor": share(on_conv, n_eligible), "share_on_conveyor_ci": wilson(on_conv, n_eligible),
             "n_neighbour_test": n_neigh_test, "share_on_conveyor_among_neighbours": share(conv_in_neigh, n_neigh_test),
-            "share_on_conveyor_among_neighbours_ci": wilson(conv_in_neigh, n_neigh_test), "chance_among_neighbours": 0.25}
+            "share_on_conveyor_among_neighbours_ci": wilson(conv_in_neigh, n_neigh_test), "chance_among_neighbours": 0.25,
+            **{f"share_on_homologous_{name}": share(k, n_err) for name, k in homologous.items()},
+            **{f"share_in_{name}": share(k, n_err) for name, k in sorted(in_region.items())}}
 
 
 def torus_neighbours(grid_shape: tuple[int, int]) -> np.ndarray:

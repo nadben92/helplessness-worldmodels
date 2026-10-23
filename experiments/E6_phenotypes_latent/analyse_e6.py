@@ -33,6 +33,7 @@ from helplessness.config import REPO_ROOT
 from helplessness.measures import monotone_fit as mf
 from helplessness.measures import localisation_errors as le
 from helplessness.measures.zone_phenotypes import PHENOTYPES
+from helplessness.envs.layouts import two_zones
 from helplessness.pipeline import two_zones_setup as setup
 from helplessness.pipeline import frozen_setup as fs
 
@@ -213,7 +214,8 @@ def localisation_section(rows: list[dict], dirs: list[str], cfg: dict, out: Path
             sb = le.steps_by_localisation(st, length, zone, dist, dec)
             steps_rows.append({"agent": r["agent"], "image": r["image"], "valid": r["valid"], "b_step1": r["b_step1"], **sb})
             if r["position"] == "ud":
-                en = le.error_nature(st, length, zone, dec, conveyor, neighbours)
+                regions = np.array([two_zones.region_of_state(two_zones.build_layout(1, "reference"), q) for q in range(144)])
+                en = le.error_nature(st, length, zone, dec, conveyor, neighbours, regions=regions)
                 error_rows.append({"agent": r["agent"], "image": r["image"], "valid": r["valid"], "b_step1": r["b_step1"], **en})
     write_csv(out / "localisation_steps.csv", steps_rows)
     write_csv(out / "localisation_errors.csv", error_rows)
