@@ -73,6 +73,16 @@ def toric_cells(a, b) -> np.ndarray:
     return np.minimum(dr, R - dr) + np.minimum(dc, C - dc)
 
 
+def decoded_agent_cell(dec: torch.Tensor, agent: torch.Tensor, kpx: int) -> np.ndarray:
+    """The agent's decoded position, directly: the cell holding the pixel nearest to the agent's colour. dec: (n, 3, H, W)
+    reconstructions clamped to [0, 1]; agent: (3, 1, 1) the agent's colour in [0, 1]; kpx: pixels per cell. (n,) state
+    indices. (Split out of reconstruction_diagnostic on 2026-10-23 for E6's per-step localisation, same operations.)"""
+    R, C = two_zones.GRID_SHAPE
+    d_agent = ((dec - agent) ** 2).sum(dim=1)
+    per_cell = d_agent.reshape(-1, R, kpx, C, kpx).amin(dim=(2, 4)).reshape(-1, R * C)
+    return per_cell.argmin(dim=1).cpu().numpy()
+
+
 def reconstruction_diagnostic(model, world, walks: dict, slot: str, probe_rgb, reference_colors: dict, agent_color,
                               generator: torch.Generator, batch: int = 1024) -> list[dict]:
     """One row per part (PARTS) of the walks: n_frames, recon_mse, recon_mse_outside_zone, nearest_template_accuracy /
@@ -106,9 +116,7 @@ def reconstruction_diagnostic(model, world, walks: dict, slot: str, probe_rgb, r
             err = ((dec - templates[st]) ** 2).mean(dim=1)
             mse.append(err.mean(dim=(1, 2)).cpu().numpy())
             mse_out.append(err[:, ~zone_px].mean(dim=1).cpu().numpy())
-            d_agent = ((dec - agent) ** 2).sum(dim=1)
-            per_cell = d_agent.reshape(-1, R, kpx, C, kpx).amin(dim=(2, 4)).reshape(-1, R * C)
-            agent_cell.append(per_cell.argmin(dim=1).cpu().numpy())
+            agent_cell.append(decoded_agent_cell(dec, agent, kpx))
             n = dec.shape[0]
             own = torch.zeros(n, R * C, dtype=torch.bool, device=device)
             own[torch.arange(n, device=device), st] = True
