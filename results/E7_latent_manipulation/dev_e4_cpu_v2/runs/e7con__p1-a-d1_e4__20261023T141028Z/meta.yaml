@@ -1,0 +1,97 @@
+agent: p1-a-d1_e4
+condition: dev_pair1
+weights:
+  experimental: scratch\e4x\all\results\E4_generalization_gradient\grid12x12__2zones-p1-a-d1__pair-experimental__worldmodel-agent-e4__seed01__20261016T144543Z\checkpoints\agent_env300000.pt
+  reference: scratch\e4x\all\results\E4_generalization_gradient\grid12x12__2zones-p1-a-d1__pair-control__worldmodel-agent-e4__seed01__20261016T144543Z\checkpoints\agent_env300000.pt
+agents_file: configs\e6\agents_dev_e4.yaml
+config: C:\Users\nadim\Desktop\v1_ucl\configs\e7\e7.yaml
+config_bases:
+- configs/e4/e4.yaml
+- configs/e6/e6.yaml
+e7:
+  seed: 7007
+  lam: 0.01
+  lr: 0.05
+  max_steps: 1000
+  tol: 0.0001
+  patience: 50
+  contexts_per_state: 10
+  n_pre:
+  - 8
+  - 32
+  direction_images:
+  - training
+  restarts:
+    n_situations: 20
+    k: 5
+  alphas:
+  - 0.0
+  - 0.25
+  - 0.5
+  - 0.75
+  - 1.0
+  - 1.5
+  apply_in: zone
+  modes:
+  - direction
+  - random
+  - stepwise
+  stepwise_max_steps: 300
+  reverse: true
+  constrained:
+    images:
+    - training
+    contexts_per_state: 4
+    reproduce_first_report: true
+    lams:
+    - 0.01
+    - 0.1
+    - 1.0
+    - 10.0
+    mu_pos:
+    - 0.0
+    - 1.0
+    - 10.0
+    - 100.0
+    mu_goal_grid:
+    - 0.0
+    - 10.0
+    - 100.0
+    - 1000.0
+    - 10000.0
+    - 100000.0
+    goal_tol: 0.05
+    tau: 0.02
+    loc_tol: 0.02
+    specific_share: 0.5
+    n_boot: 1000
+    alphas:
+    - 0.0
+    - 1.0
+  induction:
+    alphas:
+    - 0.0
+    - 0.1
+    - 0.2
+    - 0.3
+    - 0.4
+    - 0.5
+    - 0.75
+    - 1.0
+  apply_plans:
+  - A
+  - B
+device: cpu
+torch_threads: 1
+seconds: 3905.3911597002298
+code:
+  git_commit: 7f812919ee9841f1a06e9b0a59612b614e7cec1f
+  git_dirty: true
+  git_n_changed_paths: 20
+  source_sha256: 15fbd2a04b9735856b0e443c037b5daa1d9bef57e08849d735c3fd1c4c6741a6
+  source_n_files: 373
+  source_scope:
+  - src
+  - experiments
+  - configs
+  - pyproject.toml

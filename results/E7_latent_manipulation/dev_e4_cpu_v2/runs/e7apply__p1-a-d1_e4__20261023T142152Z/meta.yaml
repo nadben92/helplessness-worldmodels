@@ -1,0 +1,157 @@
+agent: p1-a-d1_e4
+condition: dev_pair1
+directions: scratch\e6dev\results\E7_latent_manipulation\e7dir__p1-a-d1_e4__20261023T090245Z
+plans:
+- B
+modes:
+- direction
+- random
+- stepwise
+- reverse
+- reverse_random
+alphas: &id001
+- 0.0
+- 0.25
+- 0.5
+- 0.75
+- 1.0
+- 1.5
+constrained: null
+weights:
+  experimental: scratch\e4x\all\results\E4_generalization_gradient\grid12x12__2zones-p1-a-d1__pair-experimental__worldmodel-agent-e4__seed01__20261016T144543Z\checkpoints\agent_env300000.pt
+  reference: scratch\e4x\all\results\E4_generalization_gradient\grid12x12__2zones-p1-a-d1__pair-control__worldmodel-agent-e4__seed01__20261016T144543Z\checkpoints\agent_env300000.pt
+agents_file: configs\e6\agents_dev_e4.yaml
+config: C:\Users\nadim\Desktop\v1_ucl\configs\e7\e7.yaml
+config_bases:
+- configs/e4/e4.yaml
+- configs/e6/e6.yaml
+e6:
+  seed: 6006
+  images:
+  - name: training
+    axis: training
+    position: ud
+  - name: position_only
+    axis: position_only
+    k: 0
+    position: ud
+  - name: theme_only
+    axis: segment
+    k: 0
+    position: neutral
+  - name: neutral
+    axis: training
+    position: neutral
+  n_reps: 20
+  horizon: 36
+  epsilon: null
+  measure: all
+  draws: 16
+  fresh_samples: 8
+  validity:
+    n_walks: 150
+  phenotypes:
+    k_revisit: 4
+    n_min: 20
+    n_boot: 200
+  analysis:
+    phenotypes:
+      primary:
+      - directed_share
+      secondary:
+      - recovery_latency
+      - zone_share
+      - stay_share
+      - revisit_share
+      logged:
+      - exit_median_km
+    include_references: true
+    grid_step: 0.01
+    n_boot: 1000
+    window: 0.25
+    min_delta_share: 0.02
+    localisation_min: 0.9
+    min_points_per_condition: 4
+  margin: 0.001
+e7:
+  seed: 7007
+  lam: 0.01
+  lr: 0.05
+  max_steps: 1000
+  tol: 0.0001
+  patience: 50
+  contexts_per_state: 10
+  n_pre:
+  - 8
+  - 32
+  direction_images:
+  - training
+  restarts:
+    n_situations: 20
+    k: 5
+  alphas: *id001
+  apply_in: zone
+  modes:
+  - direction
+  - random
+  - stepwise
+  stepwise_max_steps: 300
+  reverse: true
+  constrained:
+    images:
+    - training
+    contexts_per_state: 4
+    reproduce_first_report: true
+    lams:
+    - 0.01
+    - 0.1
+    - 1.0
+    - 10.0
+    mu_pos:
+    - 0.0
+    - 1.0
+    - 10.0
+    - 100.0
+    mu_goal_grid:
+    - 0.0
+    - 10.0
+    - 100.0
+    - 1000.0
+    - 10000.0
+    - 100000.0
+    goal_tol: 0.05
+    tau: 0.02
+    loc_tol: 0.02
+    specific_share: 0.5
+    n_boot: 1000
+    alphas:
+    - 0.0
+    - 1.0
+    apply_settings: best
+  induction:
+    alphas:
+    - 0.0
+    - 0.1
+    - 0.2
+    - 0.3
+    - 0.4
+    - 0.5
+    - 0.75
+    - 1.0
+  apply_plans:
+  - A
+  - B
+device: cpu
+torch_threads: 1
+seconds: 3877.4026068989187
+code:
+  git_commit: df99c218d9fab67ad5c7f062d7f865e356b75714
+  git_dirty: false
+  git_n_changed_paths: 0
+  source_sha256: 1f669c1d85fbd7268cae76d695b52d6efbd6bc22b31eafdfe260c04ba4a55572
+  source_n_files: 373
+  source_scope:
+  - src
+  - experiments
+  - configs
+  - pyproject.toml

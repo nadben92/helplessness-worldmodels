@@ -268,3 +268,234 @@ python experiments/E7_latent_manipulation/analyse_e7.py --e6-runs "results/E6_ph
 **À décider par toi** : la liste des images de test (pour remplir l'écart entre −1,9 et −0,1 bit, il faut des images de
 croyance intermédiaire : les sondes d'E5 diront lesquelles) ; la composition de `configs/e6/agents_e5.yaml` ; λ ou un terme de
 conservation pour E7 ; l'existence de la direction commune.
+
+---
+
+# Corrections après le premier rapport (2026-10-23, suite)
+
+Même branche `e6`. Décisions (44)–(50) dans `docs/e6/DECISIONS.md`. Sorties légères : `results/E6_phenotypes_latent/dev_e4_cpu_v2/`
+et `results/E7_latent_manipulation/dev_e4_cpu_v2/` (analyses, figures, lignes et réglages par run). Toujours les 4 agents
+d'E4 sur CPU, conditions artificielles. Le protocole d'E6 n'a pas changé : la relance donne les mêmes b et phénotypes.
+
+## 9. E6 : phénotypes et localisation
+
+**Phénotypes ((44)).** Principal : la part de pas dirigés. Secondaires : j_θ, part des pas dans la zone, « stay », retours.
+Le temps de première sortie reste dans les lignes (`points.csv`), hors des courbes et des figures. Les rôles sont dans
+`e6.analysis.phenotypes`.
+
+**Localisation par couple** (`localisation_by_pair.csv` ; règle du gabarit le plus proche, moyenne sur les pas dans la zone) :
+
+| Agent | entraînement : b / dirigé / loc. | position seule : b / dirigé / loc. | thème seul ; neutre : loc. |
+|---|---|---|---|
+| p1-a | −2,12 / 0,32 / 0,87 | −1,89 / 0,32 / 0,60 | 0,89 ; 1,00 |
+| p1-b | −2,17 / 0,49 / 0,61 | −2,08 / 0,49 / 0,68 | 1,00 ; 1,00 |
+| p2-a | −2,06 / 0,33 / 0,96 | invalide (0,10) | invalide (0,08) ; 1,00 |
+| p2-b | −2,17 / 0,40 / 0,70 | −2,11 / 0,44 / 0,68 | 1,00 ; 1,00 |
+
+**Comportement à croyance égale.** Sur les 14 couples exposés valides, la part dirigée et la localisation sont corrélées
+(Pearson 0,74, Spearman 0,65), mais c'est l'effet des deux amas. **Parmi les 7 exposés à b < −1, la corrélation est
+négative** (Pearson −0,53, Spearman −0,36) : p2-a, le mieux localisé (0,96), est le moins dirigé (0,33) ; p1-b, le plus mal
+localisé (0,61), le plus dirigé (0,49).
+
+**Pas à pas, dans chaque agent, les pas bien et mal localisés sont aussi dirigés les uns que les autres**
+(`localisation_steps.csv`, image d'entraînement, bien / mal localisés) : p1-a 0,32 / 0,31 ; p1-b 0,50 / 0,47 ; p2-a 0,33 /
+0,43 (47 pas mal localisés seulement) ; p2-b 0,40 / 0,39. Même chose en position seule. La localisation n'explique pas
+l'écart de 0,32 à 0,49 à b ≈ −2,1.
+
+**Nature des erreurs** (`localisation_errors.csv`, zone UD, exposés). Deux régimes, selon l'orientation de la configuration :
+
+| Agent, image | erreurs | sur la case du tapis (depuis s_{t−1}) [IC 95 %] | parmi les voisines : sur la case du tapis (hasard 0,25) | région de la case décodée |
+|---|---|---|---|---|
+| p1-a, entraînement | 174 | 0,65 [0,58 ; 0,72] | 0,97 (n = 35) | UD 0,90, couloir 0,10 |
+| p1-a, position seule | 410 | 0,24 [0,20 ; 0,29] | 0,43 (n = 30) | UD 0,98 |
+| p2-a, entraînement | 36 | 0,46 [0,30 ; 0,62] | 1,00 (n = 5) | UD 0,97 |
+| p1-b, entraînement | 427 | 0,02 [0,01 ; 0,04] | 1,00 (n = 2) | **CD 0,98** |
+| p1-b, position seule | 365 | 0,13 [0,10 ; 0,17] | 1,00 (n = 24) | CD 0,81, UD 0,17 |
+| p2-b, entraînement | 372 | 0,03 [0,02 ; 0,06] | 1,00 (n = 8) | **CD 0,96** |
+| p2-b, position seule | 344 | 0,03 [0,02 ; 0,06] | 1,00 (n = 6) | CD 0,96 |
+
+- Orientation **a** (T_inc = couleur a) : les erreurs restent dans la zone UD, et la plupart tombent là où le tapis
+  roulant aurait poussé l'agent (un rang plus bas). Parmi les erreurs sur une voisine, c'est presque toujours la case du
+  tapis, loin au-dessus du hasard (0,97 contre 0,25 pour p1-a).
+- Orientation **b** : l'agent est dessiné dans le quadrant CD, à des cases variées (ce n'est pas la case homologue :
+  2 %). C'est un saut de quadrant, pas une dérive.
+- La mesure par région et la case homologue ont été ajoutées après avoir vu les erreurs lointaines de p1-b : c'est
+  post hoc, et signalé comme tel ((45)).
+
+## 10. E6 : séparation de l'écart de b ((46))
+
+b au premier pas depuis l'état initial, au centre (9 états) et sur la bordure (16 états d'entrée d'E4), avec la même
+fonction pour les deux modèles. Effet de l'endroit = bordure − centre ; effet de l'historique = sonde d'E4 − bordure.
+
+| Agent, image | b centre (sans contexte) | b bordure (sans contexte) | b sonde d'E4 (bordure, après le couloir) | endroit | historique |
+|---|---|---|---|---|---|
+| p1-a, entraînement | −2,11 | −2,07 | −2,30 | +0,03 | −0,23 |
+| p1-a, position seule | −1,84 | −1,68 | −2,17 | +0,16 | −0,49 |
+| p1-b, entraînement | −2,22 | −2,21 | −2,31 | +0,01 | −0,10 |
+| p1-b, position seule | −2,00 | −2,10 | −2,30 | −0,10 | −0,21 |
+| p2-a, entraînement | −2,04 | −2,05 | −2,31 | −0,01 | −0,26 |
+| p2-b, entraînement | −2,15 | −2,14 | −2,32 | +0,01 | −0,18 |
+| p2-b, position seule | −2,21 | −2,11 | −2,25 | +0,10 | −0,14 |
+
+À la zone UD, **l'écart vient surtout de l'historique** : 32 pas de couloir rendent b plus négatif de 0,10 à 0,49 bit.
+L'endroit pèse de −0,10 à +0,16, sans signe constant. Sur thème seul et neutre (b ≈ 0), les deux effets sont de l'ordre de
+±0,2 bit, sans signe constant. Rien n'est corrigé.
+
+## 11. E7, A : la correction contrainte
+
+**Lecture différentiable de la position ((47)).** La position douce est lue dans l'image décodée : un softmax sur les
+cellules de −(distance minimale de leurs pixels à la couleur de l'agent) / τ, avec τ = 0,02. Elle lit le décodeur, comme
+la mesure de localisation, et ne demande aucun entraînement. Son argmax est exactement la règle « cellule de l'agent »
+d'E4 (testé).
+
+Sur les épisodes d'E6, cette règle et celle du gabarit le plus proche (celle des vérifications) ont des précisions qui
+diffèrent d'au plus 0,05 sur les 14 couples valides. Elles divergent sur les deux images invalides de p2-a, où la règle
+du gabarit échoue (comme dans E4). Pourquoi pas une sonde linéaire entraînée sur les références : elle lirait le code des
+références, pas ce que dessine le décodeur de l'exposé.
+
+**Tests de forme.**
+- **μ_pos = μ_goal = 0 et λ = 0,01 reproduisent le premier rapport** : écart max 0,0 sur les corrections des 4 agents
+  (mêmes contextes, `reproduce_first_report`).
+- **α = 0 reproduit E6** en A comme en B : 40 couples sur 40 identiques (`identity_alpha0.csv`).
+- **Contrôle aléatoire compatible avec 0 pour les réglages retenus : non** pour λ ≤ 0,1 (gain aléatoire +0,15 à
+  +0,46 bit, IC au-dessus de 0). À λ ≥ 1, il ne l'est qu'en partie : IC contenant 0 pour p1-a et p2-b, mais +0,10
+  [+0,04 ; +0,17] pour p1-b et p2-a.
+- **Induction monotone en α : partiellement** (section 12).
+
+**Balayage** (`run_e7_constrained.py` ; 100 situations par agent, image d'entraînement, toutes corrigées, qu'elles soient
+localisées ou non ; figure `constrained_tradeoff.png`, tableau `constrained_settings.csv`). μ_goal est calibré par agent :
+10 pour p1-a et p1-b, 0 pour p2-a et p2-b, où p_goal ne bouge pas. Avec ce réglage, max |Δp_goal| ≤ 0,05 dans tous les
+réglages.
+
+| Agent (loc. sans intervention ; référence 1,00) | λ = 0,01, μ_pos = 0 : gain / loc. | λ = 0,01, μ_pos = 1–10 | λ = 0,1, μ_pos = 1 | λ = 1, μ_pos = 1 | λ = 10 | gain aléatoire à λ = 0,01 / 1 |
+|---|---|---|---|---|---|---|
+| p1-a (0,76) | +1,55 / 0,27 | +1,52 / 0,74 | +1,25 / 0,79 | +0,51 / 0,82 | +0,05 / 0,80 | +0,46 / +0,03 |
+| p1-b (0,60) | +1,65 / 0,46 | +1,65 / 0,59 | +1,50 / 0,64 | +0,91 / 0,73 | +0,21 / 0,63 | +0,36 / +0,10 |
+| p2-a (0,90) | +1,67 / 0,31 | +1,66 / 0,89 | +1,49 / 0,86 | +0,76 / 0,92 | +0,17 / 0,92 | +0,44 / +0,10 |
+| p2-b (0,66) | +1,48 / 0,41 | +1,50 / 0,67 | +1,39 / 0,73 | +0,88 / 0,70 | +0,17 / 0,67 | +0,43 / +0,07 |
+
+- **Le terme de position fait ce qu'on lui demande.** Sans lui (μ_pos = 0), la localisation tombe (0,27 à 0,46 pour
+  λ = 0,01). Avec μ_pos = 1 ou 10, elle revient au niveau sans intervention pour le même gain de b (+1,5 à +1,7 bit).
+- **Réglages retenus : 9 à 13 sur 16 selon l'agent.** Un réglage est retenu si sa localisation n'est pas inférieure à
+  celle sans intervention moins 0,02, et si son gain est spécifique (IC de l'écart au contrôle au-dessus de 0, et écart
+  ≥ ½ gain).
+- **La spécificité dépend de λ.** Le gain spécifique (gain moins contrôle) va de +1,0 à +1,3 bit à λ ≤ 0,1. Mais le
+  contrôle aléatoire de même norme y gagne encore 0,15 à 0,46 bit : une grande perturbation de h fait déjà monter I.
+
+**Application** ((48) : le réglage retenu au gain spécifique le plus grand — p1-a λ 0,1 μ 1 ; p1-b λ 0,01 μ 1 ; p2-a
+λ 0,01 μ 10 ; p2-b λ 0,1 μ 1). Image d'entraînement :
+
+| Agent | sans : b / dirigé / loc. pas 1, zone / p_goal | direction contrainte | pas à pas contraint |
+|---|---|---|---|
+| p1-a | −2,12 / 0,32 / 0,97, 0,87 / 0,00 | −0,90 / 0,48 / 0,00, 0,00 / 0,06 | −0,72 / 0,44 / 0,85, 0,63 / 0,00 |
+| p1-b | −2,17 / 0,49 / 0,98, 0,61 / 0,00 | −1,29 / 0,41 / 0,11, 0,05 / 0,93 | −0,37 / 0,71 / 0,88, 0,79 / 0,00 |
+| p2-a | −2,06 / 0,33 / 0,94, 0,96 / 0,00 | −1,54 / 0,39 / 0,09, 0,01 / 0,36 | −0,15 / 0,61 / 0,94, 0,87 / 0,00 |
+| p2-b | −2,17 / 0,40 / 1,00, 0,70 / 0,00 | −1,16 / 0,41 / 0,00, 0,04 / 0,97 | −0,28 / 0,48 / 0,91, 0,88 / 0,00 |
+
+- **La direction contrainte (v moyen) casse encore tout pendant les épisodes** : la localisation tombe à 0,00–0,11,
+  p_goal monte jusqu'à 0,97, et cela même sur les images à b ≈ 0. La contrainte vaut situation par situation, pas pour
+  leur moyenne.
+- **Le pas à pas contraint tient presque toutes les vérifications sur l'image d'entraînement** : p_goal = 0,
+  localisation au pas 1 de 0,85 à 0,94, et la masse sur le successeur joué passe de 0,2 à 0,4–0,8. Seule exception, la
+  localisation dans la zone chez p1-a : 0,63 contre 0,87 sans intervention (les autres agents restent à 0,79–0,88).
+  b remonte de 1,4 à 1,9 bit.
+- **Mais la part dirigée ne remonte qu'en partie** : 0,32 → 0,44, 0,49 → 0,71, 0,33 → 0,61, 0,40 → 0,48 (les références
+  sont à 0,94).
+
+## 12. E7, B : l'induction chez les références ((49))
+
+Direction inverse (vers le tapis roulant), α ∈ {0 ; 0,1 ; 0,2 ; 0,3 ; 0,4 ; 0,5 ; 0,75 ; 1}, images à zone UD, contrôle
+aléatoire de même norme (`summary.json`, clé `induction`). Image d'entraînement, α de 0,1 à 1 (en gras, le premier α où la
+localisation casse) :
+
+| Agent | b | part dirigée | loc. dans la zone | p_goal |
+|---|---|---|---|---|
+| p1-a | −0,05, −0,22, **−0,41**, −0,60, −0,77, −0,89, −1,90 | 0,94, 0,93, **0,54**, 0,42, 0,41, 0,40, 0,41 | 0,99, 0,97, **0,28**, 0,04, 0,01, 0,00, 0,00 | 0, 0, **0,48**, 0,79, 0,87, 0,95, 0,97 |
+| p1-b | −0,03, −0,28, **−0,68**, −1,02, −1,26, −1,40, −1,82 | 0,94, 0,93, **0,67**, 0,46, 0,39, 0,33, 0,36 | 1,00, 0,99, **0,51**, 0,15, 0,12, 0,08, 0,05 | 0, 0, **0,28**, 0,69, 0,78, 0,88, 0,94 |
+| p2-a | −0,06, −0,24, **−0,49**, −0,53, −0,62, −1,01, −1,12 | 0,94, 0,95, **0,93**, 0,73, 0,52, 0,37, 0,28 | 0,99, 0,85, **0,37**, 0,10, 0,06, 0,06, 0,00 | 0, 0, 0, 0, 0, 0,01, 0,08 |
+| p2-b | −0,06, −0,39, −0,67, **−0,88**, −1,05, −1,76, −1,33 | 0,94, 0,94, 0,93, **0,58**, 0,48, 0,37, 0,36 | 1,00, 1,00, 0,99, **0,34**, 0,15, 0,04, 0,02 | 0, 0, 0, **0,39**, 0,66, 0,84, 0,90 |
+
+- **b décroît avec α** : monotone sur 4 des 8 couples (agent, image). Sur les autres, il remonte aux grands α, quand la
+  localisation s'est déjà effondrée (p2-a position seule : la référence y est invalide).
+- **Tant que la localisation tient, b descend jusqu'à −0,67 bit (p2-b, α = 0,3) sans aucun changement de comportement**
+  (part dirigée 0,93).
+- **Le comportement change avec la localisation.** Chez p1-a et p1-b, la part dirigée chute au même α que la localisation,
+  et p_goal monte en même temps. Chez p2-a, la localisation casse dès α = 0,3 (0,37), mais le comportement ne chute qu'à
+  α = 0,4, sans que p_goal bouge. Chez p2-b, il chute à α = 0,4 avec la localisation et p_goal.
+- Le contrôle aléatoire de même norme fait baisser b deux à cinq fois moins et laisse le comportement intact jusqu'à
+  α ≈ 0,5.
+
+## 13. Superposition aux courbes d'E6
+
+Figure `e7_on_e6_directed_share.png` : carrés pour A, triangles pour B. Résidus de la part dirigée par rapport à la courbe
+principale d'E6 (RMSE des points d'E6 : 0,04). Les points sont séparés selon qu'ils passent les vérifications ou non
+(localisation dans la zone ≥ celle sans intervention − 0,02, et |Δp_goal| ≤ 0,05) :
+
+| Groupe | passe | n | b | part dirigée | RMSE résidu | résidu moyen |
+|---|---|---|---|---|---|---|
+| A, direction contrainte | non | 14 | −2,21 à −0,57 | 0,38–0,57 | 0,18 | −0,15 |
+| A, pas à pas contraint | oui | 9 | −0,37 à +0,19 | 0,47–0,95 | 0,21 | −0,11 |
+| A, pas à pas contraint | non | 5 | −0,90 à +0,05 | 0,39–0,94 | 0,25 | −0,22 |
+| B | oui | 12 | −0,67 à −0,03 | 0,93–0,94 | 0,05 | +0,03 |
+| B | non | 37 | −2,22 à −0,22 | 0,28–0,95 | 0,22 | −0,17 |
+| B aléatoire | oui / non | 33 / 16 | −1,00 à +0,01 | 0,64–0,95 | 0,02 / 0,06 | +0,01 / +0,02 |
+
+**Lecture.**
+- Les points A qui passent les vérifications sont sous la courbe : le comportement remonte moins que b.
+- Les points B qui passent sont sur la courbe, mais entre −0,67 et −0,13 bit la courbe d'E6 n'est que de
+  l'interpolation (aucun point d'E6, section 5). Ces points disent seulement que b peut baisser de 0,7 bit sans changer
+  le comportement.
+- Hors vérifications, A et B sont sous la courbe, et le comportement y chute en même temps que la localisation (et,
+  sauf chez p2-a, que p_goal).
+- Sur ces 4 agents, aucun point ne montre le comportement suivre b quand rien d'autre ne bouge.
+
+## 14. Coût des nouvelles phases
+
+Mesures sur CPU, 1 thread par processus, 8 processus en parallèle sur 12 cœurs :
+
+| Phase | par agent |
+|---|---|
+| e6 (avec le b frais en bordure et au centre, et les positions décodées) | 1 480–1 980 s (≈ celui du premier rapport) |
+| e7-constrained (16 réglages, calibration de μ_goal, reproduction ; 100 situations) | 3 530–4 400 s : ≈ 280–400 s par réglage avec μ_pos > 0, ≈ 30 s sans |
+| e7-apply, plan A (meilleur réglage, 4 images) | ≈ 3 900–4 500 s, dont 600–960 s par image pour le pas à pas contraint |
+| e7-apply, plan B (2 images × 7 α × 2 modes) | ≈ 3 400–4 300 s |
+
+Le terme de position décode l'image à chaque pas d'Adam : c'est lui qui coûte. Tout tient encore sur CPU : pour 5 à 7
+agents, compter environ 4 à 5 h avec 4 à 8 processus. Le GPU devrait aider surtout ici (décodages en lots).
+
+Dry-runs (préfixer `MSYS_NO_PATHCONV=1` sous Git Bash) :
+
+```bash
+python experiments/E6_phenotypes_latent/submit_kubeflow.py --batch e6_e5 --phase e6 --runs-root /scratch --repo-dir /scratch/helplessness-worldmodels-e6 --dry-run
+python experiments/E6_phenotypes_latent/submit_kubeflow.py --batch e6_e5 --phase e7-directions --runs-root /scratch --repo-dir /scratch/helplessness-worldmodels-e6 --dry-run
+python experiments/E6_phenotypes_latent/submit_kubeflow.py --batch e6_e5 --phase e7-constrained --runs-root /scratch --repo-dir /scratch/helplessness-worldmodels-e6 --dry-run
+python experiments/E6_phenotypes_latent/submit_kubeflow.py --batch e6_e5 --phase e7-apply --runs-root /scratch --repo-dir /scratch/helplessness-worldmodels-e6 --dry-run
+```
+
+Ordre : e6 et e7-directions, puis e7-constrained, puis e7-apply (plans A et B par défaut, `e7.apply_plans`).
+`configs/e6/agents_e5.yaml` ne contient pour l'instant que `base_A` (les autres en commentaire, TODO).
+
+## 15. Points tranchés
+
+1. **Lecture de la position** : position douce lue dans l'image décodée, τ = 0,02, plutôt qu'une sonde linéaire ((47)).
+2. **Le balayage corrige toutes les situations**, localisées ou non. La référence « sans intervention » est ainsi la
+   localisation propre de l'exposé (< 1). La restriction aux situations localisées ((42)) reste pour l'estimation de la
+   direction du premier rapport.
+3. **4 contextes par état pour le balayage**, à cause du coût. La reproduction du premier rapport se fait sur ses 10
+   contextes.
+4. **« Nettement supérieur » au contrôle aléatoire** : IC 95 % de l'écart au-dessus de 0, et écart ≥ ½ gain.
+5. **μ_goal** : le plus petit de la grille qui garde max |Δp_goal| ≤ 0,05 au réglage le plus permissif, par agent.
+6. **Plan A** : seul le meilleur réglage retenu est appliqué, pour le coût (`apply_settings: all` sinon), avec α ∈ {0 ; 1}.
+7. **Plan B** : la direction inverse non contrainte du premier rapport, sur une grille d'α plus fine.
+8. **Nature des erreurs** : la case du tapis est celle où l'état PRÉCÉDENT aurait mené sans contrôle, et les pas où
+   l'agent a bougé comme le tapis sont exclus. Région et case homologue : post hoc.
+9. **Agents** : la relance du run f = 1 échoué correspond à deux runs dans (32), E et F. Les deux sont listés en
+   commentaire ; à toi de garder celui ou ceux qui ont appris.
+
+**À décider par toi**
+- **Le terme de position ne suffit pas pendant les épisodes.** En mode direction, la contrainte par situation ne passe pas
+  à leur moyenne. En pas à pas, elle tient presque partout, mais le comportement ne suit b qu'en partie. Faut-il
+  contraindre aussi le pas suivant (h_{t+1}) ?
+- **Le réglage de référence pour la suite** : un λ ≥ 1 rapproche le contrôle aléatoire de 0, mais le gain est plus petit
+  (+0,5 à +0,9 bit).
+- **Les images de test intermédiaires**, toujours nécessaires pour lire la courbe d'E6 entre −1,9 et −0,1 bit.
