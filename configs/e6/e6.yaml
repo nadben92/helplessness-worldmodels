@@ -22,6 +22,13 @@ e6:
   validity: {n_walks: 150}   # E4's validity probe (E5's 150 walks, docs/e5/DECISIONS.md (25))
   phenotypes: {k_revisit: 4, n_min: 20, n_boot: 200}
   analysis:
+    # docs/e6/DECISIONS.md (44): one main phenotype; the first exit time stays in the rows (logged), out of the curves and
+    # figures (a directed agent follows the inside of the quadrant to its corner nearest the goal and leaves no earlier than
+    # a wandering one)
+    phenotypes:
+      primary: [directed_share]
+      secondary: [recovery_latency, zone_share, stay_share, revisit_share]
+      logged: [exit_median_km]
     include_references: true     # the reference models' points (b = 0 by construction) are in the curves
     grid_step: 0.01              # bit
     n_boot: 1000                 # resamples of the agents

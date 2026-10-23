@@ -25,7 +25,9 @@ import numpy as np
 import torch
 import yaml
 
-from helplessness.envs.layouts import two_zones
+from helplessness.envs.appearance.theme_sampling import CORRIDOR_COLOR
+from helplessness.envs.layouts import four_zones_pixel, two_zones
+from helplessness.envs.layouts.four_zones import QUADRANT_ORDER
 from helplessness.measures import zone_phenotypes as zp
 from helplessness.pipeline import two_zones_setup as setup
 from helplessness.probing import probe_validity
@@ -33,6 +35,7 @@ from helplessness.probing.frozen_episodes import (FrozenAgent, TestWorld, explor
                                                   run_episodes)
 from helplessness.probing.theme_probe_measure import measure as probe_measure
 from helplessness.probing.theme_probes import probe_images
+from helplessness.probing.walks import border_states as walk_borders
 
 SLOT_INDEX = {"nw": 0, "ne": 1, "se": 2, "sw": 3}
 # E6's streams: purposes under SeedSequence([e6.seed, image index, slot index, purpose])
@@ -241,6 +244,33 @@ def reference_fresh(reference: FrozenAgent, tw: TestWorld, image: dict, e6: dict
     out = np.full(two_zones.N_STATES, np.nan)
     out[states] = fresh_start_controllability(reference, tw, states, int(e6["fresh_samples"]), int(e6["draws"]), float(e6["margin"]),
                                               seeds(e6["seed"], image)["fresh"])
+    return out
+
+
+def border_states(slot: str) -> np.ndarray:
+    """The zone's states with a corridor neighbour (E4's entry states: probing.walks.border_states), reference dynamics."""
+    layout = two_zones.build_layout(1, "reference")
+    themes = two_zones.themes({q: CORRIDOR_COLOR for q in QUADRANT_ORDER}, (0, 0, 0))
+    succ = four_zones_pixel.build_pixel_env(layout, themes, goal_reward=50.0).transition_tensor().argmax(-1)
+    return walk_borders(succ, zone_states(slot), two_zones.corridor_states(layout))
+
+
+def fresh_split(exposed: FrozenAgent, tw: TestWorld, image: dict, e6: dict, ref_fresh: np.ndarray) -> dict:
+    """b at the first step of an episode started from the initial state (no context), at the zone's centre and on its
+    border (docs/e6/DECISIONS.md (46)): the exposed model's fresh-start I at the zone's states (the same function, seed
+    and draws as reference_fresh) minus the reference's, by state then zone. With E4's probe (border, after a corridor
+    walk), it splits E6's gap into a place effect (border vs centre, both fresh) and a history effect (probe vs fresh,
+    both on the border)."""
+    zone = zone_states(image["slot"])
+    I_exp = np.full(two_zones.N_STATES, np.nan)
+    I_exp[zone] = fresh_start_controllability(exposed, tw, zone, int(e6["fresh_samples"]), int(e6["draws"]), float(e6["margin"]),
+                                              seeds(e6["seed"], image)["fresh"])
+    out = {}
+    for name, states in (("center", interior_states(image["slot"])), ("border", border_states(image["slot"]))):
+        out[f"I_exp_fresh_{name}"] = float(np.nanmean(I_exp[states]))
+        out[f"I_ref_fresh_{name}"] = float(np.nanmean(ref_fresh[states]))
+        out[f"b_fresh_{name}"] = out[f"I_exp_fresh_{name}"] - out[f"I_ref_fresh_{name}"]
+        out[f"n_fresh_{name}"] = int(len(states))
     return out
 
 

@@ -106,7 +106,8 @@ def measure_contexts(agent: FrozenAgent, world: TestWorld, h: torch.Tensor, z: t
     with torch.no_grad():
         p_goal = agent.goal_head.p_goal(h, z).cpu().numpy()
     return {"I": sc["I"], "mass_true": sc["mass_true"], "ghost": np.nanmean(sc["ghost_fraction"], axis=1),
-            "loc_template": loc["nearest_template"] == states, "loc_agent": loc["agent_cell"] == states, "p_goal": p_goal}
+            "loc_template": loc["nearest_template"] == states, "loc_agent": loc["agent_cell"] == states, "p_goal": p_goal,
+            "decoded_template": loc["nearest_template"], "decoded_cell": loc["agent_cell"]}
 
 
 def fresh_start_contexts(rssm: RSSM, world: TestWorld, states: np.ndarray, generator: torch.Generator) -> tuple[torch.Tensor, torch.Tensor]:
@@ -139,7 +140,8 @@ def explore_sequences(seed_entropy: list[int], n_episodes: int) -> list[np.rando
     return np.random.SeedSequence([int(v) for v in seed_entropy]).spawn(n_episodes)
 
 
-FIELDS_STEP = ("I", "mass_played", "ghost", "loc_template", "loc_agent", "p_goal", "q_gap", "explored", "tied")
+FIELDS_STEP = ("I", "mass_played", "ghost", "loc_template", "loc_agent", "p_goal", "q_gap", "explored", "tied", "decoded_template",
+               "decoded_cell")
 
 
 def run_episodes(agent: FrozenAgent, world: TestWorld, starts: np.ndarray, H: int, epsilon: float,
@@ -148,7 +150,8 @@ def run_episodes(agent: FrozenAgent, world: TestWorld, starts: np.ndarray, H: in
     """The episodes from `starts` (n,), at most H transitions each (module docstring). measure: "all" (every step), "zone"
     (the steps whose state is in `zone` and t = 0), "first" (t = 0 only); unmeasured steps are NaN.
     Returns: states (n, H + 1) and actions (n, H) (-1 beyond the end), length, terminated, and per step (n, H): I,
-    mass_played (the mass on the true successor of the action taken), ghost, loc_template, loc_agent, p_goal, q_gap (max -
+    mass_played (the mass on the true successor of the action taken), ghost, loc_template, loc_agent, decoded_template and
+    decoded_cell (the decoded positions, states as floats, NaN where unmeasured), p_goal, q_gap (max -
     min Q), explored, tied, plus the hook's fields; Q (n, H, n_actions)."""
     rssm, cfg = agent.rssm, agent.cfg
     device = world.templates_t.device
@@ -184,7 +187,7 @@ def run_episodes(agent: FrozenAgent, world: TestWorld, starts: np.ndarray, H: in
             idx = torch.as_tensor(np.flatnonzero(sel), device=device)
             m = measure_contexts(agent, world, h[idx], z[idx], s[sel], draws, margin, meas_gen)
             r = rows[sel]
-            for name in ("I", "ghost", "loc_template", "loc_agent", "p_goal"):
+            for name in ("I", "ghost", "loc_template", "loc_agent", "p_goal", "decoded_template", "decoded_cell"):
                 out[name][r, t] = m[name]
             mass_t = m["mass_true"]
         Q = q_values(rssm, agent.goal_head, agent.critic, h, z, cfg.k_act, cfg, act_gen)

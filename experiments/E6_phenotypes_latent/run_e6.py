@@ -8,9 +8,12 @@ orchestrates and writes.
 Outputs, one directory per agent: <out-dir>/E6_phenotypes_latent/e6__<agent id>__<UTC>/
   rows.csv        one row per (image, role): role exposed (b_step1 = I_exposed - I_reference at step 1) and reference
                   (b_step1 = 0 by construction); validity (E4's criterion, the reference's probe), b_step1_probe (E4's
-                  probe: corridor walk, then the zone's border) and coherence_gap = b_step1 - b_step1_probe; localisation;
+                  probe: corridor walk, then the zone's border) and coherence_gap = b_step1 - b_step1_probe; b at the first
+                  step from the initial state at the centre and on the border (b_fresh_center, b_fresh_border: the same
+                  function for both models), place_effect = b_fresh_border - b_fresh_center, history_effect =
+                  b_step1_probe - b_fresh_border (docs/e6/DECISIONS.md (46)); localisation;
                   the phenotypes with their bootstrap intervals; by-index curves (JSON lists)
-  episodes__<image>.npz   every per-step array of both models' episodes, b_local, the reference's fresh-start I
+  episodes.npz    <image>__<role>__<field>: every per-step array of both models' episodes, b_local, the reference's fresh-start I
   meta.yaml, status.json  the agent, its weights (path, SHA-256), the config, the code's provenance, timings
 
 Usage, from the repo root:
@@ -65,6 +68,7 @@ def measure_agent(cfg: dict, e6: dict, agent: dict, device, images_only: list[st
         ep = {role: fs.run_model(m, tw, im, e6, eps[role]) for role, m in models.items()}
         t1 = time.perf_counter()
         ref_fresh = fs.reference_fresh(models["reference"], tw, im, e6)
+        split = fs.fresh_split(models["experimental"], tw, im, e6, ref_fresh)  # b's gap with the probe: place and history
         t2 = time.perf_counter()
         val = fs.probe_validity_pair(cfg, conf, {r: m.rssm for r, m in models.items()}, im, int(e6["validity"]["n_walks"]), device)
         t3 = time.perf_counter()
@@ -79,7 +83,9 @@ def measure_agent(cfg: dict, e6: dict, agent: dict, device, images_only: list[st
             rows.append({"agent": agent["id"], "condition": agent["condition"], "configuration": agent["configuration"], "seed": agent["seed"],
                          "image": im["name"], "image_index": im["index"], "slot": im["slot"], "position": im["role"], "role": ROLES[role],
                          "epsilon": eps[role], **{k: v for k, v in val.items()}, "coherence_gap": belief["b_step1"] - val["b_step1_probe"] if role == "experimental" else float("nan"),
-                         **belief, **ph, "b_local_by_index": [None if not np.isfinite(v) else float(v) for v in bl["mean"]],
+                         **belief, **ph, **split, "place_effect": split["b_fresh_border"] - split["b_fresh_center"],
+                         "history_effect": val["b_step1_probe"] - split["b_fresh_border"],
+                         "b_local_by_index": [None if not np.isfinite(v) else float(v) for v in bl["mean"]],
                          "b_local_by_index_n": bl["n"].tolist()})
             for key, value in ep[role].items():
                 arrays[f"{im['name']}__{ROLES[role]}__{key}"] = value

@@ -178,7 +178,6 @@ def summarize(states: np.ndarray, actions: np.ndarray, length: np.ndarray, zone:
 
 
 PHENOTYPES = ("exit_median_km", "directed_share", "recovery_latency", "zone_share", "stay_share", "revisit_share")
-PRIMARY = ("exit_median_km", "directed_share", "recovery_latency")
 
 
 def bootstrap(states: np.ndarray, actions: np.ndarray, length: np.ndarray, zone: np.ndarray, dist: np.ndarray, epsilon: float,

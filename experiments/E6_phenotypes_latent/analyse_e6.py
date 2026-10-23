@@ -1,6 +1,7 @@
 """E6's analysis (docs/E6_phenotypes_latent.md, docs/e6/DECISIONS.md): every run of run_e6.py given, read-only.
 
-For each phenotype (measures.zone_phenotypes.PHENOTYPES; the first three are the main ones):
+For each phenotype of e6.analysis.phenotypes, primary then secondary (the logged ones -- the first exit time -- stay in
+points.csv only, docs/e6/DECISIONS.md (44)):
   1. main cloud: one point per valid (agent, image) -- the exposed role, and the reference role (b = 0) unless
      e6.analysis.include_references is false; the isotonic fit, its smooth version, the band of a bootstrap over the agents;
   2. by condition: the same points coloured by condition, one curve per condition with enough points;
@@ -30,7 +31,9 @@ import numpy as np
 
 from helplessness.config import REPO_ROOT
 from helplessness.measures import monotone_fit as mf
-from helplessness.measures.zone_phenotypes import PHENOTYPES, PRIMARY
+from helplessness.measures import localisation_errors as le
+from helplessness.measures.zone_phenotypes import PHENOTYPES
+from helplessness.pipeline import two_zones_setup as setup
 from helplessness.pipeline import frozen_setup as fs
 
 SERIES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300"]  # fixed categorical order (dataviz palette)
@@ -173,6 +176,52 @@ def plot_by_index(rows: list[dict], path: Path, H: int = 10) -> None:
     plt.close(fig)
 
 
+def localisation_section(rows: list[dict], dirs: list[str], cfg: dict, out: Path) -> dict:
+    """docs/e6/DECISIONS.md (45): the localisation of every (agent, image) next to b and the directed share; the directed
+    share against the localisation across the exposed models (valid pairs), and step by step within each agent (steps
+    well vs badly localised); the nature of the exposed models' errors at the former UD slot (on the conveyor's cell?).
+    Reads each run's episodes.npz (decoded_template: the nearest-template rule, E4's localisation)."""
+    exposed = [r for r in rows if r["role"] == "exposed"]
+    table = [{k: r.get(k) for k in ("agent", "condition", "image", "valid", "b_step1", "directed_share", "loc_template_step1", "loc_template_zone",
+                                    "loc_agent_zone")} for r in rows]
+    write_csv(out / "localisation_by_pair.csv", table)
+    valid = [r for r in exposed if fs._truthy(r["valid"])]
+    res = {"n_valid_exposed": len(valid)}
+    for name, sel in (("all_valid", valid), ("b_below_minus1", [r for r in valid if float(r["b_step1"]) < -1.0])):
+        d = [float(r["directed_share"]) for r in sel]
+        loc = [float(r["loc_template_zone"]) for r in sel]
+        res[f"corr_directed_loc_zone_{name}"] = {"n": len(sel), "pearson": _pearson(d, loc), "spearman": mf.spearman(np.array(d), np.array(loc))}
+    neighbours = le.torus_neighbours((12, 12))
+    dist = fs.goal_distances()
+    steps_rows, error_rows = [], []
+    for d in dirs:
+        npz = Path(d) / "episodes.npz"
+        rows_d = json.loads((Path(d) / "rows.json").read_text(encoding="utf-8"))
+        if not npz.is_file():
+            continue
+        arrays = np.load(npz)
+        agent = rows_d[0]
+        conf = {**setup.configuration(cfg, agent["configuration"]), "seed": agent["seed"]}
+        conveyor = setup.successors(setup.world(cfg, conf, "experimental"))[:, 4]  # the conveyor ignores the action
+        for r in (r for r in rows_d if r["role"] == "exposed"):
+            key = f"{r['image']}__exposed__"
+            if key + "decoded_template" not in arrays:
+                continue
+            zone = np.zeros(144, dtype=bool)
+            zone[fs.zone_states(r["slot"])] = True
+            st, length, dec = arrays[key + "states"], arrays[key + "length"], arrays[key + "decoded_template"]
+            sb = le.steps_by_localisation(st, length, zone, dist, dec)
+            steps_rows.append({"agent": r["agent"], "image": r["image"], "valid": r["valid"], "b_step1": r["b_step1"], **sb})
+            if r["position"] == "ud":
+                en = le.error_nature(st, length, zone, dec, conveyor, neighbours)
+                error_rows.append({"agent": r["agent"], "image": r["image"], "valid": r["valid"], "b_step1": r["b_step1"], **en})
+    write_csv(out / "localisation_steps.csv", steps_rows)
+    write_csv(out / "localisation_errors.csv", error_rows)
+    res["steps"] = steps_rows
+    res["errors"] = error_rows
+    return res
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--runs", nargs="+", required=True)
@@ -201,7 +250,8 @@ def main(argv: list[str] | None = None) -> int:
     summary = {"runs": dirs, "n_rows": len(rows), "n_valid_exposed": sum(fs._truthy(r["valid"]) for r in exposed), "n_exposed": len(exposed),
                "phenotypes": {}}
     curves, held_rows = {"b": grid}, []
-    for name in PHENOTYPES:
+    roles = an["phenotypes"]
+    for name in [*roles["primary"], *roles["secondary"]]:
         res = analyse_phenotype(rows, name, an, grid, rng)
         if "skipped" in res:
             summary["phenotypes"][name] = res
@@ -217,7 +267,7 @@ def main(argv: list[str] | None = None) -> int:
                                   "mae_b": it["mae_b"], "n_outside_y_range": int(it["outside_y_range"].sum()),
                                   "n_outside_b_range": int(it["outside_b_range"].sum()), "n_flat": int(it["flat"].sum())})
         loc = {k: v for k, v in res["localisation"].items() if k != "curve_without"}
-        summary["phenotypes"][name] = {"primary": name in PRIMARY, "n_points": res["n_points"], "n_agents": m["n_clusters"],
+        summary["phenotypes"][name] = {"primary": name in roles["primary"], "n_points": res["n_points"], "n_agents": m["n_clusters"],
                                        "increasing": m["increasing"], "spearman": m["spearman"], "spearman_ci": m["spearman_ci"],
                                        "invertible_range": m["strict"]["invertible_range"], "invertible_share": m["strict"]["invertible_share"],
                                        # the strict range is read on the smooth curves: across a gap without points it is interpolation
@@ -228,6 +278,8 @@ def main(argv: list[str] | None = None) -> int:
     np.savez_compressed(args.out / "curves.npz", **curves)
     write_csv(args.out / "held_out.csv", held_rows)
     plot_by_index(rows, args.out / "figures" / "by_index.png")
+    summary["logged_only"] = list(roles.get("logged", []))
+    summary["localisation"] = localisation_section(rows, dirs, cfg, args.out)
     (args.out / "summary.json").write_text(json.dumps(summary, indent=1, default=lambda o: o.tolist() if hasattr(o, "tolist") else str(o)),
                                            encoding="utf-8")
     print(json.dumps({n: {k: v for k, v in s.items() if k in ("n_points", "spearman", "spearman_ci", "invertible_range", "increasing")}
