@@ -39,6 +39,7 @@ e7:
     specific_share: 0.5       # kept: the gain over the random control's has a 95% CI above 0 and is >= this share of the gain
     n_boot: 1000
     alphas: [0.0, 1.0]        # the application of a kept setting (alpha = 0: the identity with E6)
+    apply_settings: best      # best: the kept setting with the largest specific gain, per agent (cost); all: every kept setting
   # B. The induction in the references (run_e7_apply.py, plan B): the reverse direction and its random control.
   induction:
     alphas: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.75, 1.0]

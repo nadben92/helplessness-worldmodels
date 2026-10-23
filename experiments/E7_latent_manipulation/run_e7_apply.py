@@ -119,7 +119,10 @@ def build_plan(plans, im: dict, vec: dict, modes: list[str], alphas: list[float]
     if "A" in plans:
         if constrained is None:
             log(f"[E7 apply] {im['name']}: plan A needs a run_e7_constrained.py output, skipped")
-        for r in [r for r in (constrained or {}).get("settings", []) if r["kept"]]:
+        kept = [r for r in (constrained or {}).get("settings", []) if r["kept"]]
+        if e7["constrained"].get("apply_settings", "best") == "best" and kept:  # cost: the constrained stepwise decodes at every Adam step
+            kept = [max(kept, key=lambda r: r["specific_gain"])]
+        for r in kept:
             for mode in ("constrained_direction", "constrained_stepwise"):
                 items += [{"mode": mode, "alpha": float(a), "role": "experimental", "plan": "A", "setting": r}
                           for a in e7["constrained"]["alphas"] if float(a) != 0.0]

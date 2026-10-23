@@ -248,7 +248,8 @@ def test_apply_plans():
     apply = load_experiment_module("E7_latent_manipulation", "run_e7_apply.py", "e7_apply_under_test")
     e7 = fs.load_layered_config(REPO_ROOT / "configs" / "e7" / "e7.yaml", ("e6", "e7"))["e7"]
     vec = {"reverse": np.zeros(16), "reverse_random": np.zeros(16)}
-    kept = {"settings": [{"setting": "lam1_mupos10", "kept": True}, {"setting": "lam0.01_mupos0", "kept": False}]}
+    kept = {"settings": [{"setting": "lam1_mupos10", "kept": True, "specific_gain": 1.0}, {"setting": "lam0.01_mupos0", "kept": False, "specific_gain": 2.0},
+                         {"setting": "lam10_mupos10", "kept": True, "specific_gain": 0.5}]}  # best kept: lam1_mupos10
     ud, other = {"name": "training", "role": "ud"}, {"name": "neutral", "role": "neutral"}
     items = apply.build_plan(["A", "B"], ud, vec, [], [], e7, kept, lambda s: None)
     modes = [(i["mode"], i["alpha"], i["plan"]) for i in items]
