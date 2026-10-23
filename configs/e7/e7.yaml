@@ -1,0 +1,26 @@
+# E7 -- the causal test: a correction of h (docs/E7_latent_manipulation.md, docs/e6/DECISIONS.md). `base`: E6's config
+# (E4's world and E6's protocol, read unchanged: E7's episodes are E6's, with an intervention). `e7`: the corrections.
+base: configs/e6/e6.yaml
+e7:
+  seed: 7007
+  # Correction of h (probing.belief_steering): sum_a KL(target_a || prior(GRU(h + d, z, a))) + lam |d|^2, Adam from d = 0.
+  lam: 0.01
+  lr: 0.05
+  max_steps: 1000
+  tol: 1.0e-4          # plateau: every situation's loss changed by less than tol (relative) over `patience` steps
+  patience: 50
+  # Situations: every state of the zone of interest, contexts_per_state context walks (probing.context_walks), split by
+  # their index into estimation (even) and test (odd) halves; only the situations the model localises (nearest template
+  # of the decoded (h, z) = the true state) are optimised.
+  contexts_per_state: 10
+  n_pre: [8, 32]
+  # Images on which the common direction v is estimated (by name, among e6.images); every image is reported.
+  direction_images: [training]
+  restarts: {n_situations: 20, k: 5}  # stability: random restarts (norm = the mean |d|) on a subset of situations
+  # Application (run_e7_apply.py): E6's episodes with h <- h + alpha * d at every step in the zone (apply_in: zone) or
+  # at every step (apply_in: all).
+  alphas: [0.0, 0.25, 0.5, 0.75, 1.0, 1.5]
+  apply_in: zone
+  modes: [direction, random, stepwise]   # stepwise: d optimised at every step on the current h
+  stepwise_max_steps: 300                # Adam steps of a stepwise correction (cost; the plateau rule still applies)
+  reverse: true                          # the reference agent corrected towards the exposed training dynamics (UD slot)

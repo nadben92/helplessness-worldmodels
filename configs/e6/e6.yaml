@@ -1,0 +1,31 @@
+# E6 -- the behavioural signature of the controllability belief (docs/E6_phenotypes_latent.md, docs/e6/DECISIONS.md).
+# `base`: the E4 config, read whole and unchanged (render, episode, measure.kernel_margin_threshold, e4.walks / e4.probe
+# for the validity probes, e4.configurations and themes). `e6`: the protocol. The agents are NOT here: an agents file
+# (configs/e6/agents_*.yaml) lists them, given at the command line.
+base: configs/e4/e4.yaml
+e6:
+  seed: 6006
+  # The test images (a parameter: set after E5's probes to cover the belief's range). Names are free; axis "training" is
+  # the training image, "position_only", or one of E4's axes (segment, arc_ctrl, arc_inc) with its point k; position:
+  # ud / cd / neutral, the zone of interest (the slot the image changes; the agent starts in its central 3 x 3).
+  images:
+    - {name: training, axis: training, position: ud}
+    - {name: position_only, axis: position_only, k: 0, position: ud}
+    - {name: theme_only, axis: segment, k: 0, position: neutral}
+    - {name: neutral, axis: training, position: neutral}
+  n_reps: 20            # episodes per start state (9 starts: 180 episodes per model and image)
+  horizon: 36           # H, the episode's truncation (= episode.max_steps, checked)
+  epsilon: null         # null: each model's training epsilon (its checkpoint's agent_config); a number overrides it
+  measure: all          # per-step measures: all (every step), zone (steps in the zone, and step 1), first (step 1)
+  draws: 16             # prior draws per action of I_s (E4's e4.probe.draws)
+  fresh_samples: 8      # posterior draws per state of the reference's fresh-start I (b_local's subtrahend)
+  validity: {n_walks: 150}   # E4's validity probe (E5's 150 walks, docs/e5/DECISIONS.md (25))
+  phenotypes: {k_revisit: 4, n_min: 20, n_boot: 200}
+  analysis:
+    include_references: true     # the reference models' points (b = 0 by construction) are in the curves
+    grid_step: 0.01              # bit
+    n_boot: 1000                 # resamples of the agents
+    window: 0.25                 # bit: the strict-monotonicity window
+    min_delta_share: 0.02        # the smallest change counted as strict, as a share of the phenotype's observed range
+    localisation_min: 0.9        # E4's localisation at step 1 (nearest template) below which a pair is "poorly localised"
+    min_points_per_condition: 4  # a per-condition curve needs at least this many points
