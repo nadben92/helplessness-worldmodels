@@ -30,7 +30,7 @@ import numpy as np
 
 from helplessness.config import REPO_ROOT
 from helplessness.measures import monotone_fit as mf
-from helplessness.measures.zone_phenotypes import PHENOTYPES, PRIMARY
+from helplessness.measures.zone_phenotypes import PHENOTYPES
 from helplessness.pipeline import frozen_setup as fs
 
 MODE_COLOUR = {"direction": "#2a78d6", "random": "#eb6834", "stepwise": "#1baf7a", "reverse": "#eda100", "reverse_random": "#e87ba4"}
@@ -64,11 +64,74 @@ def same(a, b) -> bool:
     return (np.isnan(fa) and np.isnan(fb)) or fa == fb
 
 
+def induction_checks(rows: list[dict]) -> list[dict]:
+    """Plan B, per (agent, image): b at step 1, the directed share, the localisation and p_goal along alpha for the reverse
+    direction and its random control, against the reference without intervention (reverse_none); whether b decreases
+    monotonically with alpha (no rise larger than 0.02 bit between consecutive alphas)."""
+    out = []
+    keys = sorted({(r["agent"], r["image"]) for r in rows if r.get("plan") == "B"})
+    for agent, image in keys:
+        base = next((r for r in rows if (r["agent"], r["image"], r["mode"]) == (agent, image, "reverse_none")), None)
+        for mode in ("reverse", "reverse_random"):
+            seq = sorted((r for r in rows if (r["agent"], r["image"], r["mode"], r.get("plan")) == (agent, image, mode, "B")), key=lambda r: r["alpha"])
+            if not seq or base is None:
+                continue
+            seq = [base] + seq
+            b = [float(r["b_step1"]) for r in seq]
+            out.append({"agent": agent, "image": image, "mode": mode, "alphas": [float(r["alpha"]) for r in seq], "b_step1": b,
+                        "b_monotone_decreasing": bool(all(b[i + 1] <= b[i] + 0.02 for i in range(len(b) - 1))),
+                        "directed_share": [float(r["directed_share"]) for r in seq],
+                        "loc_template_step1": [float(r["loc_template_step1"]) for r in seq], "loc_template_zone": [float(r["loc_template_zone"]) for r in seq],
+                        "p_goal_zone": [float(r["p_goal_zone"]) for r in seq], "delta_norm_zone": [float(r["delta_norm_zone"]) for r in seq]})
+    return out
+
+
+def constrained_table(patterns: list[str], out: Path) -> list[dict]:
+    """Manipulation A's sweep (run_e7_constrained.py), every agent: one row per setting, and the combined trade-off figure."""
+    rows, lines = [], {}
+    for d, s in read(patterns, "settings.json"):
+        for r in s["settings"]:
+            rows.append(r)
+        for image, e in s["images"].items():
+            lines[(s["agent"], image)] = e
+    if not rows:
+        return []
+    write_csv(out / "constrained_settings.csv", rows)
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    agents = sorted({r["agent"] for r in rows})
+    fig, axes = plt.subplots(1, len(agents), figsize=(4.2 * len(agents), 4.2), sharey=True, squeeze=False)
+    for ax, agent in zip(axes[0], agents):
+        ax.grid(color="#e6e6e3", lw=0.6)
+        ax.set_axisbelow(True)
+        sel = [r for r in rows if r["agent"] == agent]
+        for r in sel:
+            ax.scatter(r["gain_b"], r["loc_after"], s=44, color="#2a78d6" if r["kept"] else "#7a7a75", zorder=3)
+            ax.scatter(r["gain_b_random"], r["loc_random"], s=34, facecolors="white", edgecolors="#eb6834", linewidths=1.5, zorder=3)
+            ax.annotate(f"{r['lam']:g}/{r['mu_pos']:g}", (r["gain_b"], r["loc_after"]), fontsize=5, xytext=(2, 2), textcoords="offset points")
+        ax.axhline(sel[0]["loc_before"], color="#2b2b29", ls="--", lw=1)
+        ax.axhline(sel[0]["loc_reference"], color="#1baf7a", ls=":", lw=1.5)
+        ax.set_title(agent, fontsize=9, loc="left")
+        ax.set_xlabel("gain of b (bit)")
+    axes[0, 0].set_ylabel("localisation under intervention")
+    handles = [plt.Line2D([], [], marker="o", ls="", color="#2a78d6", label="kept"), plt.Line2D([], [], marker="o", ls="", color="#7a7a75", label="not kept"),
+               plt.Line2D([], [], marker="o", ls="", mfc="white", mec="#eb6834", label="random control"),
+               plt.Line2D([], [], color="#2b2b29", ls="--", label="exposed, no intervention"), plt.Line2D([], [], color="#1baf7a", ls=":", label="reference")]
+    fig.legend(handles=handles, loc="lower center", ncol=5, fontsize=7, frameon=False)
+    fig.tight_layout(rect=(0, 0.08, 1, 1))
+    fig.savefig(out / "figures" / "constrained_tradeoff.png", dpi=130)
+    plt.close(fig)
+    return rows
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--e6-runs", nargs="+", required=True)
     parser.add_argument("--apply-runs", nargs="+", required=True)
     parser.add_argument("--directions-runs", nargs="+", default=[])
+    parser.add_argument("--constrained-runs", nargs="+", default=[], help="run_e7_constrained.py outputs (manipulation A's sweep)")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--config", type=Path, default=REPO_ROOT / "configs" / "e7" / "e7.yaml")
     parser.add_argument("--seed", type=int, default=6060, help="E6's analysis seed (analyse_e6.py --seed): the same curves")
@@ -131,53 +194,74 @@ def main(argv: list[str] | None = None) -> int:
                        **{f"d_{c}": (float(r[c]) - float(b0[c])) if c in r and c in b0 else None for c in CHECKS}})
     write_csv(args.out / "checks.csv", checks)
 
-    # E7 points on E6's curves
+    # E7 points on E6's curves, by group: A (the constrained correction's kept settings), B (the induction in the references,
+    # reverse), v1 (the first report's modes)
+    roles = an["phenotypes"]
     valid = {(r["agent"], r["image"]): fs._truthy(r["valid"]) for r in e6_rows if r["role"] == "exposed"}
     bs = [float(r["b_step1"]) for r in e6_rows] + [float(r["b_step1"]) for r in e7_rows]
     step = float(an["grid_step"])
     grid = np.arange(np.floor(min(bs + [0.0]) / step) * step - step, max(bs + [0.0]) + 2 * step, step)
     rng = np.random.default_rng(args.seed)
     resid_rows, summary = [], {"identity_all": all(i.get("identical") for i in ident) if ident else None, "phenotypes": {}}
-    for name in PHENOTYPES:
+
+    def group_of(r) -> str | None:
+        plan = r.get("plan") or "v1"
+        if r["mode"] in ("none", "reverse_none"):
+            return None
+        if plan == "A":
+            return f"A {r['mode']}"
+        if plan == "B":
+            return "B" if r["mode"] == "reverse" else "B random"
+        return f"v1 {r['mode']}"
+
+    for name in [*roles["primary"], *roles["secondary"]]:
         pts = fs.curve_points(e6_rows, name, include_references=bool(an["include_references"]))
         if pts["b"].size < 3:
             continue
         main = mf.curve_summary(pts["b"], pts["y"], pts["agent"], grid, rng, int(an["n_boot"]), float(an["window"]), float(an["min_delta_share"]))
-        e7_pts = [r for r in e7_rows if r["mode"] not in ("none", "reverse_none") and valid.get((r["agent"], r["image"]), False)]
-        for r in e7_pts:
+        for r in e7_rows:
+            g = group_of(r)
+            if g is None or not valid.get((r["agent"], r["image"]), False):
+                continue
             y = float(r[name]) if not (name == "recovery_latency" and fs._truthy(r.get("recovery_censored"))) else float(r.get("recovery_max_index_read", np.nan)) + 1
             b = float(r["b_step1"])
             pred = float(mf.predict(main["fit"], [b])[0])
-            resid_rows.append({"phenotype": name, "agent": r["agent"], "image": r["image"], "mode": r["mode"], "alpha": r["alpha"], "b_step1": b,
-                               "y": y, "e6_curve": pred, "residual": y - pred, "outside_e6_b_range": bool(b < pts["b"].min() or b > pts["b"].max())})
+            resid_rows.append({"phenotype": name, "group": g, "agent": r["agent"], "image": r["image"], "mode": r["mode"], "setting": r.get("setting"),
+                               "alpha": r["alpha"], "b_step1": b, "y": y, "e6_curve": pred, "residual": y - pred,
+                               "loc_template_step1": r.get("loc_template_step1"), "loc_template_zone": r.get("loc_template_zone"),
+                               "p_goal_zone": r.get("p_goal_zone"), "outside_e6_b_range": bool(b < pts["b"].min() or b > pts["b"].max())})
         sub = [x for x in resid_rows if x["phenotype"] == name]
-        summary["phenotypes"][name] = {"primary": name in PRIMARY, "by_mode": {
-            m: {"n": len(v), "rmse_residual": float(np.sqrt(np.mean([x["residual"] ** 2 for x in v]))) if v else None,
+        groups = sorted({x["group"] for x in sub})
+        summary["phenotypes"][name] = {"primary": name in roles["primary"], "by_group": {
+            g: {"n": len(v), "rmse_residual": float(np.sqrt(np.mean([x["residual"] ** 2 for x in v]))) if v else None,
                 "mean_residual": float(np.mean([x["residual"] for x in v])) if v else None}
-            for m in MODE_COLOUR for v in [[x for x in sub if x["mode"] == m and np.isfinite(x["residual"])]]},
+            for g in groups for v in [[x for x in sub if x["group"] == g and np.isfinite(x["residual"])]]},
             "e6_points_rmse_residual": float(np.sqrt(np.mean((pts["y"] - mf.predict(main["fit"], pts["b"])) ** 2)))}
-        if name in PRIMARY:
+        if name in roles["primary"]:
             import matplotlib
             matplotlib.use("Agg")
             import matplotlib.pyplot as plt
 
-            fig, ax = plt.subplots(figsize=(6.4, 4.4))
+            fig, ax = plt.subplots(figsize=(6.8, 4.6))
             ax.grid(color="#e6e6e3", lw=0.6)
             ax.set_axisbelow(True)
             ax.fill_between(grid, main["band_lo"], main["band_hi"], color="#c3c2b7", alpha=0.5, lw=0, label="E6 band")
             ax.plot(grid, main["curve"], color="#2b2b29", lw=2, label="E6 curve")
             ax.scatter(pts["b"], pts["y"], s=30, color="#7a7a75", zorder=3, label="E6 points")
-            for m, c in MODE_COLOUR.items():
-                v = [x for x in sub if x["mode"] == m]
+            style = {"A constrained_direction": ("s", "#2a78d6"), "A constrained_stepwise": ("s", "#1baf7a"), "B": ("^", "#eda100")}
+            for g, (marker, colour) in style.items():
+                v = [x for x in sub if x["group"] == g]
                 if v:
-                    ax.scatter([x["b_step1"] for x in v], [x["y"] for x in v], s=[20 + 30 * float(x["alpha"]) for x in v], facecolors="white",
-                               edgecolors=c, linewidths=2, zorder=4, label=f"E7 {m} (size: alpha)")
+                    ax.scatter([x["b_step1"] for x in v], [x["y"] for x in v], marker=marker, s=46, facecolors="white", edgecolors=colour,
+                               linewidths=2, zorder=4, label=f"E7 {g}")
             ax.set_xlabel("b at step 1 (bit)")
             ax.set_ylabel(name)
             ax.legend(fontsize=7, frameon=False, loc="best")
             fig.tight_layout()
             fig.savefig(args.out / "figures" / f"e7_on_e6_{name}.png", dpi=130)
             plt.close(fig)
+    summary["induction"] = induction_checks(e7_rows)
+    summary["constrained"] = constrained_table(args.constrained_runs, args.out)
     write_csv(args.out / "residuals.csv", resid_rows)
     (args.out / "summary.json").write_text(json.dumps(summary, indent=1, default=str), encoding="utf-8")
     print(json.dumps(summary, indent=1, default=str))

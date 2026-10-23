@@ -24,3 +24,22 @@ e7:
   modes: [direction, random, stepwise]   # stepwise: d optimised at every step on the current h
   stepwise_max_steps: 300                # Adam steps of a stepwise correction (cost; the plateau rule still applies)
   reverse: true                          # the reference agent corrected towards the exposed training dynamics (UD slot)
+  # --- after the first report (docs/e6/DECISIONS.md (47)-(50)) ---
+  # A. The constrained correction of the exposed models (run_e7_constrained.py): + mu_pos D_pos + mu_goal (dp_goal)^2.
+  constrained:
+    images: [training]
+    contexts_per_state: 4     # the sweep's contexts (cost: the position term decodes at every Adam step); the same walk generator
+    reproduce_first_report: true  # lam = e7.lam, mu = 0 on e7.contexts_per_state's localised situations, against run_e7_directions' corrections
+    lams: [0.01, 0.1, 1.0, 10.0]
+    mu_pos: [0.0, 1.0, 10.0, 100.0]
+    mu_goal_grid: [0.0, 10.0, 100.0, 1000.0, 10000.0, 100000.0]  # the smallest keeping max |dp_goal| <= goal_tol at the most permissive setting
+    goal_tol: 0.05
+    tau: 0.02                 # the soft position's temperature (squared colour distance units)
+    loc_tol: 0.02             # kept: localisation under intervention >= the exposed model's without - loc_tol
+    specific_share: 0.5       # kept: the gain over the random control's has a 95% CI above 0 and is >= this share of the gain
+    n_boot: 1000
+    alphas: [0.0, 1.0]        # the application of a kept setting (alpha = 0: the identity with E6)
+  # B. The induction in the references (run_e7_apply.py, plan B): the reverse direction and its random control.
+  induction:
+    alphas: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.75, 1.0]
+  apply_plans: [A, B]         # run_e7_apply.py's default plans (v1: the first report's direction / random / stepwise / reverse)

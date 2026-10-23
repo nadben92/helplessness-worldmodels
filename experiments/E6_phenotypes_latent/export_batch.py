@@ -26,7 +26,8 @@ from pathlib import Path
 
 import batches
 
-PREFIX = {"e6": ("E6_phenotypes_latent", "e6"), "e7-directions": ("E7_latent_manipulation", "e7dir"), "e7-apply": ("E7_latent_manipulation", "e7apply")}
+PREFIX = {"e6": ("E6_phenotypes_latent", "e6"), "e7-directions": ("E7_latent_manipulation", "e7dir"),
+          "e7-constrained": ("E7_latent_manipulation", "e7con"), "e7-apply": ("E7_latent_manipulation", "e7apply")}
 
 
 def sha256(path: Path) -> str:

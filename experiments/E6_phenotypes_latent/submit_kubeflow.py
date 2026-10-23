@@ -3,8 +3,9 @@ under the library's supervisor (helplessness.cluster.kubeflow.supervise: <output
 agents in parallel (batches.MAX_PARALLEL), each process measuring --agents-per-job agents. E5's submission with E6's
 phases; frozen weights only, nothing is trained.
 
-Phases: e6 (run_e6.py), e7-directions (run_e7_directions.py), e7-apply (run_e7_apply.py; reads the e7-directions outputs
-under results/E7_latent_manipulation/ of the checkout, so it is submitted after them). Batch parameters: --runs-root (the
+Phases: e6 (run_e6.py), e7-directions (run_e7_directions.py), e7-constrained (run_e7_constrained.py), e7-apply
+(run_e7_apply.py; reads the e7-directions and e7-constrained outputs under results/E7_latent_manipulation/ of the
+checkout, so it is submitted after them). Batch parameters: --runs-root (the
 root the agents file's run globs are relative to: /scratch on the cluster), --agents-per-job, --agent-ids (a subset).
 
 Launched from the e6 checkout (branch e6, no modified tracked file: refused otherwise); results under

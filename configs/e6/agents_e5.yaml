@@ -1,38 +1,43 @@
-# E6/E7's agents on the cluster: p1-b-d1, baseline and shuffle f = 1 (docs/e5/DECISIONS.md (32)). TO BE CONFIRMED after
-# E5's wave 2 (the composition is the user's: add, remove or relabel entries; the code needs no change -- E8's
-# immunisation, for instance, is one more entry with its own condition). Runs root: the cluster's mount (/scratch),
-# --runs-root /scratch; every glob below is relative to it.
-# Seeds (e5_setup.SEED_LABELS): A = 2, B = 102, E = 402, F = 502. Seed B's f = 1 experimental run locked in (excluded);
-# E and F replace it and are measured against seed B's f = 1 reference (batches.REFERENCE_SEED_OF of E5).
+# E6/E7's agents on the cluster, the current two-wave plan of E5 (docs/e5/DECISIONS.md (32)): p1-b-d1, baseline seeds A
+# and B, shuffle f = 1 seed A, and the relaunch of the f = 1 run that failed in wave 1 (seed B's experimental run locked
+# in; wave 2 replaces it with seeds E = 402 and F = 502, both against seed B's f = 1 reference). Runs root: the cluster's
+# mount (--runs-root /scratch); every glob below is relative to it. Adding an agent (E8's immunisation...) is one more
+# entry, no code change.
+# TODO (user, after wave 2): uncomment the entries of the runs once trained and their weights at `checkpoint` exist;
+# check the globs against the run directories' names.
 checkpoint: 300000
 agents:
-  - id: base_A
+  - id: base_A        # E4's own pair of p1-b-d1 (trained)
     condition: baseline
     configuration: p1-b-d1
     seed: 2
     experimental: {run: "helplessness-worldmodels-e4/results/E4_generalization_gradient/grid12x12__2zones-p1-b-d1__pair-experimental__worldmodel-agent-e4__seed02__*"}
     reference: {run: "helplessness-worldmodels-e4/results/E4_generalization_gradient/grid12x12__2zones-p1-b-d1__pair-control__worldmodel-agent-e4__seed02__*"}
-  - id: base_B
-    condition: baseline
-    configuration: p1-b-d1
-    seed: 102
-    experimental: {run: "helplessness-worldmodels-e5/results/E5_belief_training/grid12x12__2zones-p1-b-d1-base__pair-experimental__worldmodel-agent-e5__seed102__*"}
-    reference: {run: "helplessness-worldmodels-e5/results/E5_belief_training/grid12x12__2zones-p1-b-d1-base__pair-control__worldmodel-agent-e5__seed102__*"}
-  - id: f1_A
-    condition: f1
-    configuration: p1-b-d1
-    seed: 2
-    experimental: {run: "helplessness-worldmodels-e5/results/E5_belief_training/grid12x12__2zones-p1-b-d1-sh100__pair-experimental__worldmodel-agent-e5__seed02__*"}
-    reference: {run: "helplessness-worldmodels-e5/results/E5_belief_training/grid12x12__2zones-p1-b-d1-sh100__pair-control__worldmodel-agent-e5__seed02__*"}
-  - id: f1_E
-    condition: f1
-    configuration: p1-b-d1
-    seed: 402
-    experimental: {run: "helplessness-worldmodels-e5/results/E5_belief_training/grid12x12__2zones-p1-b-d1-sh100__pair-experimental__worldmodel-agent-e5__seed402__*"}
-    reference: {run: "helplessness-worldmodels-e5/results/E5_belief_training/grid12x12__2zones-p1-b-d1-sh100__pair-control__worldmodel-agent-e5__seed102__*"}
-  - id: f1_F
-    condition: f1
-    configuration: p1-b-d1
-    seed: 502
-    experimental: {run: "helplessness-worldmodels-e5/results/E5_belief_training/grid12x12__2zones-p1-b-d1-sh100__pair-experimental__worldmodel-agent-e5__seed502__*"}
-    reference: {run: "helplessness-worldmodels-e5/results/E5_belief_training/grid12x12__2zones-p1-b-d1-sh100__pair-control__worldmodel-agent-e5__seed102__*"}
+  # TODO: wave 2, seed B's baseline (not yet trained)
+  # - id: base_B
+  #   condition: baseline
+  #   configuration: p1-b-d1
+  #   seed: 102
+  #   experimental: {run: "helplessness-worldmodels-e5/results/E5_belief_training/grid12x12__2zones-p1-b-d1-base__pair-experimental__worldmodel-agent-e5__seed102__*"}
+  #   reference: {run: "helplessness-worldmodels-e5/results/E5_belief_training/grid12x12__2zones-p1-b-d1-base__pair-control__worldmodel-agent-e5__seed102__*"}
+  # TODO: wave 1, shuffle f = 1 seed A (training)
+  # - id: f1_A
+  #   condition: f1
+  #   configuration: p1-b-d1
+  #   seed: 2
+  #   experimental: {run: "helplessness-worldmodels-e5/results/E5_belief_training/grid12x12__2zones-p1-b-d1-sh100__pair-experimental__worldmodel-agent-e5__seed02__*"}
+  #   reference: {run: "helplessness-worldmodels-e5/results/E5_belief_training/grid12x12__2zones-p1-b-d1-sh100__pair-control__worldmodel-agent-e5__seed02__*"}
+  # TODO: wave 2, the relaunch of seed B's failed f = 1 experimental run -- seeds E (402) and F (502), each against seed B's
+  # f = 1 reference; keep the one(s) that switched and learnt
+  # - id: f1_E
+  #   condition: f1
+  #   configuration: p1-b-d1
+  #   seed: 402
+  #   experimental: {run: "helplessness-worldmodels-e5/results/E5_belief_training/grid12x12__2zones-p1-b-d1-sh100__pair-experimental__worldmodel-agent-e5__seed402__*"}
+  #   reference: {run: "helplessness-worldmodels-e5/results/E5_belief_training/grid12x12__2zones-p1-b-d1-sh100__pair-control__worldmodel-agent-e5__seed102__*"}
+  # - id: f1_F
+  #   condition: f1
+  #   configuration: p1-b-d1
+  #   seed: 502
+  #   experimental: {run: "helplessness-worldmodels-e5/results/E5_belief_training/grid12x12__2zones-p1-b-d1-sh100__pair-experimental__worldmodel-agent-e5__seed502__*"}
+  #   reference: {run: "helplessness-worldmodels-e5/results/E5_belief_training/grid12x12__2zones-p1-b-d1-sh100__pair-control__worldmodel-agent-e5__seed102__*"}

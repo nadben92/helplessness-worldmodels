@@ -70,8 +70,10 @@ def training_successors(cfg: dict, conf: dict) -> np.ndarray:
     return setup.successors(setup.world(cfg, conf, "experimental"))
 
 
-def situations(cfg, e6, e7, conf, model, image, tw, task, target_succ, device) -> dict:
-    """The situations of one (model, image, task) and their corrections."""
+def contexts(cfg, e7, conf, model, image, tw, task, device) -> dict:
+    """Every context of one (model, image, task): the walks filtered by the model, the last step of each (h, z, its
+    state), whether the model localises it, its half, side and kind. The draws are those of `situations` (one
+    generator per (image, task), consumed by the filter only)."""
     world = setup.probe_world(cfg, conf, image["slot_colors"])
     zone = fs.zone_states(image["slot"])
     corridor = two_zones.corridor_states(world.layout)
@@ -86,7 +88,14 @@ def situations(cfg, e6, e7, conf, model, image, tw, task, target_succ, device) -
     states = walks["target"]
     loc = localise(model.rssm, tw, h, z)["nearest_template"] == states
     context_index = np.tile(np.arange(int(e7["contexts_per_state"])), len(zone))
-    half = np.where(context_index % 2 == 0, "estimation", "test")
+    return {"h": h, "z": z, "states": states, "loc": loc, "half": np.where(context_index % 2 == 0, "estimation", "test"),
+            "side": walks["side"], "kind": walks["kind"], "walks": walks}
+
+
+def situations(cfg, e6, e7, conf, model, image, tw, task, target_succ, device) -> dict:
+    """The situations of one (model, image, task) -- the localised contexts -- and their corrections."""
+    c = contexts(cfg, e7, conf, model, image, tw, task, device)
+    h, z, states, loc = c["h"], c["z"], c["states"], c["loc"]
     sel = torch.as_tensor(np.flatnonzero(loc), device=device)
     target = target_posteriors(model.rssm, h[sel], z[sel], target_succ[states[loc]], tw.templates_t)
     opt = optimise_delta(model.rssm, h[sel], z[sel], target, float(e7["lam"]), float(e7["lr"]), int(e7["max_steps"]), float(e7["tol"]),
@@ -94,8 +103,8 @@ def situations(cfg, e6, e7, conf, model, image, tw, task, target_succ, device) -
     mgen = torch.Generator(device=device).manual_seed(torch_seed(seq(e7["seed"], image, task, 2)))
     I0 = step_controllability(model.rssm, h[sel], z[sel], tw.templates_t, int(e6["draws"]), float(e6["margin"]), generator=mgen)["I"]
     I1 = step_controllability(model.rssm, h[sel] + opt["delta"], z[sel], tw.templates_t, int(e6["draws"]), float(e6["margin"]), generator=mgen)["I"]
-    return {"h": h[sel], "z": z[sel], "target": target, "delta": opt["delta"], "states": states[loc], "half": half[loc],
-            "side": walks["side"][loc], "kind": walks["kind"][loc], "I0": I0, "I_opt": I1, "kl0": opt["kl0"].cpu().numpy(),
+    return {"h": h[sel], "z": z[sel], "target": target, "delta": opt["delta"], "states": states[loc], "half": c["half"][loc],
+            "side": c["side"][loc], "kind": c["kind"][loc], "I0": I0, "I_opt": I1, "kl0": opt["kl0"].cpu().numpy(),
             "kl": opt["kl"].cpu().numpy(), "steps": opt["steps"], "converged": opt["converged"], "n_contexts": int(len(states)),
             "n_localised": int(loc.sum()), "loc_by_state": {int(s): float(loc[states == s].mean()) for s in np.unique(states)},
             "mgen": mgen}

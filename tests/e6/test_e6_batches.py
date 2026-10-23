@@ -16,19 +16,22 @@ submit = load_experiment_module("E6_phenotypes_latent", "submit_kubeflow.py", "e
 
 def test_agent_ids_of_both_files():
     assert batches.agent_ids(REPO_ROOT, "e6_dev_e4") == ["p1-a-d1_e4", "p1-b-d1_e4", "p2-a-d1_e4", "p2-b-d1_e4"]
-    assert batches.agent_ids(REPO_ROOT, "e6_e5") == ["base_A", "base_B", "f1_A", "f1_E", "f1_F"]
+    # the two-wave plan: only the trained runs are active, the others commented out with a TODO (the regex reads no comment)
+    assert batches.agent_ids(REPO_ROOT, "e6_e5") == ["base_A"]
+    text = (REPO_ROOT / "configs" / "e6" / "agents_e5.yaml").read_text(encoding="utf-8")
+    assert all(f"#   seed: {s}" in text or f"# - id" in text for s in (102, 402, 502)) and text.count("TODO") >= 3
 
 
 @pytest.mark.parametrize("phase", list(batches.PHASES))
 def test_jobs_of_every_phase(phase):
-    jobs = submit.commands("py", "e6_e5", phase, "/scratch", REPO_ROOT, "cuda", 2)
-    assert [n for n, _ in jobs] == [f"{phase}_base_A_base_B", f"{phase}_f1_A_f1_E", f"{phase}_f1_F"]
+    jobs = submit.commands("py", "e6_dev_e4", phase, "/scratch", REPO_ROOT, "cuda", 2)
+    assert [n for n, _ in jobs] == [f"{phase}_p1-a-d1_e4_p1-b-d1_e4", f"{phase}_p2-a-d1_e4_p2-b-d1_e4"]
     for _, cmd in jobs:
         assert cmd[:3] == ["py", "-u", batches.PHASES[phase]] and (REPO_ROOT / cmd[2]).is_file()
         assert cmd[cmd.index("--runs-root") + 1] == "/scratch" and cmd[cmd.index("--device") + 1] == "cuda"
-        assert ("--directions" in cmd) == (phase == "e7-apply")
+        assert ("--constrained" in cmd) == (phase == "e7-apply") and ("--directions" in cmd) == (phase in ("e7-apply", "e7-constrained"))
     with pytest.raises(ValueError):
-        batches.jobs(REPO_ROOT, "e6_e5", phase, "/scratch", only=["nobody"])
+        batches.jobs(REPO_ROOT, "e6_dev_e4", phase, "/scratch", only=["nobody"])
 
 
 def test_dry_run_prints_without_submitting(capsys):
@@ -37,7 +40,7 @@ def test_dry_run_prints_without_submitting(capsys):
 
 
 def test_agents_files_parse_and_resolve(tmp_path):
-    for name in ("agents_dev_e4.yaml", "agents_e5.yaml"):
+    for name in ("agents_dev_e4.yaml", "agents_e5.yaml"):  # (load_agents reads YAML: commented entries are not agents)
         with pytest.raises(FileNotFoundError):  # nothing under an empty root: the globs are explicit errors, never silent
             fs.load_agents(REPO_ROOT / "configs" / "e6" / name, tmp_path)
     run = tmp_path / "E4_generalization_gradient" / "grid12x12__2zones-p1-a-d1__pair-experimental__worldmodel-agent-e4__seed01__X" / "checkpoints"

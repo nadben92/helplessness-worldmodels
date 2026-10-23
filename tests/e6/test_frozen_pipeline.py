@@ -191,3 +191,70 @@ def test_run_episodes_measure_modes(world, agents):
     first = run_episodes(agents[0], tw, starts, 36, 0.1, seqs, 1, 2, zone, draws=4, measure="first")
     assert np.array_equal(full["states"], first["states"]) and np.array_equal(full["I"][:, 0], first["I"][:, 0])
     assert np.isnan(first["I"][:, 1:]).all()
+
+
+# --- after the first report (docs/e6/DECISIONS.md (44)-(50)) ---------------------------------------------------------
+
+def test_soft_position_reads_the_localisation_and_p_goal_keeps_its_value(world, agents):
+    from helplessness.probing.belief_steering import p_goal_with_grad, soft_agent_position
+    from helplessness.probing.probe_validity import decoded_agent_cell
+
+    _, _, tw = world
+    a = agents[0]
+    states = fs.zone_states("nw")[:8]
+    h, z = fresh_start_contexts(a.rssm, tw, states, torch.Generator().manual_seed(0))
+    with torch.no_grad():
+        pos = soft_agent_position(a.rssm, h, z, tw.agent, tw.kpx, 0.02)
+        cell = decoded_agent_cell(a.rssm.decode(h, z).clamp(0, 1), tw.agent, tw.kpx)
+        assert np.array_equal(pos.argmax(dim=1).numpy(), cell)
+        assert torch.allclose(p_goal_with_grad(a.goal_head, h, z), a.goal_head.p_goal(h, z))
+
+
+def test_constrained_correction(world, agents):
+    from helplessness.probing.belief_steering import constraint_terms, soft_agent_position
+
+    _, _, tw = world
+    a = agents[0]
+    states = fs.zone_states("nw")[:6]
+    h, z = fresh_start_contexts(a.rssm, tw, states, torch.Generator().manual_seed(0))
+    target = target_posteriors(a.rssm, h, z, tw.succ[states], tw.templates_t)
+    assert constraint_terms(a.rssm, a.goal_head, h, z, tw.agent, tw.kpx, 0.0, 0.0) is None
+    plain = optimise_delta(a.rssm, h, z, target, lam=0.01, max_steps=60)
+    none = optimise_delta(a.rssm, h, z, target, lam=0.01, max_steps=60, extra=constraint_terms(a.rssm, a.goal_head, h, z, tw.agent, tw.kpx, 0, 0))
+    assert torch.equal(plain["delta"], none["delta"])  # mu_pos = mu_goal = 0: the first report's correction, step for step
+    ex = constraint_terms(a.rssm, a.goal_head, h, z, tw.agent, tw.kpx, 100.0, 1000.0)
+    # the constraint's gradient reaches d: from the unconstrained solution, optimising with the constraint lowers it
+    held = optimise_delta(a.rssm, h, z, target, lam=0.01, lr=0.01, max_steps=200, init=plain["delta"], extra=ex)
+    with torch.no_grad():
+        assert ex(held["delta"]).mean() < ex(plain["delta"]).mean()
+    assert soft_agent_position is not None
+
+
+def test_border_and_fresh_split(world, agents):
+    _, images, tw = world
+    border, inner = fs.border_states("nw"), fs.interior_states("nw")
+    assert len(border) == 16 and not set(border) & set(inner) and set(border) | set(inner) == set(fs.zone_states("nw"))
+    rf = fs.reference_fresh(agents[1], tw, images[0], E6)
+    split = fs.fresh_split(agents[0], tw, images[0], E6, rf)
+    assert split["n_fresh_center"] == 9 and split["n_fresh_border"] == 16
+    assert split["b_fresh_border"] == pytest.approx(split["I_exp_fresh_border"] - split["I_ref_fresh_border"])
+    same = fs.fresh_split(agents[1], tw, images[0], E6, rf)  # the reference against itself: zero, same seed and draws
+    assert same["b_fresh_center"] == pytest.approx(0.0, abs=1e-12) and same["b_fresh_border"] == pytest.approx(0.0, abs=1e-12)
+
+
+def test_apply_plans():
+    from _experiment_loader import load_experiment_module
+
+    apply = load_experiment_module("E7_latent_manipulation", "run_e7_apply.py", "e7_apply_under_test")
+    e7 = fs.load_layered_config(REPO_ROOT / "configs" / "e7" / "e7.yaml", ("e6", "e7"))["e7"]
+    vec = {"reverse": np.zeros(16), "reverse_random": np.zeros(16)}
+    kept = {"settings": [{"setting": "lam1_mupos10", "kept": True}, {"setting": "lam0.01_mupos0", "kept": False}]}
+    ud, other = {"name": "training", "role": "ud"}, {"name": "neutral", "role": "neutral"}
+    items = apply.build_plan(["A", "B"], ud, vec, [], [], e7, kept, lambda s: None)
+    modes = [(i["mode"], i["alpha"], i["plan"]) for i in items]
+    assert modes[0] == ("none", 0.0, "all") and modes[-1] == ("reverse_none", 0.0, "all")
+    assert {(m, a) for m, a, p in modes if p == "A"} == {("constrained_direction", 1.0), ("constrained_stepwise", 1.0)}
+    assert sorted(a for m, a, p in modes if m == "reverse") == [a for a in e7["induction"]["alphas"] if a]
+    assert all(i["setting"]["setting"] == "lam1_mupos10" for i in items if i["plan"] == "A")
+    assert [i["mode"] for i in apply.build_plan(["A", "B"], other, vec, [], [], e7, kept, lambda s: None)] == ["none"] + \
+        ["constrained_direction", "constrained_stepwise"]
