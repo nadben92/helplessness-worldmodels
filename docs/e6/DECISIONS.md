@@ -307,3 +307,16 @@ fails if it moved.
   Long lookahead and softmax are manipulations of the decision rule at test time, used to separate the transition
   belief from the cached value, not new phenotypes. The critic learnt under epsilon-greedy: the softmax is a reading
   rule, not the training policy.
+
+## 2026-10-26 (54) -- what was settled while running the diagnostics (implementer)
+
+- **tau's grid**, by (53)'s rule, before diagnostic 3 ran: the median best-minus-second gap of the references'
+  well-localised zone steps of D2 (E6's reference and plan B, both modes, the 4 agents) is 0.4975, so tau in {0.0498,
+  0.157, 0.498, 1.57, 4.98}.
+- **n_trace = 1** particle per (context, action) for b along the rollout (not 2, as written in (52)): cost. b along the
+  rollout is also reported on the particles decoded in the zone only (`b_mean_in_zone`): read at the decoded cell, b rises
+  as soon as the imagined conveyor carries a particle out of the zone, which is location, not belief.
+- D2 pools plan B's two modes (reverse and reverse_random) to cover b's range; D3 runs plan B's reverse mode only. D3's
+  checks (localisation and p_goal) compare each point to the run without intervention at the same tau.
+- D4's episodes ran on the 4 agents (under 1 h each), with the policy on Q_k oracle at every step of the episode.
+- Results and verdicts: `experiments/E6_phenotypes_latent/IMPLEMENTATION_REPORT.md`, section 16.

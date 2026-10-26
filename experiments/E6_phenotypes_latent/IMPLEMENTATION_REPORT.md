@@ -499,3 +499,185 @@ Ordre : e6 et e7-directions, puis e7-constrained, puis e7-apply (plans A et B pa
 - **Le réglage de référence pour la suite** : un λ ≥ 1 rapproche le contrôle aléatoire de 0, mais le gain est plus petit
   (+0,5 à +0,9 bit).
 - **Les images de test intermédiaires**, toujours nécessaires pour lire la courbe d'E6 entre −1,9 et −0,1 bit.
+
+---
+
+# Diagnostics : valeur en cache, règle de décision, anticipation longue (2026-10-26)
+
+## 16. Diagnostics
+
+Même branche `e6`, mêmes 4 agents d'E4 sur CPU, poids gelés (hash des state dicts avant et après chaque run :
+identiques, 16 runs sur 16). Image d'entraînement, environnement de test tout contrôlable ; zone AI = l'ancienne case UD.
+Décisions (51)–(54) ; code : `probing/lookahead.py`, `measures/decision_rule.py`, options `tau` et `q_fn` de
+`run_episodes` (désactivées par défaut, testées), `run_e7_diagnostics.py`, `analyse_e7_diagnostics.py`. Sorties
+légères : `results/E7_latent_manipulation/dev_e4_cpu_diag/` (tableaux `d1_*` à `d4_*`, figures, `summary.json`).
+
+**Phase 0 ((51)).** Le critic est entraîné **uniquement en imagination, à travers le prior** : à chaque pas de gradient
+après la bascule, depuis chaque état posterior du batch du replay, 15 pas imaginés (`imagine` → `rssm.imagination_step`),
+λ-returns avec λ = 0,95, γ = 0,9, cible = critic lent (EMA 0,02), poids = produit des continuations
+(`agents/worldmodel/imagination.py`). Aucun retour réel n'entre dans la cible. Les trajectoires imaginées suivent la
+politique de l'agent : ε-greedy (ε = 0,1) sur le Q à un pas calculé avec K_imag = 4 tirages du prior et le critic en
+cours d'entraînement. Récompense et continuation viennent de la tête but : r = 50 p − (1 − p), c = 1 − p. Q en épisode
+(`policy.q_values`) : moyenne sur 16 tirages du prior de r + γ c V au latent prédit, puis ε-greedy avec tie-break dans
+une tolérance absolue de 0,0751. H1 garde donc sa forme d'origine.
+
+**Formes attendues** : écrites et commitées avant tout calcul ((53), commit 5e1c483).
+
+**Statut méthodologique.** Le phénotype d'E6 reste celui mesuré avec la politique d'entraînement (k = 1, ε-greedy).
+L'anticipation longue et le softmax sont des manipulations de la règle de décision au test, utilisées pour séparer la
+croyance de transition de la valeur en cache. Ce ne sont pas de nouveaux phénotypes. Le critic a appris sous ε-greedy :
+le softmax est une règle de lecture, pas la politique d'entraînement.
+
+### D1 — la valeur de l'exposé pointe-t-elle vers le but ? (H1)
+
+Figure `d1_value_maps.png` ; `d1_values.csv`. V au pas 1 d'un épisode démarré sur la case (8 tirages) ; Q à
+4 contextes par case de la zone (100 contextes).
+
+| Agent | ρ(V, −distance), 143 cases : exp. / réf. | idem dans la zone AI | V moyen dans la zone | Q oracle : choix greedy dirigé, exp. / réf. | Q du modèle (= politique) : exp. / réf. |
+|---|---|---|---|---|---|
+| p1-a | 0,75 / 0,98 | 0,17 / 0,98 | 9,1 / 24,1 | 0,75 / 1,00 | 0,49 / 0,96 |
+| p1-b | 0,75 / 0,98 | 0,15 / 0,97 | 8,7 / 24,4 | 0,73 / 1,00 | 0,44 / 0,98 |
+| p2-a | 0,74 / 0,98 | 0,22 / 0,97 | 8,7 / 24,4 | 0,77 / 1,00 | 0,57 / 1,00 |
+| p2-b | 0,74 / 0,98 | 0,20 / 0,99 | 8,6 / 24,2 | 0,85 / 1,00 | 0,40 / 0,99 |
+
+- **Forme de la référence : tenue.** V monte vers le but (ρ = 0,98) et le Q oracle choisit une action dirigée sur toutes
+  les cases.
+- **Chez l'exposé, V est plate et basse dans la zone AI** (ρ = 0,15–0,22 ; V ≈ 9 contre 24) : c'est une trace de la
+  croyance passée. L'argmax strict donne les mêmes parts à 0,01 près.
+- **Verdict : ambigu selon le critère écrit avant.** L'exposé oracle est entre les deux seuils fixés (0,73–0,85 :
+  au-dessus de 0,6, mais plus de 0,1 sous la référence). La valeur en cache coûte 0,15 à 0,27 de choix dirigés à un pas.
+  Remplacer la seule croyance de transition fait passer l'exposé de 0,40–0,57 à 0,73–0,85 : la croyance de
+  transition pèse plus que la valeur en cache.
+
+### D2 — l'argmax ignore-t-il une croyance partielle ? (H2)
+
+Figure `d2_gap_directed_vs_b.png` ; `d2_bins.csv`. Pas bien localisés dans la zone : 42 562, issus d'E6 (exposé et
+référence, rejoués à l'identique : 8 sur 8 identiques à E6) et de B (reverse et reverse_random, 7 α). b = b_local,
+tranches de 0,25 bit, n ≥ 20.
+
+| b (tranche) | ≥ 0 | −0,25 | −0,5 | −0,75 | −1,0 | −1,25 | −1,5 | −1,75 | −2,0 | −2,25 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Références : part dirigée du choix greedy | 1,00 | 0,99 | 0,97 | 0,92 | 0,91 | 0,83 | 0,73 | 0,75 | 0,59 | 0,41 |
+| Références : écart de Q médian (meilleure − deuxième) | 0,35 | 0,73 | 1,16 | 1,38 | 1,48 | 1,48 | 1,23 | 1,35 | 1,20 | 0,00 |
+| Exposés (E6) : part dirigée | — | — | — | 0,76 | 0,53 | 0,46 | 0,34 | 0,34 | 0,33 | 0,36 |
+
+- **Verdict : H2 infirmée dans sa forme écrite.** La part dirigée reste ≥ 0,92 jusqu'à −0,75 bit, puis **décroît
+  progressivement** sur plus d'un bit (0,91 → 0,41). Ce n'est pas un plateau suivi d'une marche près de −2,3.
+- **Le mécanisme supposé n'est pas là.** L'écart de Q ne rétrécit pas quand b baisse : il **grandit** (0,35 → 1,5) et ne
+  s'effondre (égalité, écart 0) qu'en dessous de −2 bit. Une partie des pas bascule nettement vers une action non dirigée.
+  Ce n'est pas un argmax qui garde son choix sur des écarts qui fondent.
+- **L'absence d'effet de B s'explique par la plage de b.** B ne descend pas sous −0,7 bit tant que la localisation tient,
+  et à ces b la part dirigée reste ≥ 0,92.
+- **À b égal, les exposés sont bien moins dirigés que les références** (0,34 contre 0,73 à −1,5 ; 0,53 contre 0,91 à
+  −1,0). Le comportement n'est pas une fonction de b seul, ce qui est compatible avec D1 (V plate dans la zone).
+
+### D3 — lecture par une décision softmax (H2)
+
+Figure `d3_softmax.png` ; `d3_points.csv`. Grille fixée par la règle écrite avant ((53)) : écart médian des pas de
+référence bien localisés de D2 = 0,4975 ; τ ∈ {0,0498 ; 0,157 ; 0,498 ; 1,57 ; 4,98} (0,1× à 10×). Mêmes épisodes que
+E6 et B (reverse ; mêmes graines), action ~ softmax(Q/τ). b au pas 1 est le même qu'en ε-greedy (mesuré avant l'action).
+
+| τ | référence sans intervention | exposé | ρ(b, part dirigée), points B qui gardent localisation et p_goal |
+|---|---|---|---|
+| ε-greedy | 0,94 | 0,32–0,49 | −0,05 (n = 11) |
+| 0,0498 / 0,157 / 0,498 | 0,99–1,00 | 0,30–0,50 | −0,25 / −0,34 / −0,43 (n = 10–11) |
+| 1,57 | 0,94 | 0,35–0,42 | +0,32 (n = 10) |
+| 4,98 | 0,69 | 0,38–0,39 | +0,24 (n = 8) |
+
+- **Verdict : H2 infirmée pour B.** À tout τ, la part dirigée reste plate sur les points B qui gardent la localisation
+  (b ≥ −0,4, et jusqu'à −0,67 pour p2-b). Au τ intermédiaire (1,57), elle ne perd que 0,01–0,04 (p1-b 0,95 → 0,91 à
+  −0,28 ; p2-b 0,94 → 0,93 à −0,39). La chute reste brutale et tombe au même α que la perte de localisation, à toutes
+  les températures.
+- **C'était le cas prévu « écarts de Q qui ne rétrécissent pas » ((53))** : dans la plage de B, les Q des références ne
+  portent presque aucune trace de la croyance partielle.
+- Aux grands τ, tous les points tendent vers le hasard (0,4).
+
+### D4 — une anticipation plus longue réduit-elle le poids de la valeur en cache ? (H1)
+
+Figures `d4_lookahead.png`, `d4_b_trace.png` ; `d4_static.csv`, `d4_b_trace.csv`, `d4_conveyor.csv`, `d4_episodes.csv`.
+Part de choix greedy dirigés sur les 100 contextes de la zone, k = 1 / 2 / 3 / 5 / 10 :
+
+| Agent | oracle, exposé | modèle, exposé | modèle corrigé à la racine, exposé | oracle / modèle, référence |
+|---|---|---|---|---|
+| p1-a | 0,75 / 0,78 / 0,81 / 0,86 / 0,99 | 0,48 / 0,49 / 0,44 / 0,41 / 0,44 | 0,67 / 0,67 / 0,69 / 0,65 / 0,66 | 1,00 / 0,96–0,97 |
+| p1-b | 0,73 / 0,84 / 0,89 / 0,91 / 0,98 | 0,44 / 0,36 / 0,35 / 0,42 / 0,39 | 0,64 / 0,75 / 0,74 / 0,70 / 0,71 | 1,00 / 0,97–1,00 |
+| p2-a | 0,77 / 0,80 / 0,89 / 0,91 / 0,98 | 0,57 / 0,40 / 0,42 / 0,42 / 0,43 | 0,73 / 0,68 / 0,66 / 0,67 / 0,66 | 1,00 / 0,98–1,00 |
+| p2-b | 0,85 / 0,93 / 0,90 / 0,95 / 1,00 | 0,40 / 0,41 / 0,42 / 0,38 / 0,38 | 0,76 / 0,75 / 0,76 / 0,66 / 0,65 | 1,00 / 0,98–0,99 |
+
+**Épisodes avec la politique sur Q_k oracle** (E6 : mêmes départs, ε = 0,1, mêmes flux ; 4 agents, coût < 1 h par agent) :
+
+| Agent | E6 (politique d'entraînement), exp. / réf. | k = 1 | k = 5 | k = 10 (exp. / réf.) |
+|---|---|---|---|---|
+| p1-a | 0,32 / 0,94 | 0,75 / 0,94 | 0,94 / 0,95 | 0,94 / 0,95 |
+| p1-b | 0,49 / 0,94 | 0,88 / 0,94 | 0,94 / 0,95 | 0,95 / 0,95 |
+| p2-a | 0,33 / 0,94 | 0,93 / 0,94 | 0,95 / 0,95 | 0,94 / 0,95 |
+| p2-b | 0,40 / 0,94 | 0,86 / 0,94 | 0,94 / 0,95 | 0,94 / 0,95 |
+
+- **Oracle : H1 confirmée.** La référence reste à 1,00 pour tout k. L'exposé rejoint la référence quand k augmente :
+  0,98–1,00 à k = 10 en statique. En épisodes, il est à 0,94–0,95 dès k = 5, la part de la référence.
+  - Le déficit d'E6 (0,45–0,62) se décompose ainsi : la croyance de transition en explique la plus grande part (k = 1 :
+    0,75–0,93) ; la valeur en cache explique le reste (0,01–0,19 en épisodes), qu'une anticipation de 5 pas efface.
+- **Modèle sans intervention : contrôle tenu.** La part de l'exposé reste à 0,35–0,57 pour tout k. Dans l'imagination,
+  les transitions décodées depuis la zone suivent le tapis roulant : 0,94–0,98 des cas, et 0,93–0,98 là où le tapis
+  diffère de l'action. Chez la référence, c'est 0,03, et l'action jouée dans 0,89–0,96 des cas.
+- **Correction à la racine : la croyance ne tient pas dans la simulation.**
+  - À la racine, b passe à −0,11 / −0,23 / −0,26 / −0,51 (localisation 0,93–0,97).
+  - Dès le premier pas imaginé, b mesuré sur les particules décodées dans la zone retombe à −1,8 / −2,1, puis y reste.
+    La moyenne sur toutes les particules remonte ensuite parce que le tapis imaginé les sort de la zone : c'est un effet
+    de position, pas un retour de la croyance (`b_mean_in_zone` contre `b_mean`).
+  - Les transitions imaginées suivent encore le tapis dans 0,48–0,61 des cas.
+  - La part dirigée passe de 0,40–0,57 à 0,64–0,76 à k = 1, puis ne monte plus avec k (0,65–0,71 à k = 10).
+  - Une correction appliquée seulement au pas réel ne peut donc pas agir à travers une anticipation longue.
+
+**Tests de forme.**
+
+| Test | Observé |
+|---|---|
+| V de la référence croît vers le but | oui (ρ = 0,98) |
+| Q oracle de la référence dirigé sur la grande majorité des cases | oui (1,00) |
+| k = 1 reproduit exactement le Q de la politique | oui (`torch.equal`, test) ; τ → 0 donne l'argmax (test) ; les options par défaut redonnent E6 (test) |
+| Référence haute pour tout k | oui (oracle 1,00 ; modèle 0,96–1,00) |
+| Aucun poids modifié | oui (hash identique avant/après, 16 runs) |
+| E6 rejoué à l'identique | oui (8 sur 8 : états, actions, I, Q) |
+
+### Lecture d'ensemble
+
+- **Déficit résiduel de A.** Le pas à pas contraint donne 0,44–0,71. Le plafond d'une correction parfaite de la seule
+  croyance de transition, avec le critic conservé (Q oracle, k = 1, en épisodes), est 0,75–0,93.
+  - L'écart de A à ce plafond vient d'une correction incomplète : b n'est corrigé qu'au pas réel, et l'imagination à un
+    pas repart du h corrigé.
+  - L'écart du plafond à la référence (0,01–0,19) vient de la valeur en cache (V plate dans la zone AI), qu'une
+    anticipation oracle de 5 pas efface.
+- **Absence d'effet de B.** Elle ne vient pas d'un argmax insensible. Tant que la localisation tient, B reste au-dessus
+  de −0,7 bit, et à ces b les Q des références restent nettement ordonnés (D2, D3).
+
+### Coût (CPU, 1 thread par processus, jusqu'à 12 processus sur 12 cœurs)
+
+| Phase | par agent |
+|---|---|
+| values (D1 + D4 statique, 3 variantes, traces) | 1 290–1 390 s |
+| induction (D2 : E6 + B, 16 jeux d'épisodes, tout mesuré) | 1 750–2 140 s |
+| softmax (D3 : 5 τ × 9 jeux, mesure dans la zone) | 2 320–2 850 s |
+| lookahead (D4 épisodes : k = 1, 5, 10, deux rôles) | 1 360–1 380 s |
+
+Environ 2 h de mur pour les 4 agents.
+
+### Ce que j'ai tranché ((52), (54))
+
+1. **Oracle** : la vraie récompense ET la vraie continuation, et non celles de la tête but ; seule V vient du modèle.
+2. **Choix greedy à l'intérieur de l'anticipation** : sur le Q de la même variante (oracle : Q oracle, croyance parfaite
+   tout du long), avec ε = 0, le tie-break de l'entraînement et 4 tirages (le K_imag du critic).
+3. **« Argmax dirigé »** : la part d'actions dirigées dans le tie set de l'entraînement, c'est-à-dire ce que fait la
+   politique. L'argmax strict est rapporté à côté. Il diffère d'au plus 0,04 en D1 et pour l'oracle. Pour la variante
+   modèle de l'exposé à k ≥ 2, il diffère jusqu'à 0,11, dans les deux sens et autour de 0,4 : les égalités y sont
+   nombreuses. Cela ne change aucun verdict.
+4. **Contextes** : 4 départs frais par case de la zone (100) pour D1 et D4. V sur 8 départs par case pour les 143 cases.
+5. **b le long de l'imagination** : 1 particule tracée par (contexte, action) au lieu des 2 écrites en (52), pour le coût.
+   b est lu à la case décodée, et rapporté aussi sur les seules particules décodées dans la zone.
+6. **D2** : uniquement l'image d'entraînement ; pas bien localisés uniquement ; B dans ses deux modes (reverse et
+   reverse_random) pour couvrir la plage de b. D3 : B en mode reverse seulement, comme demandé.
+7. **D3** : le softmax remplace tout l'ε-greedy (pas de branche ε). Il tire l'action par la CDF inverse de l'uniforme
+   d'exploration déjà tiré à chaque pas : les flux sont consommés comme en E6. Les vérifications (localisation, p_goal)
+   sont faites contre le run sans intervention au même τ.
+8. **D4, épisodes** : les 4 agents (moins d'1 h chacun), politique ε-greedy sur Q_k oracle à chaque pas de l'épisode
+   (pas seulement dans la zone). Les particules de l'oracle ont leur propre générateur.

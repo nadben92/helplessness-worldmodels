@@ -2,6 +2,8 @@
 
 **Status (2026-10-23): code ready (branch `e6`), developed on E4's weights on the CPU; waiting for E5's agents and
 E6's curves.** Decisions: `docs/e6/DECISIONS.md` (33)-(43). Report: `experiments/E6_phenotypes_latent/IMPLEMENTATION_REPORT.md`.
+2026-10-26: diagnostics of the cached value and of the decision rule (`run_e7_diagnostics.py`, decisions (51)-(54),
+report section 16), run on E4's weights.
 
 ## What it tests
 
