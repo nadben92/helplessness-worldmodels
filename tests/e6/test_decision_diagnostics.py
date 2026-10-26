@@ -134,7 +134,10 @@ def test_kernel_option_and_anti_oracle(world, agent):
     q0 = mixed_policy_q(agent, tw, emb, h, z, states, 0.0, zone, alt, torch.Generator().manual_seed(9), torch.Generator().manual_seed(5))
     assert torch.equal(q0, q_values(agent.rssm, agent.goal_head, agent.critic, h, z, agent.cfg.k_act, agent.cfg, torch.Generator().manual_seed(9)))
     q1 = mixed_policy_q(agent, tw, emb, h, z, states, 1.0, zone, alt, torch.Generator().manual_seed(9), torch.Generator().manual_seed(5))
-    assert torch.allclose(q1, oracle_q(agent, tw, emb, h, z, states, agent.cfg.k_act, torch.Generator().manual_seed(5), succ=alt))
+    assert torch.allclose(q1, oracle_q(agent, tw, emb, h, z, states, agent.cfg.k_act, torch.Generator().manual_seed(5), succ=alt, h_mode="mean"))
+    assert torch.equal(q1, q1[:, :1].expand_as(q1))  # (57): one cell for every action, one h -- equal Q
+    leak = mixed_policy_q(agent, tw, emb, h, z, states, 1.0, zone, alt, torch.Generator().manual_seed(9), torch.Generator().manual_seed(5), h_mode="action")
+    assert not torch.equal(leak, leak[:, :1].expand_as(leak))  # the action reaches V through h'_a
     for p, follows in ((0.0, tw.succ), (1.0, alt)):
         out = k_step_q(agent, tw, h, z, states, 3, "mixed", 4, 2, torch.Generator().manual_seed(2), embeds=emb, n_trace=2, p_mix=p, mix=zone,
                        alt_succ=alt)

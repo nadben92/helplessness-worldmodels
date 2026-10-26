@@ -368,3 +368,17 @@ the anti-oracle's, the same code path as D4's oracle; k_step_q's variant "mixed"
   the share of steps localised, flagged when more than 0.05 under E6's reference localisation in the zone; the greedy
   directed share over ALL steps (no filter) against D2's (well-localised steps); and a run-level filter: only the plan-B
   runs whose localisation in the zone stays within 0.05 of E6's reference.
+
+## 2026-10-26 (57) -- the anti-oracle's h, found at the smoke test, before the main runs (implementer)
+
+With (55)'s conveyor branch as D4's oracle path, V(h'_a, z'), h'_a = GRU(h, z, a), the reference at p = 1, k = 1 stays
+directed (0.975 on a 1-rep smoke run of p1-b): every action reaches the same conveyor cell, but h'_a still carries the
+action and the reference's critic reads it. The design asks for equal Q at p = 1 (the planner believes the action does
+not matter). **Main variant ("mean")**: the conveyor branch uses one h for every action, the mean of the h'_a over the
+actions, and one set of posterior draws per distinct successor: at p = 1 every action has exactly the same Q (tested),
+and the training's tie rule draws uniformly. In k > 1 rollouts, a particle's h after a conveyor step is that mean too.
+**Secondary ("action")**: h'_a as D4's oracle, run at p = 1 (k = 1 and 5) on the references only, reported as the action's
+leak through h. D4's oracle keeps h'_a (`oracle_q`'s default, unchanged).
+Consequence written before the main runs: at k = 1, Q = (1 - p) Q_model + p Q_conv with Q_conv the same for every action
+is the model's Q with its gaps scaled by (1 - p): the argmax does not move until the gaps fall under the tie tolerance,
+so the k = 1 curve is expected flat in p, then falling near p = 1 (form 1's "decreasing" is read as non-increasing).
