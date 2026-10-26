@@ -833,3 +833,49 @@ Figures : `t1_directed_vs_beff.png` (part dirigée en fonction de b effectif, k 
 
 Un épisode à k = 5 coûte environ 500 s par jeu de 180 épisodes (k = 1 : environ 60 s). Environ 1 h 10 de temps réel pour
 l'ensemble.
+
+---
+
+# D5 : quelle action est crue inefficace, et lecture du prior par la politique (2026-10-26)
+
+## 18. D5
+
+Décisions (58)–(60). Mêmes 4 agents d'E4, CPU, poids gelés.
+
+### Tâche 0 — lecture du code (avant tout run)
+
+1. **z après l'action : 16 échantillons du prior par action.** `policy.q_values` (`agents/worldmodel/policy.py:59-69`)
+   appelle `lookahead` (`:39-55`) : `rssm.imagination_step` donne h'_a = GRU(h, z, a) et le prior (`:50`), puis 16
+   tirages (`sample_categorical_index`, `:52` ; `torch.multinomial`, `rssm.py:161-171`). Aucune moyenne ni aucun mode
+   du prior n'est formé dans l'espace latent.
+2. **V est évaluée sur (h'_a, z'_k), avec un h'_a propre à l'action**, pour chacun des 16 tirages (`:64-68`). r et c
+   viennent de la tête but sur le même couple. **Q(a) est la moyenne des 16 valeurs** (`:69`).
+3. **La politique n'a pas de « case prédite » : elle ne décode jamais.**
+   - L'oracle de D4 utilise la VRAIE case (posterior de son image, `lookahead.oracle_q`).
+   - La branche modèle du § 17 est le `q_values` de la politique elle-même (`lookahead.mixed_policy_q`, `:108`).
+   - La prédiction en cases derrière b (I_s) est un autre objet : 16 AUTRES tirages du même prior (générateur de mesure),
+     décodés et appariés au gabarit le plus proche (`fixed_trajectory.step_controllability`, `:112-139`).
+4. **Égalités** (`frozen_episodes.run_episodes`, `:200-208`) : tie set de l'entraînement, Q ≥ max Q − 0,0751
+   (`policy.tie_set`, `:80-82`). L'action greedy est le membre du tie set au plus haut score uniforme du pas, tiré dans le
+   flux de l'épisode ; la branche ε utilise l'uniforme u du même pas.
+
+**Conclusion.** La politique lit des échantillons, donc une croyance partielle entre bien dans Q tirage par tirage, mais
+moyennée sur 16 tirages. H4 n'est plausible que comme le bruit de cette moyenne autour de l'espérance du § 17 (un nombre
+Binomial(16, p) de tirages « tapis »). La tâche 2 est faite, avec les 16 tirages par action de la politique.
+
+### Formes attendues (écrites et commitées avant tout calcul)
+
+Critères chiffrés fixés ici ; « part dirigée » = part ε-greedy d'E6, sauf mention contraire.
+
+1. **H3.** Sachant C_dir = 1, exposés et références induites ont des parts dirigées proches (écart ≤ 0,10, sur les
+   classes de b couvertes par les deux groupes). Sachant C_dir = 0, les deux sont proches du hasard (0,39 ± 0,10).
+2. **H3.** À b ≈ −1,5 (classes −1,75 et −1,5), la part de pas avec C_dir = 1 est nettement plus élevée chez les
+   références induites que chez les exposés (écart ≥ 0,20).
+3. **H3.** Dans la régression, l'ajout de C_dir réduit l'effet du groupe d'au moins la moitié (log-odds, M0 → M1).
+4. **H4.** L'anti-oracle par tirage donne une courbe graduée dès k = 1 (pas de marche : la part à p = 0,8 est sous
+   celle de p = 0 de plus de 0,05), plus basse que la version en espérance aux p intermédiaires (0,3–0,9).
+5. **H4.** À b effectif ≈ −1,5, l'anti-oracle par tirage (k = 1) se rapproche de l'exposé naturel : l'écart à l'exposé
+   (0,41) est réduit d'au moins la moitié par rapport au § 17 (0,94 − 0,41 = 0,53, donc ≤ 0,27).
+
+Si H3 et H4 sont toutes deux confirmées, leurs parts dans l'écart de 0,5 sont estimées : pour H3, par l'écart absorbé
+par C_dir dans la régression ; pour H4, par l'écart de l'anti-oracle par tirage à b ≈ −1,5.

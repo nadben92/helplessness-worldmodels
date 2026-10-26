@@ -382,3 +382,60 @@ leak through h. D4's oracle keeps h'_a (`oracle_q`'s default, unchanged).
 Consequence written before the main runs: at k = 1, Q = (1 - p) Q_model + p Q_conv with Q_conv the same for every action
 is the model's Q with its gaps scaled by (1 - p): the argmax does not move until the gaps fall under the tie tolerance,
 so the k = 1 curve is expected flat in p, then falling near p = 1 (form 1's "decreasing" is read as non-increasing).
+
+## 2026-10-26 (58) -- D5, task 0: how E6's policy reads the prior (implementer, read from the code before any run)
+
+1. `policy.q_values` (`agents/worldmodel/policy.py:59-69`) calls `lookahead` (`:39-55`): for every action a,
+   `rssm.imagination_step` (`:50`) gives h'_a = GRU(h, z, a) and the prior p(z | h'_a); **K_act = 16 independent samples**
+   z'_k are drawn from it (`sample_categorical_index`, `:52`; `torch.multinomial`, `rssm.py:161-171`). No mean and no
+   mode of the prior is ever formed in latent space.
+2. V is evaluated on **(h'_a, z'_k), h'_a specific to the action**, for each of the 16 samples (`:64-68`), with r and c
+   from the goal head on the same pair; **Q(a) is the mean of the 16 values** (`:69`). The policy thus uses samples,
+   averaged: a 16-draw Monte Carlo estimate of E_{z' ~ prior}[r + gamma c V].
+3. **No predicted cell exists in the policy**: it never decodes. D4's oracle uses the TRUE cell (posterior of its image,
+   `lookahead.oracle_q`); section 17's model branch is the policy's own `q_values` (`lookahead.mixed_policy_q`, `:108`);
+   the cell-space prediction behind b (I_s) is a different object: 16 OTHER prior draws per action (the measure
+   generator), decoded and matched to the nearest template (`fixed_trajectory.step_controllability`, `:112-139`).
+4. **Ties** (`frozen_episodes.run_episodes`, `:200-208`): the training's tie set, Q >= max Q - 0.0751 (`policy.tie_set`,
+   `:80-82`), the greedy action the tie-set member with the highest of the episode's per-step uniform scores; epsilon's
+   branch from the same per-step uniform u.
+**Consequence for H4**: the policy reads samples, so a partial belief does enter Q draw by draw -- but averaged over 16.
+H4 is plausible only as the noise of that average around section 17's expectation (Binomial(16, p) conveyor draws).
+Task 2 is run, with the policy's 16 draws per action.
+
+## 2026-10-26 (59) -- D5, task 1: the prediction for the directed action (implementer)
+
+- **Per step and action, the prediction is read on the I_s kernel** p_hat(s' | h, z, a) (16 decoded prior draws per
+  action, the measure generator), the closest cell-space object to the policy's samples ((58).3: same prior, independent
+  draws; the policy itself has no cell). Recorded by run_episodes' new option `action_kernel` (off by default: every other
+  array unchanged, tested): mass_true_all (n, H, A), the mass on the true successor of every action, and argmax_true
+  (n, H, A), whether the kernel's argmax cell is the true successor (NaN if every draw of the action is a ghost).
+- **Just prediction**: argmax_true (main), mass >= 0.5 (reported). A_dir: the actions whose test-environment successor is
+  strictly closer to the goal. C_dir = some action of A_dir is just; n_juste = the number of just actions of 5. Directed:
+  the epsilon-greedy transition (E6's), and the tie set's directed share of the logged Q (D2's "argmax" reading).
+- **b's decomposition by action is not computed**: I = (1/A) sum_a KL(p_a || p_bar) would need a second implementation
+  of the controllability measure (CLAUDE.md); the mass on the true cell per action is reported instead.
+- **Groups**: exposed = E6's exposed training-image episodes; induced references = plan B's runs (reverse,
+  reverse_random) and E6's reference, kept when the run's zone localisation stays within 0.05 of E6's reference (section
+  17's run filter). Both groups: steps in the zone, measured, well localised (sensitivity: the exposed steps localised or
+  not). All rerun with `action_kernel` (the same seeds: the arrays of E6 and plan B are reproduced, checked).
+- **Analyses**: bins of 0.25 bit (b = b_local), bins under 30 steps masked, 95% bootstrap intervals resampling episodes
+  within each agent (1,000). Logistic regression fitted by IRLS (numpy; no new dependency), agent as fixed effects:
+  M0 directed ~ b + group + agent; M1 = M0 + C_dir; M2 = M1 + C_dir x group + b x group; on every step and on the b range
+  both groups cover (bins with >= 30 steps in each). Share of the group effect absorbed by C_dir = 1 - beta_group(M1) /
+  beta_group(M0) (log-odds), and the same on the probability scale (the mean predicted gap).
+- The anti-oracle runs of section 17 do not change the prior (only the planner), so their C_dir is the reference's own:
+  the "complement" is the effective prediction, (1 - p) mass_model + p delta(conveyor): its argmax is the conveyor cell
+  for every action once p > mass_model / (1 + mass_model) ~ 0.5. Stated, not rerun.
+
+## 2026-10-26 (60) -- D5, task 2: the anti-oracle by draws (implementer)
+
+- k = 1: the policy's 16 prior draws per action (`lookahead`, the act generator: E6's draws) and, per draw, a Bernoulli(p)
+  from the zone (its own generator) replacing that draw by a draw of the posterior of the conveyor cell's image, with (57)'s
+  common h (the mean of the h'_a) and true r and c; Q(a) = the mean of the 16 values. **Main: independent Bernoulli per
+  (action, draw)** -- the policy reading a prior that puts mass p on the conveyor. **Secondary: one Bernoulli per step**
+  for every action and draw (the whole step under the conveyor or not). p = 0 returns `q_values` itself (E6 exactly).
+- k = 5: section 17's mixed rollout already draws per particle and per imagined step (16 particles per action, a
+  Bernoulli each): it IS the main variant by draws at k = 5, reused, not rerun. The secondary at k = 5 is not run (cost).
+- Grid p in {0, 0.1, ..., 1}, the 4 references, E6's episodes and tie rule; b_eff is section 17's (the same p, the same
+  kernel).
