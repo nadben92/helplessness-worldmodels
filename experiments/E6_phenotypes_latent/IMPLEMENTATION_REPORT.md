@@ -998,3 +998,32 @@ Ni H3 ni H4 n'explique l'écart d'environ 0,5 ; il n'y a donc pas de parts respe
 | par tirages, un tirage par pas (11 p) | 1 030–1 130 s |
 
 Environ 32 min de temps réel ; l'analyse prend moins de 3 min.
+
+---
+
+# D6 : le canal h'_a (2026-10-26)
+
+## 19. D6
+
+Décision (61). Mêmes 4 agents d'E4, CPU, poids gelés, k = 1.
+
+### Formes attendues (écrites et commitées avant tout calcul)
+
+« Part dirigée » = part greedy dirigée (tie set de l'entraînement) sur les pas de zone bien localisés, sauf mention
+contraire ; b ≈ −1,5 = classes −1,75 et −1,5 regroupées, ou la plus proche ayant au moins 30 pas, signalée.
+
+1. **Variante (a)** : Q identique bit à bit à celui de la politique, pour les trois groupes ; les épisodes rejoués sont
+   ceux d'E6 et de B (états et actions identiques).
+2. **Variante (b), références induites à b ≈ −1,5** : la part dirigée chute vers le niveau de l'exposé naturel (≤ 0,50).
+3. **Variante (b), références sans intervention (b ≈ 0)** : la part reste élevée (≥ 0,85) : le canal z suffit quand
+   la prédiction est juste.
+4. **Variante (b), exposés** : pas de changement (± 0,05) : le canal h'_a est déjà éteint.
+5. **Test 2** : argmax de V(h'_a, z̄) dirigé à ≥ 0,85 chez les références induites, même sous −1 bit ; proche du hasard
+   (0,4 ± 0,10) chez les exposés.
+6. **Test 2** : chez les références induites, la part dirigée du test 2 ne dépend pas de b (écart ≤ 0,10 entre la
+   classe la plus haute et la plus basse ayant ≥ 30 pas) ; chez les exposés, elle reste au hasard sur toute la plage.
+7. **(c)** : chez les références induites, (c) reste dirigée (≥ 0,85) ; chez les exposés, (c) est au hasard
+   (0,4 ± 0,10).
+
+**Part de l'écart passant par h'_a** : (part (a) − part (b)) des références induites à b ≈ −1,5, rapportée à
+l'écart (a) des références induites − (a) des exposés à la même classe.

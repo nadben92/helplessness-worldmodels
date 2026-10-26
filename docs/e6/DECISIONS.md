@@ -439,3 +439,27 @@ Task 2 is run, with the policy's 16 draws per action.
   Bernoulli each): it IS the main variant by draws at k = 5, reused, not rerun. The secondary at k = 5 is not run (cost).
 - Grid p in {0, 0.1, ..., 1}, the 4 references, E6's episodes and tie rule; b_eff is section 17's (the same p, the same
   kernel).
+
+## 2026-10-26 (61) -- D6: the h'_a channel (implementer)
+
+- **Counterfactual step by step, on the recorded states**: (h, z) at every step are not stored, so E6's episodes (both
+  models) and plan B's (reverse and reverse_random, every alpha) are rerun with a `q_fn` that (1) copies the act
+  generator's state into a clone, (2) computes the variants on the clone -- exactly the policy's 16 prior draws per action
+  (`lookahead`) --, (3) returns the policy's own `q_values` on the act generator: the episodes are E6's and plan B's, and
+  variant (a) is checked bitwise against the Q the policy uses. Library: `lookahead.channel_q`.
+- **Variants** (all with the policy's r and c from the goal head on the evaluated pair, gamma, K = 16):
+  (a) normal, V(h'_a, z'_{a,k}): `q_values` term for term; (b) common h, V(h_bar, z'_{a,k}), h_bar = the mean of the h'_a
+  over the 5 actions, the same z' draws: only z carries the action; (c) common z, V(h'_a, z_bar_k), z_bar_k drawn once per
+  step and shared by the 5 actions from the MIXTURE of the 5 priors (a uniform action, then its prior; its own
+  generator): only h'_a carries the action. Test 2: V(h'_a, z_bar_k) averaged over k, without r and c.
+- **Readings per zone step**: the greedy directed share (the training's tie set, as D2), the strict argmax, and the
+  epsilon-greedy EXPECTED directed probability (1 - eps) x greedy share + eps x (directed actions) / 5 -- the
+  counterfactual choice is not drawn. Test 2: argmax of V(h'_a, z_bar) directed, its best-minus-second gap, and
+  Spearman's rho between V(h'_a, z_bar) and minus the distance to the goal of a's true successor (ties ranked by their
+  mean).
+- **Groups** (D5's): exposed (E6's exposed), induced references (plan B's runs with alpha > 0 whose zone localisation stays
+  within 0.05 of E6's reference), references without intervention (E6's reference); zone steps, measured, well
+  localised. Bins of 0.25 bit (b_local), bins < 30 steps masked, 95% bootstrap by episodes within each agent.
+- **Episode replay of (b)** (complement): the references' plan-B runs and E6's reference rerun with the policy on Q_b
+  (computed on the act generator itself: the generator is consumed exactly as by `q_values`), epsilon-greedy, measured in
+  the zone.
