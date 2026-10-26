@@ -678,3 +678,21 @@ stopped (`ObservationTableMismatch`). No run of waves 1-2 was resumed, so none i
 would have failed. The offset is now saved and restored (only with an episode source: E3's and E4's resume states are
 unchanged); tested (a shuffle run interrupted and resumed equals the uninterrupted run; the continuation equals the
 original at 600).
+
+**(33), adjusted the same day (user): (c) chosen; 3 CPUs; a ceiling of 650,000; the user stops the pod at convergence.**
+- `e5_extend` runs on 3 CPUs (the quota: one pod of 3 CPUs), five runs, to **650,000** steps (`batches.EXTEND_TO`), a
+  ceiling: the user stops the pod as soon as `check_wave.py --batch e5_extend` shows every pair (A; E and F against B's
+  reference -- the five runs) meeting E4's criterion at one common checkpoint (its line `ALL 3 PAIRS MEET E4's CRITERION
+  AT: [...]`); the probes of the shuffle pairs go at that checkpoint K.
+- **A stop leaves usable checkpoints.** Each `agent_env<N>.pt` is written by `_atomic_torch_save` (a `.tmp` file, then
+  `os.replace` onto the name): a stop during a write leaves at most an orphan `.tmp`, never a truncated weight file; the
+  record of a checkpoint is appended to `checkpoints.jsonl` AFTER its weights are saved, so a checkpoint the check shows
+  has its weights on disk. What a stop can leave: a truncated last line of `checkpoints.jsonl` (now ignored by
+  `check_wave.py`, with a note), status `running` in `meta.yaml` (a stopped run: `check_wave.py` and the probe plan no
+  longer exclude it -- only `failed` is excluded), no `replay_final.npz` nor `agent_final.pt` (not needed by the probes;
+  the RSA would need the replay: `resume.pt` holds it up to the last resume point). Tested (a stopped continuation with a
+  truncated last line is read, paired and kept by the probe plan).
+- Calendar (one pod of 3 CPUs, five runs: about 6,200 steps per hour per run, from wave 2's 7,700-8,000 with four):
+  from 290,000, about 26 h to 450,000, 34 h to 500,000, 42 h to 550,000, 58 h to the 650,000 ceiling; launched on 26
+  October in the evening, the stop falls between 27 October late evening and 29 October morning; the probes (a few
+  hours) follow the export, the aggregation the next day.

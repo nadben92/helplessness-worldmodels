@@ -160,3 +160,30 @@ def test_unmeasured_values_are_flagged_not_fatal(tmp_path):
     pair = cw.check_pair(runs[0], runs[1])
     assert pair["converged_at"] == [300000]
     assert any("not computable" in f for f in pair["attention"])
+
+
+
+def test_a_stopped_continuation_is_read_paired_and_probed(tmp_path):
+    """docs/e5/DECISIONS.md (33): the user stops the continuations' pod once every pair meets E4's criterion. A stopped run
+    keeps status running and may end on a truncated record line (a stop while appending); its weights are written
+    atomically (whole or absent). check_wave.py reads it (the truncated line ignored), keeps it in its pairs and gives the
+    checkpoints where EVERY pair converged; the probe plan keeps it when its weights at K exist."""
+    import shutil
+
+    from helplessness.config import REPO_ROOT
+
+    for rel in ("configs/e5/e5.yaml", "configs/e4/e4.yaml"):
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(REPO_ROOT / rel, tmp_path / rel)
+    exp = healthy_run(tmp_path, 402, "sh100", "exp", status="running")
+    ref = healthy_run(tmp_path, 102, "sh100", "ref", status="running")
+    with open(exp / "checkpoints.jsonl", "a", encoding="utf-8") as f:
+        f.write('{"env_step": 325000, "grad_st')  # a stop while appending
+    run = cw.read_run(exp)
+    assert [r["env_step"] for r in run["records"]] == [300000]
+    c = cw.check_run(run)
+    assert not any("status" in f for f in c["attention"])
+    pair = cw.check_pair(run, cw.read_run(ref))
+    assert pair["last_common_env_step"] == 300000 and "b_step1_by_slot" in pair  # paired, read up to its last whole record
+    keep, excluded = submit.probe_plan(tmp_path, "e5_probes_all", "p1-b-d1", 300000, str(tmp_path / "no_e4"))
+    assert "probes_E_sh100_k300000" in keep, excluded

@@ -177,14 +177,14 @@ def test_seeds_c_and_d_and_no_stream_collision():
 
 
 def test_continuation_batch_and_probe_checkpoints():
-    """docs/e5/DECISIONS.md (33): e5_extend continues the five healthy shuffle runs (A exp/ref, B ref, E, F) to EXTEND_TO
+    """docs/e5/DECISIONS.md (33): e5_extend continues the five healthy shuffle runs (A exp/ref, B ref, E, F) to EXTEND_TO (650,000, a ceiling)
     from their resume point; e5_probes_all probes the baselines at 300,000 (converged) and the shuffle pairs at --checkpoint."""
     jobs = dict(submit.commands("train", "PY", "e5_extend", "p1-b-d1"))
     assert sorted(jobs) == ["A_sh100_experimental", "A_sh100_reference", "B_sh100_reference", "E_sh100_experimental", "F_sh100_experimental"]
     for name, cmd in jobs.items():
-        assert cmd[cmd.index("--extend") + 1] == "auto" and cmd[cmd.index("--to") + 1] == str(batches.EXTEND_TO) == "500000"
+        assert cmd[cmd.index("--extend") + 1] == "auto" and cmd[cmd.index("--to") + 1] == str(batches.EXTEND_TO) == "650000"
         assert cmd[cmd.index("--training") + 1] == "shuffle" and cmd[cmd.index("--fraction") + 1] == "1.0"
-    assert batches.BATCH_CPUS["e5_extend"] == 4
+    assert batches.BATCH_CPUS["e5_extend"] == 3  # the quota: one pod of 3 CPUs
     probes = dict(submit.commands("probes", "PY", "e5_probes_all", "p1-b-d1", checkpoint=500000, e4_results="/e4"))
     assert sorted(probes) == ["probes_A_base_k300000", "probes_A_sh100_k500000", "probes_B_base_k300000", "probes_B_sh100_k500000",
                               "probes_E_sh100_k500000", "probes_F_sh100_k500000"]
