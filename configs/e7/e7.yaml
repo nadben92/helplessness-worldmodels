@@ -44,3 +44,18 @@ e7:
   induction:
     alphas: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.75, 1.0]
   apply_plans: [A, B]         # run_e7_apply.py's default plans (v1: the first report's direction / random / stepwise / reverse)
+  # Diagnostics of the value and of the decision rule (run_e7_diagnostics.py; docs/e6/DECISIONS.md (51)-(54)). Frozen
+  # weights; training image, test environment; the zone AI is the image's zone of interest (the former UD slot).
+  diagnostics:
+    seed: 7107
+    image: training
+    contexts_per_cell: 4      # E6's step-1 contexts (fresh start on the cell) per zone cell, for the Q diagnostics
+    k_max: 10                 # the lookahead's longest horizon (one rollout gives every k <= k_max)
+    k_report: [1, 2, 3, 5, 10]
+    n_particles: 16           # particles per (context, action): the policy's K_act
+    k_inner: 4                # draws of the greedy one-step choice inside the rollout: the critic's training K_imag
+    n_trace: 1                # particles per (context, action) whose b and decoded cell are measured along the rollout
+    chunk: 20                 # contexts per batch of the rollouts (memory)
+    bin_width: 0.25           # bit: diagnostic 2's bins of b
+    taus: null                # diagnostic 3's grid, fixed from diagnostic 2's gaps ((53)); given at the command line
+    lookahead_ks: [1, 5, 10]  # diagnostic 4's episodes with the oracle Q_k
