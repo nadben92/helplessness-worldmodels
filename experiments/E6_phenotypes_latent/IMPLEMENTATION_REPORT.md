@@ -709,3 +709,127 @@ rapprochent du but).
 6. **Tâche 3.** D2 ne gardait déjà que les pas bien localisés ((56)). Forme attendue : la courbe des références sans
    filtre est sous celle de D2 ou égale, et le filtre au niveau du run la fait monter ou la laisse stable (à −1,5 en
    particulier, 0,73 dans D2). Elle ne descend pas.
+
+### Ce qui a été fait
+
+- **Tâche 1 — anti-oracle.** 4 références × p ∈ {0 ; 0,1 ; … ; 1} × k ∈ {1 ; 5}, plus le contrôle croisé sur les
+  exposés (p ∈ {0 ; 1}, k ∈ {1 ; 5}) et la variante secondaire h'_a (références, p = 1). Épisodes d'E6 : image
+  d'entraînement, mêmes départs, ε = 0,1, mêmes flux, mesurés dans la zone.
+- **Tâche 2 — E6 pas à pas.** Calculée sur les épisodes d'E6 existants, où b_local est stocké à chaque pas ; rien n'a été
+  relancé.
+- **Tâche 3 — contrôle de D2.** Calculée sur les épisodes de la phase induction des diagnostics.
+- Code : `run_e7_dissociation.py`, `analyse_e7_dissociation.py`, `probing/lookahead.py` (`mixed_policy_q`, variante
+  `mixed`, `h_mode`), option `return_kernel` de `step_controllability`.
+- Sorties légères : `results/E7_dissociation/dev_e4_cpu/` (`t1_runs.csv`, `t2_bins.csv`, `t3_bins.csv`,
+  `table_2x2.csv`, `forms.json`, figures, méta des 16 runs). Épisodes dans `scratch/e6dev/results/E7_dissociation/`.
+
+**Contrôles.**
+- Poids identiques avant et après les 16 runs (hash).
+- p = 0, k = 1 rejoue E6 à l'identique (8 sur 8) : états, actions, Q, et I au pas 1.
+  - I aux autres pas diffère, comme attendu : ces runs mesurent dans la zone seulement, E6 partout, donc le générateur de
+    mesure est consommé autrement. Le comportement n'en dépend pas ((36)).
+- b effectif à p = 0 contre le b = 0 d'E6 chez les références : −0,010 à +0,004 bit (tirages de mesure seulement).
+  Chez les exposés, b effectif à p = 0 : −2,06 / −2,11 / −2,17 / −2,18, contre −2,06 / −2,12 / −2,17 / −2,17 dans E6.
+- Localisation à chaque p : 1,00 chez les références (écart maximal à p = 0 : 0,003).
+
+### Écarts au prompt
+
+1. **h de la branche tapis roulant ((57)).** Avec V(h'_a, z_tapis) comme l'oracle de D4, le critic de la référence lit
+   encore l'action dans h'_a. À p = 1, la référence reste alors dirigée (variante h'_a : 0,92–0,94 à k = 1). La variante
+   principale utilise un seul h pour toutes les actions (la moyenne des h'_a) : à p = 1, les Q sont exactement égaux,
+   comme le prompt le suppose. La variante h'_a est reportée en secondaire.
+2. **À k = 1, le mélange en espérance ne déplace pas l'argmax.** (1 − p) Q_modèle + p · constante garde l'argmax jusqu'à
+   ce que les écarts passent sous la tolérance. La courbe k = 1 est donc une marche à p = 1, et ce n'est pas un résultat
+   empirique. C'est k = 5, avec des particules tirées, qui donne une courbe graduée.
+3. **Tâche 3.** D2 ne gardait déjà que les pas bien localisés. Le contrôle compare donc tous les pas, D2, et un filtre au
+   niveau du run ((56)).
+4. Image d'entraînement seulement ; b effectif calculé dans l'espace des cases (le noyau décodé, comme I_s), sans
+   approximation supplémentaire.
+
+### Tableau 2 × 2 (part dirigée ε-greedy dans la zone, moyenne des 4 agents ; extrêmes entre agents)
+
+| k = 1 | Critic référence | Critic exposé |
+|---|---|---|
+| Vraie croyance | 0,94 (E6) | 0,85 [0,75–0,93] (oracle, D4) |
+| Croyance tapis roulant | 0,39 [0,39–0,40] (anti-oracle p = 1) | 0,38 [0,32–0,49] (E6) |
+
+| k = 5 | Critic référence | Critic exposé |
+|---|---|---|
+| Vraie croyance | 0,95 (oracle D4) ; 0,94 (son propre modèle) | 0,95 [0,94–0,95] (oracle, D4) |
+| Croyance tapis roulant | 0,39 [0,38–0,41] (anti-oracle p = 1) | 0,39 [0,39–0,40] (anti-oracle p = 1) ; 0,37 (son propre modèle) |
+
+- **La croyance de transition fait presque tout l'effet** : 0,55 points d'une ligne à l'autre.
+- **L'effet du critic n'apparaît que sous la vraie croyance et à k = 1** : 0,09 en moyenne, de 0,01 à 0,19 selon
+  l'agent. Il disparaît à k = 5.
+- **Sous la croyance tapis roulant, les deux critics donnent le hasard.** À p = 1, toutes les actions sont à égalité.
+  L'exposé d'E6, avec son propre modèle, s'écarte un peu du hasard (0,32–0,49) : son prior n'est pas exactement le tapis
+  et son critic n'est pas neutre.
+
+Figures : `t1_directed_vs_beff.png` (part dirigée en fonction de b effectif, k = 1 et k = 5), `t2_stepwise.png`,
+`t3_localisation.png`.
+
+### Verdicts des formes attendues
+
+1. **Monotonie en p : confirmée.** Aucune hausse au-delà de l'IC entre deux p consécutifs, pour les 4 agents et les deux
+   k ; localisation constante (écart maximal 0,003).
+   - k = 1 : plate à 0,93–0,95 jusqu'à p = 0,9 (b effectif ≈ −2,0), puis 0,39–0,40 à p = 1. C'est l'effet mécanique de
+     l'écart 2.
+   - k = 5 : décroissance graduée, 0,94 → 0,91–0,92 (p = 0,4, b ≈ −1,05) → 0,85–0,86 (p = 0,6, b ≈ −1,45) → 0,68–0,72
+     (p = 0,8) → 0,38–0,41 (p = 1).
+2. **p = 1, k = 1 au niveau du hasard : confirmée.** 0,39–0,40 pour les 4 références, dans [0,30 ; 0,50]. Toutes les
+   actions sont à égalité (100 % des pas de zone) et le choix est uniforme. L'argmax strict, lui, vaut 1,00 : il prend
+   la première action d'indice, qui se trouve dirigée. Ce chiffre n'a pas de sens ici.
+3. **p = 1, k = 5 sans amélioration : confirmée.** Écart k = 5 − k = 1 de −0,013 à +0,012.
+4. **Exposé à p = 1 à ± 0,05 de l'exposé d'E6 : infirmée pour 3 agents sur 4.** Écarts : +0,08 (p1-a), −0,09 (p1-b),
+   +0,06 (p2-a), +0,00 (p2-b).
+   - L'exposé à p = 1 est à 0,40 partout, car ses Q sont à égalité. L'exposé d'E6 s'écarte du hasard dans les deux sens
+     (0,32 à 0,49).
+   - Même ordre de grandeur en moyenne (0,40 contre 0,38), mais pas à ± 0,05 agent par agent.
+5. **À b effectif égal : confirmée à −1,5 et −2,1, non testable près de 0.**
+   - À −1,5 : la référence + anti-oracle est à 0,94 (k = 1) et 0,85 (k = 5), l'exposé pas à pas à 0,41 [0,36 ; 0,46].
+   - À −2,1 : écart plus faible, 0,69 (k = 1, interpolé sur la marche) et ≈ 0,50 (k = 5) contre 0,36.
+   - Près de b = 0, l'exposé n'a aucun pas : toutes ses classes au-dessus de −0,75 ont moins de 30 pas.
+6. **Tâche 3 : confirmée, et elle change la lecture de D2.**
+   - La part de pas bien localisés tombe sous le niveau d'E6 référence − 0,05 dans toutes les classes sous 0 bit. Elle
+     vaut 0,91 à −0,25, 0,25 à −1,5 et 0,03 à −2,25.
+   - Sur tous les pas, la courbe est sous celle de D2 : 0,58 contre 0,73 à −1,5.
+   - Avec le filtre au niveau du run (runs B dont la localisation dans la zone reste à 0,05 de celle d'E6), elle monte :
+     0,98 à −0,9, 0,96 à −1,1 et **0,90 à −1,5** (n = 51 ; aucun pas plus bas).
+   - **La décroissance progressive de D2 venait donc de pas bien localisés pris dans des runs où la localisation
+     cassait.** Tant que la localisation tient au niveau du run, les références restent ≥ 0,90 jusqu'à −1,5 bit.
+
+### Tâche 2 — E6 pas à pas (`t2_bins.csv`)
+
+| Classe de b | −2,5 | −2,25 | −2,0 | −1,75 | −1,5 | −1,25 | −1,0 | −0,75 |
+|---|---|---|---|---|---|---|---|---|
+| Exposés : part dirigée [IC] | 0,39 [0,36 ; 0,42] | 0,36 [0,34 ; 0,38] | 0,36 [0,33 ; 0,40] | 0,36 [0,32 ; 0,40] | 0,41 [0,36 ; 0,46] | 0,38 [0,32 ; 0,44] | 0,45 [0,37 ; 0,53] | 0,54 [0,44 ; 0,64] |
+| pas / épisodes | 761 / 367 | 2 143 / 655 | 663 / 385 | 519 / 330 | 397 / 276 | 241 / 170 | 146 / 118 | 85 / 77 |
+
+- Les références n'ont des pas que près de 0 : 0,89 [0,81 ; 0,95] à −0,5 (63 pas), 0,92 à −0,25 et 0,94 à 0 et +0,25.
+- Les deux courbes ne se recouvrent pas. La courbe anti-oracle est en b effectif, pas en b naturel : ce n'est pas la même
+  mesure (indiqué sur la figure).
+- Chez les exposés, la part dirigée ne remonte qu'au-dessus de −1 bit, sur peu de pas.
+
+### Points d'attention
+
+- **L'argmax est presque insensible à une croyance partielle quand elle entre par l'espérance (k = 1).** C'est la
+  forme algébrique de H2, qui ne dépend pas des données. Une anticipation à particules (k = 5) rend le comportement
+  gradué en b effectif.
+- **La variante h'_a montre que h porte une information d'action que le critic lit.** Même quand la case prédite est la
+  même pour toutes les actions, la référence reste dirigée à k = 1 (0,92–0,94) ; à k = 5, elle tombe à 0,41–0,54.
+  - Même lecture possible pour l'oracle de D4 : la part « critic exposé » de 0,85 à k = 1 inclut cette voie.
+- Le contrôle croisé (forme 4) dit que la ligne « croyance tapis roulant » de l'anti-oracle est un hasard exact. Ce n'est
+  pas une copie fidèle de l'exposé, dont le prior n'est pas exactement le tapis.
+
+### Coût (CPU, 1 thread par processus, 12 à 16 processus sur 12 cœurs)
+
+| Runs | par agent |
+|---|---|
+| références, p = 0 à 0,5, k = 1 et 5 | 3 450–3 580 s |
+| références, p = 0,6 à 1, k = 1 et 5 | 3 950–4 000 s |
+| exposés, p = 0 et 1, k = 1 et 5 | 2 950–3 240 s |
+| variante h'_a, p = 1 | 1 500–1 680 s |
+| tâches 2 et 3, analyse | < 2 min |
+
+Un épisode à k = 5 coûte environ 500 s par jeu de 180 épisodes (k = 1 : environ 60 s). Environ 1 h 10 de temps réel pour
+l'ensemble.
