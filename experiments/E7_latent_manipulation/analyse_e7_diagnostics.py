@@ -183,7 +183,7 @@ def d2(runs: list[dict], worlds: dict, e6_runs: list[str], bin_width: float, fig
         res = dr.binned(np.array([s["b"] for s in g]), np.array([s["greedy_directed"] for s in g]), edges)
         ok = res["n"] >= 20
         axes[1].plot(((res["lo"] + res["hi"]) / 2)[ok], res["mean"][ok], ":", color="gray", lw=0.8)
-    axes[0].set_ylabel("écart de Q médian (meilleure − deuxième)"), axes[0].set_yscale("log")
+    axes[0].set_ylabel("écart de Q médian (meilleure − deuxième)")
     axes[1].set_ylabel("part dirigée du choix greedy (tie set)"), axes[1].set_ylim(0, 1.02)
     axes[1].axhline(0.4, color="gray", lw=0.6, ls="--")
     for ax in axes:
@@ -258,8 +258,10 @@ def d4(runs_val: list[dict], runs_la: list[dict], runs_ind: list[dict], worlds: 
                 tb, dec, act = v[f"{key}__trace_b"], v[f"{key}__trace_decoded"], v[f"{key}__trace_actions"]
                 traces.append({"agent": a, "model": static[-1]["model"], "variant": variant, "step": 0, "b_mean": float(np.nanmean(v[f"{key}__b_root"])),
                                "loc_root": float(np.mean(v[f"{key}__loc_root"]))})
-                for i in range(tb.shape[0]):
-                    traces.append({"agent": a, "model": static[-1]["model"], "variant": variant, "step": i + 1, "b_mean": float(np.nanmean(tb[i]))})
+                for i in range(tb.shape[0]):  # b_mean_in_zone: the particles decoded in the zone only (b rises outside it by location)
+                    inz = w.in_zone[dec[i]]
+                    traces.append({"agent": a, "model": static[-1]["model"], "variant": variant, "step": i + 1, "b_mean": float(np.nanmean(tb[i])),
+                                   "b_mean_in_zone": float(np.nanmean(tb[i][inz])) if inz.any() else float("nan"), "share_in_zone": float(inz.mean())})
                 frm = np.concatenate([np.broadcast_to(cells[:, None, None], dec.shape[1:])[None], dec[:-1]])  # the cell before each step
                 ok = w.in_zone[frm]
                 conv.append({"agent": a, "model": static[-1]["model"], "variant": variant, "n_transitions": int(ok.sum()),
