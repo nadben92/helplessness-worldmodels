@@ -188,3 +188,22 @@ def test_continuation_batch_and_probe_checkpoints():
     probes = dict(submit.commands("probes", "PY", "e5_probes_all", "p1-b-d1", checkpoint=500000, e4_results="/e4"))
     assert sorted(probes) == ["probes_A_base_k300000", "probes_A_sh100_k500000", "probes_B_base_k300000", "probes_B_sh100_k500000",
                               "probes_E_sh100_k500000", "probes_F_sh100_k500000"]
+
+
+
+def test_continuation_in_two_batches_and_two_probe_sets():
+    """docs/e5/DECISIONS.md (33): e5_extend_a = seed A's f = 1 pair, e5_extend_b = seed B's reference with E and F, each
+    3 CPUs to 650,000 (e5_extend kept, unused); probes in two sets -- e5_probes_a (baselines A and B at 300,000, seed A's
+    pair at --checkpoint K_a), e5_probes_b (E and F at K_b)."""
+    a = dict(submit.commands("train", "PY", "e5_extend_a", "p1-b-d1"))
+    b = dict(submit.commands("train", "PY", "e5_extend_b", "p1-b-d1"))
+    assert sorted(a) == ["A_sh100_experimental", "A_sh100_reference"]
+    assert sorted(b) == ["B_sh100_reference", "E_sh100_experimental", "F_sh100_experimental"]
+    for cmd in [*a.values(), *b.values()]:
+        assert cmd[cmd.index("--extend") + 1] == "auto" and cmd[cmd.index("--to") + 1] == "650000"
+    assert batches.BATCH_CPUS["e5_extend_a"] == batches.BATCH_CPUS["e5_extend_b"] == 3
+    pa = dict(submit.commands("probes", "PY", "e5_probes_a", "p1-b-d1", checkpoint=550000, e4_results="/e4"))
+    assert sorted(pa) == ["probes_A_base_k300000", "probes_A_sh100_k550000", "probes_B_base_k300000"]
+    pb = dict(submit.commands("probes", "PY", "e5_probes_b", "p1-b-d1", checkpoint=600000))
+    assert sorted(pb) == ["probes_E_sh100_k600000", "probes_F_sh100_k600000"]
+    assert all(cmd[cmd.index("--reference-seed-label") + 1] == "B" for cmd in pb.values())

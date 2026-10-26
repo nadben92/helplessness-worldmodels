@@ -531,3 +531,30 @@ Avec un lancement le 26 octobre au soir :
 - l'arrêt tombe entre le 27 octobre en fin de soirée et le 29 octobre au matin ;
 - les sondes, qui prennent quelques heures, suivent l'export ;
 - l'agrégation se fait le lendemain.
+
+**Prolongation en deux batchs.**
+
+- **Batchs** :
+  - `e5_extend_a` : paire f = 1 de la graine A, 2 runs ;
+  - `e5_extend_b` : référence B, E et F, 3 runs, lancé après les sondes de a.
+  - Réglages communs : 3 CPU, plafond à 650 000, arrêt manuel.
+  - `e5_extend` reste défini mais n'est pas utilisé.
+- **Arrêt** : chaque batch a sa ligne de synthèse dans `check_wave.py --batch <batch>`, donc son propre K (K_a, K_b).
+- **Sondes en deux jeux** :
+  - `e5_probes_a` : baselines A et B à 300 000, paire A à K_a ;
+  - `e5_probes_b` : E et F à K_b.
+- **Agrégation** : `analyse_probes.py` fusionne les deux jeux, chaque paire étant sondée à son propre checkpoint.
+- **Bug corrigé au passage** : l'export d'un batch d'entraînement seul (une prolongation) aurait planté.
+
+**Vitesses mesurées dans la vague 1 relancée** : environ 7 200 pas/h par run avec 4 runs, environ 10 000 avec 3. Le
+débit total plafonne autour de 29 000 à 30 000 pas/h, faute de CPU. À 2 runs, on peut attendre environ 10 000 à 11 000
+pas/h par run (non mesuré).
+
+**Calendrier** (lancement de `e5_extend_a` le 26 oct. vers 22 h) :
+
+| Étape | Estimation |
+|---|---|
+| K_a | 27 oct. 18 h – 28 oct. 4 h |
+| `e5_probes_a` | au plus tard le 28 oct. au matin |
+| `e5_extend_b` | du 28 oct. au soir au 29 oct. au soir |
+| `e5_probes_b` | 29 oct. au soir – 30 oct. au matin |

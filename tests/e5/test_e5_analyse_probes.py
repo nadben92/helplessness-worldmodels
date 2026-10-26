@@ -50,7 +50,7 @@ def test_aggregation_over_a_variable_number_of_seeds(tmp_path):
     out = tmp_path / "out"
     ap.main(["--root", str(tmp_path), "--out", str(out)])
     summary = json.loads((out / "summary.json").read_text(encoding="utf-8"))
-    assert summary["seeds"] == {"baseline@k100000": [102, 202], "shuffle_f1@k100000": [2, 102, 202, 302]}
+    assert summary["seeds"] == {"baseline": [[102, 100000], [202, 100000]], "shuffle_f1": [[2, 100000], [102, 100000], [202, 100000], [302, 100000]]}
     with open(out / "probes_aggregated.csv", newline="", encoding="utf-8") as f:
         rows = {(r["condition"], r["axis"], int(r["k"]), r["position"]): r for r in csv.DictReader(f)}
     theme = rows[("shuffle_f1", "segment", 0, "neutral")]
@@ -63,3 +63,28 @@ def test_aggregation_over_a_variable_number_of_seeds(tmp_path):
         extremes = list(csv.DictReader(f))
     assert {e["probe"] for e in extremes} == {"training_image_ud", "theme_only", "position_only"}
     assert all(float(e["b_step1"]) == -2.0 for e in extremes if e["probe"] == "training_image_ud")
+
+
+
+def test_two_probe_sets_merge_each_pair_at_its_checkpoint(tmp_path):
+    """docs/e5/DECISIONS.md (33): the baselines at 300,000 and each shuffle pair at its own K (K_a for seed A, K_b for E
+    and F) merge into one table, grouped by condition; a pair measured at two checkpoints is refused without --pair-k."""
+    import pytest
+
+    fake(tmp_path, "baseline", None, 2, 300000, [-0.1, -2.0, -1.0], [True] * 3, "20261028T000000Z")
+    fake(tmp_path, "baseline", None, 102, 300000, [-0.2, -2.1, -1.1], [True] * 3, "20261028T000000Z")
+    fake(tmp_path, "shuffle", 1.0, 2, 550000, [-1.0, -0.1, -0.5], [True] * 3, "20261028T000000Z")   # K_a
+    fake(tmp_path, "shuffle", 1.0, 402, 600000, [-1.4, -0.2, -0.5], [True] * 3, "20261030T000000Z")  # K_b
+    fake(tmp_path, "shuffle", 1.0, 502, 600000, [-1.6, -0.3, -0.5], [True] * 3, "20261030T000000Z")
+    out = tmp_path / "out"
+    ap.main(["--root", str(tmp_path), "--out", str(out)])
+    summary = json.loads((out / "summary.json").read_text(encoding="utf-8"))
+    assert summary["seeds"] == {"baseline": [[2, 300000], [102, 300000]], "shuffle_f1": [[2, 550000], [402, 600000], [502, 600000]]}
+    with open(out / "probes_aggregated.csv", newline="", encoding="utf-8") as f:
+        rows = {(r["condition"], r["axis"], int(r["k"]), r["position"]): r for r in csv.DictReader(f)}
+    theme = rows[("shuffle_f1", "segment", 0, "neutral")]
+    assert int(theme["n_seeds"]) == 3 and np.isclose(float(theme["b_step1_mean"]), np.mean([-1.0, -1.4, -1.6]))
+    fake(tmp_path, "shuffle", 1.0, 2, 600000, [-1.2, -0.1, -0.5], [True] * 3, "20261031T000000Z")  # seed A again, another k
+    with pytest.raises(SystemExit):
+        ap.main(["--root", str(tmp_path), "--out", str(tmp_path / "out2")])
+    ap.main(["--root", str(tmp_path), "--out", str(tmp_path / "out3"), "--pair-k", "shuffle_f1:2=550000"])
