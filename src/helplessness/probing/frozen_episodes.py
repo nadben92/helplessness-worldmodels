@@ -14,7 +14,9 @@ An episode (batch of episodes, one row each; a row leaves the batch when its epi
             rule), the mass on the true successor of every action, the localisation (the decoded (h_t, z_t) nearest
             template, and the cell nearest to the agent's colour), p_goal(h_t, z_t), the Q values and their spread;
             the action: epsilon-greedy on Q (agents.worldmodel.policy.q_values, the training's K_act draws), the tie
-            set of the training's tolerance (policy.tie_set);
+            set of the training's tolerance (policy.tie_set); two test-time options of the decision rule
+            (docs/e6/DECISIONS.md (52)), both off by default: `tau`, the action drawn from softmax(Q / tau) by the inverse
+            CDF of the step's explore uniform u (no epsilon branch), and `q_fn`, another Q (E7's k-step lookahead);
   end       the goal (terminated) or H transitions (truncated: max_steps is a loop limit).
 
 Random streams (docs/e6/DECISIONS.md (36)): per EPISODE a numpy generator (explore_seqs[i]) draws, at every step and
@@ -37,6 +39,7 @@ import torch.nn.functional as F
 from helplessness.agents.worldmodel.heads import AgentConfig, Critic, GoalHead
 from helplessness.agents.worldmodel.policy import q_values, tie_set
 from helplessness.agents.worldmodel.rssm import RSSM, RSSMConfig
+from helplessness.measures.decision_rule import softmax_choice
 from helplessness.probing.fixed_trajectory import step_controllability, template_distances_torch
 from helplessness.probing.probe_validity import decoded_agent_cell
 
@@ -44,6 +47,8 @@ from helplessness.probing.probe_validity import decoded_agent_cell
 # the m active rows, states (m,) their true states, in_zone (m,) bool, rows (m,) their episode indices; info: name ->
 # (m,) array recorded at (rows, t).
 Hook = Callable[[int, torch.Tensor, torch.Tensor, np.ndarray, np.ndarray, np.ndarray], tuple[torch.Tensor, dict]]
+# q_fn(h, z, states, act_generator) -> Q (m, n_actions): the Q the policy reads in place of policy.q_values.
+QFn = Callable[[torch.Tensor, torch.Tensor, np.ndarray, torch.Generator], torch.Tensor]
 
 
 @dataclass
@@ -146,13 +151,15 @@ FIELDS_STEP = ("I", "mass_played", "ghost", "loc_template", "loc_agent", "p_goal
 
 def run_episodes(agent: FrozenAgent, world: TestWorld, starts: np.ndarray, H: int, epsilon: float,
                  explore_seqs: list[np.random.SeedSequence], act_seed: int, measure_seed: int, zone: np.ndarray,
-                 draws: int = 16, margin: float = 1e-3, measure: str = "all", hook: Hook | None = None) -> dict[str, np.ndarray]:
+                 draws: int = 16, margin: float = 1e-3, measure: str = "all", hook: Hook | None = None, tau: float | None = None,
+                 q_fn: QFn | None = None) -> dict[str, np.ndarray]:
     """The episodes from `starts` (n,), at most H transitions each (module docstring). measure: "all" (every step), "zone"
     (the steps whose state is in `zone` and t = 0), "first" (t = 0 only); unmeasured steps are NaN.
     Returns: states (n, H + 1) and actions (n, H) (-1 beyond the end), length, terminated, and per step (n, H): I,
     mass_played (the mass on the true successor of the action taken), ghost, loc_template, loc_agent, decoded_template and
     decoded_cell (the decoded positions, states as floats, NaN where unmeasured), p_goal, q_gap (max -
-    min Q), explored, tied, plus the hook's fields; Q (n, H, n_actions)."""
+    min Q), explored, tied, plus the hook's fields; Q (n, H, n_actions). tau: None (epsilon-greedy, E6) or the softmax's
+    temperature; q_fn: None (policy.q_values with the act generator, E6) or another Q."""
     rssm, cfg = agent.rssm, agent.cfg
     device = world.templates_t.device
     n, A = len(starts), rssm.cfg.n_actions
@@ -190,14 +197,18 @@ def run_episodes(agent: FrozenAgent, world: TestWorld, starts: np.ndarray, H: in
             for name in ("I", "ghost", "loc_template", "loc_agent", "p_goal", "decoded_template", "decoded_cell"):
                 out[name][r, t] = m[name]
             mass_t = m["mass_true"]
-        Q = q_values(rssm, agent.goal_head, agent.critic, h, z, cfg.k_act, cfg, act_gen)
+        Q = q_values(rssm, agent.goal_head, agent.critic, h, z, cfg.k_act, cfg, act_gen) if q_fn is None else q_fn(h, z, s, act_gen)
         tied_set = tie_set(Q, cfg).cpu().numpy()
         Qn = Q.cpu().numpy()
         a = np.empty(len(rows), dtype=np.int64)
         for j, i in enumerate(rows):
             u, uniform, scores = explore[i].random(), explore[i].integers(A), explore[i].random(A)
-            explored = u < epsilon
-            a[j] = uniform if explored else int(np.argmax(np.where(tied_set[j], scores, -1.0)))
+            if tau is None:
+                explored = u < epsilon
+                a[j] = uniform if explored else int(np.argmax(np.where(tied_set[j], scores, -1.0)))
+            else:
+                explored = False
+                a[j] = softmax_choice(Qn[j], tau, u)
             out["explored"][i, t] = explored
         out["tied"][rows, t] = tied_set.sum(axis=1) > 1
         out["q_gap"][rows, t] = Qn.max(axis=1) - Qn.min(axis=1)
