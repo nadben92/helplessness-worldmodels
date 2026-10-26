@@ -139,8 +139,8 @@ def _run_e5(repo_dir: str, phase: str, output: str, batch: str, configuration: s
 
 
 def probe_plan(repo: Path, batch: str, configuration: str, checkpoint: int, e4_results: str | None) -> tuple[set[str], dict[str, str]]:
-    """The probe jobs of the batch whose pair is healthy (docs/e5/DECISIONS.md (32)) and those left out, with the reason: an
-    E5 run not done, never switched or locked in (check_wave.py's checks), or either run without its weights at the
+    """The probe jobs of the batch whose pair is healthy (docs/e5/DECISIONS.md (32), (33)) and those left out, with the
+    reason: an E5 run failed, never switched or locked in (a run stopped by the user, status "running", is kept) (check_wave.py's checks), or either run without its weights at the
     checkpoint; seed A's baseline (E4's own pair) needs its two runs' weights at the checkpoint."""
     keep, excluded = set(), {}
     for (name, job_args), (label, training, fraction) in zip(batches.probe_args(batch, configuration, checkpoint, e4_results), batches.PROBE_PAIRS[batch]):
@@ -162,8 +162,8 @@ def probe_plan(repo: Path, batch: str, configuration: str, checkpoint: int, e4_r
                 reasons.append(f"no {role} run")
                 continue
             c = check_wave.check_run(check_wave.read_run(d))
-            if c["status"] != "done":
-                reasons.append(f"{role} {c['status']}")
+            if c["status"] == "failed":  # a continuation stopped by the user stays "running": its weights at K are whole
+                reasons.append(f"{role} failed")
             if c["switch"]["grad_step"] is None:
                 reasons.append(f"{role} never switched")
             if c["lock_in"] is not None:

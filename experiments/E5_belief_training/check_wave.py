@@ -19,10 +19,10 @@ another wave is added):
                     zone type averaged over the 12 assignments; E4's criterion: |b_UD + log2 5| <= 0.15, |b| <= 0.1 at CD
                     and in the corridor-like slots, mass >= 0.97 in the four quadrants of both runs
   converged at      the checkpoints where that criterion holds (the candidates for the common probe checkpoint)
-A run is flagged ATTENTION when it failed, never switched, had a stretch of 5 evaluations below 1.0 bit after its switch,
+A run is flagged ATTENTION when it failed (a run still training or stopped by the user stays 'running': not flagged), never switched, had a stretch of 5 evaluations below 1.0 bit after its switch,
 or misses the mass threshold at its last checkpoint; LOCK-IN when it has not switched and its statistic stayed below 0.01
 bit on at least 95% of the evaluations from gradient step 6,100 on (at least 20) -- a run locked in, never switched or
-not done is EXCLUDED from every pair (and so from the probes), listed apart; NaN/inf when a training loss present in a record or
+failed is EXCLUDED from every pair (and so from the probes), listed apart; NaN/inf when a training loss present in a record or
 the statistic is not finite (the agent heads' losses are ABSENT before the switch -- the console prints them as nan --
 and are not flagged); a pair when it misses E4's criterion at its last checkpoint.
 
@@ -56,7 +56,17 @@ LOCK_BITS, LOCK_AFTER, LOCK_MIN_EVALS, LOCK_SHARE = 0.01, 6100, 20, 0.95
 
 def read_run(run_dir: Path) -> dict:
     meta = meta_fields(run_dir / "meta.yaml")
-    records = [json.loads(x) for x in (run_dir / "checkpoints.jsonl").read_text(encoding="utf-8").splitlines() if x.strip()]
+    lines = [x for x in (run_dir / "checkpoints.jsonl").read_text(encoding="utf-8").splitlines() if x.strip()]
+    records = []
+    for i, x in enumerate(lines):
+        try:
+            records.append(json.loads(x))
+        except json.JSONDecodeError:
+            if i != len(lines) - 1:
+                raise
+            # a pod stopped while appending a record leaves its last line truncated: that checkpoint's record is lost (its
+            # weights, written atomically, are whole or absent), the others are read (docs/e5/DECISIONS.md (33))
+            print(f"{run_dir.name}: last record truncated (a stopped run), ignored", flush=True)
     name = run_dir.name
     preset = name.split("__")[1]  # 2zones-<configuration>-<tag>
     return {"dir": run_dir, "name": name, "tag": preset.rsplit("-", 1)[1], "role": "experimental" if "__pair-experimental__" in name else "reference",
@@ -174,8 +184,8 @@ def check_run(run: dict) -> dict:
                      f"evaluations from {LOCK_AFTER} on (max {lock['max']:.4f})")
     if nan:
         flags.append(f"NaN/inf at checkpoint(s) {'; '.join(nan[:3])}" + (" ..." if len(nan) > 3 else ""))
-    if run["meta"].get("status") != "done":
-        flags.append(f"status {run['meta'].get('status')}: {run['meta'].get('error', '')[:120]}")
+    if run["meta"].get("status") == "failed":
+        flags.append(f"status failed: {run['meta'].get('error', '')[:120]}")
     if sw["grad_step"] is None:
         flags.append("never switched")
     if col["longest_below_1bit"] >= COLLAPSE_CONSECUTIVE:
@@ -264,9 +274,10 @@ def main(argv: list[str] | None = None) -> int:
     runs = [read_run(d) for d in dirs]
     run_checks = [check_run(r) for r in runs]
     pairs, excluded = [], []
-    # a run in no pair (docs/e5/DECISIONS.md (32), (33)): locked in, never switched or not done -- as the probe plan
-    locked = {c["run"]: ("LOCK-IN" if c["lock_in"] is not None else "never switched" if c["switch"]["grad_step"] is None else f"status {c['status']}")
-              for c in run_checks if c["lock_in"] is not None or c["switch"]["grad_step"] is None or c["status"] != "done"}
+    # a run in no pair (docs/e5/DECISIONS.md (32), (33)): locked in, never switched or failed -- as the probe plan; a run
+    # still training or stopped by the user (status running) stays in its pairs
+    locked = {c["run"]: ("LOCK-IN" if c["lock_in"] is not None else "never switched" if c["switch"]["grad_step"] is None else "failed")
+              for c in run_checks if c["lock_in"] is not None or c["switch"]["grad_step"] is None or c["status"] == "failed"}
     repo = args.repo_dir.resolve()
     for exp in (r for r in runs if r["role"] == "experimental"):
         ref_seed = reference_seed(repo, exp["tag"], exp["seed"])
@@ -295,12 +306,15 @@ def main(argv: list[str] | None = None) -> int:
               + (f" | by type over assignments {({t: None if v is None else round(v, 3) for t, v in p['b_step1_by_type_mean_over_assignments'].items()})}"
                  if p.get("b_step1_by_type_mean_over_assignments") else "")
               + f" | converged at {p.get('converged_at')} | {'ATTENTION: ' + '; '.join(p['attention']) if p['attention'] else 'OK'}")
+    common = sorted(set.intersection(*(set(p.get("converged_at", [])) for p in pairs))) if pairs else []
+    print(f"ALL {len(pairs)} PAIRS MEET E4's CRITERION AT: {common if common else 'none yet'}")
     if excluded:
-        print("EXCLUDED (a run locked in, never switched or not done: no pair, no probe)")
+        print("EXCLUDED (a run locked in, never switched or failed: no pair, no probe)")
         for e in excluded:
             print(f"  {e['pair']}: {e['reason']}")
     if args.out:
-        args.out.write_text(json.dumps({"runs": run_checks, "pairs": pairs, "excluded_pairs": excluded}, indent=1, default=str), encoding="utf-8")
+        args.out.write_text(json.dumps({"runs": run_checks, "pairs": pairs, "excluded_pairs": excluded, "all_pairs_converged_at": common},
+                                       indent=1, default=str), encoding="utf-8")
     return 0
 
 

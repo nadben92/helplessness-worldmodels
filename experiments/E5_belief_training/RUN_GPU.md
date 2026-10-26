@@ -240,8 +240,11 @@ A run stopped by a training guard (`SeparationNotReachedError`, `CollapseAfterSw
 ## Step 6b -- continue the shuffle runs before the probes (docs/e5/DECISIONS.md (33))
 
 At 300,000 steps the shuffle runs are still learning (mass 0.74-0.93, b(UD) -1.6 to -1.9; the baselines converged by
-100,000). If the user so decides, the five healthy shuffle runs (A exp, A ref, B ref, E, F) continue from their last
-resume point (290,000) to 500,000, in one pod, new run directories (the originals untouched):
+100,000). The five healthy shuffle runs (A exp, A ref, B ref, E, F) continue from their last resume point (290,000), in
+ONE pod of 3 CPUs, in new run directories (the originals untouched), up to a ceiling of 650,000 steps; the user stops the
+pod as soon as every pair meets E4's criterion at one common checkpoint.
+
+**Launch** (after the user has pushed `e5`):
 
 ```bash
 cd /scratch/helplessness-worldmodels-e5
@@ -250,23 +253,51 @@ python experiments/E5_belief_training/submit_kubeflow.py --batch e5_extend --rep
 python experiments/E5_belief_training/submit_kubeflow.py --batch e5_extend --repo-dir /scratch/helplessness-worldmodels-e5
 ```
 
-Five jobs, each `run_e5.py --extend auto --to 500000 ...` (the newest finished run of its seed and condition, from its
-`checkpoints/resume.pt`); about 35 hours. While they train and at the end, the learning check of the continuations
-(their newest directories; E and F are paired with B's reference by themselves):
+The dry run shows `"cpus": 3` and five jobs `run_e5.py --extend auto --to 650000 ...` (the newest finished run of each
+seed and condition, from its `checkpoints/resume.pt`). Checkpoints every 25,000 steps past 300,000 (every assignment
+measured every 50,000).
+
+**Watch the convergence** (any time, readable while the runs train; E and F are paired with B's reference by
+themselves):
 
 ```bash
 python experiments/E5_belief_training/check_wave.py --batch e5_extend --out exports/e5_extend_check.json
 ```
 
-Its `converged at` lists give the probe checkpoint of the shuffle pairs (the first common one). If 500,000 is not enough,
-the same batch with a larger `EXTEND_TO` (`batches.py`) continues each continuation from its own resume point. Export:
-`export_batch.py create --batch e5_extend --configuration p1-b-d1`.
+Its last lines: `PAIRS ... converged at [...]` for each pair and `ALL 3 PAIRS MEET E4's CRITERION AT: [...]`. As soon
+as that list is not empty, its first value is **K**.
+
+**Stop the pod** (only then):
+
+```bash
+SUP=$(ls -d logs/kubeflow/e5-train-e5_extend-* | grep -v submission | tail -1)
+JOB=$(python -c "import json; print(json.load(open('$SUP.submission.json'))['job_id'])")
+echo $JOB
+kubectl delete trainjob $JOB
+kubectl get pods                                                   # its pod Terminating, then gone
+python experiments/E5_belief_training/check_wave.py --batch e5_extend --out exports/e5_extend_check.json   # K still listed
+ls results/E5_belief_training/*/checkpoints/agent_env$(printf %06d $K).pt                                 # the five runs' weights at K
+```
+
+A stop leaves usable checkpoints: every `agent_env<N>.pt` is written atomically (whole or absent; at most an orphan
+`.tmp`), and a checkpoint appears in the records only after its weights are saved. The stopped runs keep status
+`running` (they are not failed: the check and the probe plan keep them); a truncated last record line is ignored. They
+have no `replay_final.npz` (not needed by the probes).
+
+**Export** (with the weights at K):
+
+```bash
+python experiments/E5_belief_training/export_batch.py create --batch e5_extend --configuration p1-b-d1 --weights-checkpoints $K
+```
+
+If 650,000 is reached without a common K: report the check; a further continuation (a larger `EXTEND_TO`) starts from
+each continuation's own resume point.
 
 ## Step 7 -- the probes: ONE batch after wave 2, at K = 300,000 (docs/e5/DECISIONS.md (31), (32))
 
 After wave 2 has finished, been exported and checked, every healthy pair of waves 1 and 2 is probed in one batch,
 `e5_probes_all`: the baselines at 300,000 (`batches.PROBES_CHECKPOINT`, converged), the shuffle pairs at `--checkpoint`
-(300,000, or the continuations' common convergence checkpoint after step 6b): seed A's baseline (E4's own pair of p1-b-d1, under
+(the continuations' common convergence checkpoint K of step 6b): seed A's baseline (E4's own pair of p1-b-d1, under
 `--e4-results`), seed B's baseline, shuffle f = 1 seed A, and the replacements E and F against seed B's f = 1 reference.
 At submission (dry run included), a pair is LEFT OUT, with its reason printed, when one of its runs is not `done`, never
 switched, locked in (check_wave.py's criteria) or lacks its weights at K: seed B's own f = 1 pair (its experimental run

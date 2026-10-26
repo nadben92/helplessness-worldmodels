@@ -38,7 +38,7 @@ WAVES: dict[str, dict[str, tuple]] = {
                   "B_sh100_reference": ("B", "shuffle", 1.0, "reference"), "E_sh100_experimental": ("E", "shuffle", 1.0, "experimental"),
                   "F_sh100_experimental": ("F", "shuffle", 1.0, "experimental")},
 }
-EXTEND_TO = 500000  # environment steps (docs/e5/DECISIONS.md (33))
+EXTEND_TO = 650000  # environment steps, a ceiling: the user stops the pod once every pair meets E4's criterion (docs/e5/DECISIONS.md (33))
 # an experimental run measured against the reference of ANOTHER seed (docs/e5/DECISIONS.md (32)): the replacements of seed
 # B's experimental run (locked in) are paired with seed B's f = 1 reference. Absent: the run's own seed.
 REFERENCE_SEED_OF: dict[tuple[str, str], str] = {("E", "shuffle"): "B", ("F", "shuffle"): "B"}
@@ -63,7 +63,6 @@ PROBE_PAIRS: dict[str, list[tuple]] = {
 }
 BATCHES = WAVES
 BATCH_CPUS = {name: 3 for name in BATCHES}  # as E4: 4 processes, one thread each, on the job's 3 CPUs
-BATCH_CPUS["e5_extend"] = 4  # five processes
 PROBES_MAX_PARALLEL = 2
 
 

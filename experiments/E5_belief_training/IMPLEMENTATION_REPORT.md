@@ -505,3 +505,29 @@ Ce qu'on peut attendre de chaque option :
 
 **Bug de reprise trouvé et corrigé** : le décalage de ligne de l'épisode en cours n'était pas sauvegardé, ce qui aurait
 fait échouer la reprise d'un run shuffle en cours d'épisode.
+
+**Ajustements (option (c) retenue).** `e5_extend` tourne sur 3 CPU (quota) jusqu'à un plafond de 650 000 pas. Le pod est
+arrêté à la main dès que `check_wave.py --batch e5_extend` affiche une ligne `ALL 3 PAIRS MEET E4's CRITERION AT: [K, ...]`
+non vide.
+
+**Un arrêt laisse des checkpoints exploitables.**
+
+- Les poids sont écrits de façon atomique : complets ou absents.
+- L'enregistrement d'un checkpoint est ajouté après la sauvegarde de ses poids.
+- Une dernière ligne tronquée est ignorée.
+- Les runs arrêtés gardent le statut `running` et ne sont pas exclus. Testé.
+
+**Calendrier**, à environ 6 200 pas/h par run avec 5 runs sur 3 CPU, en partant de 290 000 :
+
+| Cible | Durée depuis le lancement |
+|---|---|
+| 450 000 pas | environ 26 h |
+| 500 000 pas | environ 34 h |
+| 550 000 pas | environ 42 h |
+| 650 000 pas (plafond) | environ 58 h |
+
+Avec un lancement le 26 octobre au soir :
+
+- l'arrêt tombe entre le 27 octobre en fin de soirée et le 29 octobre au matin ;
+- les sondes, qui prennent quelques heures, suivent l'export ;
+- l'agrégation se fait le lendemain.
