@@ -1027,3 +1027,95 @@ contraire ; b ≈ −1,5 = classes −1,75 et −1,5 regroupées, ou la plus pro
 
 **Part de l'écart passant par h'_a** : (part (a) − part (b)) des références induites à b ≈ −1,5, rapportée à
 l'écart (a) des références induites − (a) des exposés à la même classe.
+
+### Ce qui a été fait
+
+- **Contrefactuel pas à pas.** E6 (les deux modèles) et l'induction B (reverse et reverse_random, 7 α) ont été rejoués
+  avec un `q_fn`. Il copie l'état du générateur de la politique dans un clone et calcule les variantes sur exactement ses
+  16 tirages par action (`lookahead.channel_q`), puis rend le Q de la politique elle-même.
+  - (a) normale ; (b) h commun ; (c) z commun, tiré du mélange des 5 priors et partagé par les actions ; test 2,
+    V(h'_a, z̄).
+- **Rejeu en épisodes de (b).** Les références (E6 et B) ont été rejouées avec la politique sur Q_b, en ε-greedy.
+- Poids identiques avant et après les 8 runs (hash).
+- Code : `run_e7_d6.py`, `analyse_e7_d6.py`. Sorties légères : `results/E7_dissociation/d6/` (`d6_bins.csv`,
+  `d6_test2_bins.csv`, `d6_replay.csv`, `d6_identity.csv`, `d6_forms.json`, figures `d6_variants.png` et
+  `d6_test2.png`, méta des 8 runs).
+
+### Écarts au prompt
+
+1. **Le contrefactuel n'est pas fait sur les épisodes enregistrés**, qui ne gardent pas (h, z) : il est fait sur des
+   rejeux identiques (forme 1).
+2. **z̄ est tiré du mélange des 5 priors** (une action uniforme, puis son prior), 16 tirages partagés par les actions.
+   C'est symétrique en l'action, et chaque z̄ reste dans la distribution d'un prior.
+3. **« Sous ε-greedy » est l'espérance** (1 − ε) × part greedy + ε × (actions dirigées)/5, car le choix contrefactuel
+   n'est pas tiré. La part réelle ε-greedy de (b) vient du rejeu en épisodes.
+4. Groupes et filtre de D5 : pas de zone mesurés et bien localisés ; références induites = runs B à localisation tenue.
+
+### Résultats (part greedy dirigée ; entre crochets, IC à 95 % par épisodes)
+
+| Groupe, plage de b | (a) normale | (b) h commun | (c) z commun | test 2 : argmax de V(h'_a, z̄) dirigé | test 2 : ρ(V, −distance) |
+|---|---|---|---|---|---|
+| Références induites, b ≈ −1,5 (69 pas) | 0,89 | 0,89 | 0,93 | 0,93 | 0,77 |
+| Références induites, b < −1 (283 pas) | 0,95 | 0,95 | 0,95 | 0,94 | 0,82 |
+| Références sans intervention (3 852 pas) | 1,00 | 1,00 | 1,00 | 1,00 | 0,93 |
+| Exposés, b ≈ −1,5 (548 pas) | 0,34 | 0,38 | 0,32 | 0,36 | −0,14 |
+| Exposés, tous les pas (3 969) | 0,37 | 0,38 | 0,38 | 0,39 | −0,07 |
+
+- Par classe de b (`d6_bins.csv`, figure `d6_variants.png`), les références induites restent à 0,91–1,00 pour les trois
+  variantes : à −1,5, 0,91 [0,81 ; 1,00] en (a), 0,93 en (b), 0,95 en (c). Les exposés restent à 0,27–0,54 dans les trois.
+- Test 2 (figure `d6_test2.png`) : chez les références induites, l'argmax de V(h'_a, z̄) est dirigé à 0,93–1,00 dans
+  toutes les classes. L'écart entre la meilleure et la deuxième valeur vaut 0,53–1,06, et ρ 0,79–0,94. Chez les exposés :
+  0,32–0,50 ; écart 0,17–0,32 ; ρ −0,16 à −0,01.
+- **Rejeu en épisodes de (b)** (`d6_replay.csv`), sur 31 runs de références induites : part ε-greedy dirigée de −0,006 en
+  moyenne par rapport à l'original (de −0,087 à +0,007). Les seuls reculs nets concernent p2-b reverse_random α = 0,5 et
+  0,75 (−0,09 et −0,06).
+
+### Verdicts des formes attendues
+
+1. **(a) reproduit les choix : confirmée.** Q identique bit à bit au Q de la politique à chaque pas (vérifié dans le run).
+   États et actions identiques aux runs B de D5 ; états, actions et Q identiques à E6 (4 agents sur 4).
+2. **(b) chez les références induites à b ≈ −1,5, part ≤ 0,50 : infirmée.** Elle vaut 0,89, comme (a).
+3. **(b) chez les références sans intervention ≥ 0,85 : confirmée** (1,00).
+4. **(b) chez les exposés à ± 0,05 de (a) : confirmée.** +0,01 sur tous les pas, +0,04 à b ≈ −1,5.
+5. **Test 2, ≥ 0,85 chez les références induites sous −1 bit et au hasard chez les exposés : confirmée.** 0,94 contre
+   0,39.
+6. **Test 2, références induites indépendantes de b et exposés au hasard partout : confirmée.** Étendue de 0,93 à 1,00
+   pour les références induites (≤ 0,10) ; de 0,32 à 0,50 pour les exposés.
+7. **(c) dirigée chez les références induites et au hasard chez les exposés : confirmée.** 0,93 (b ≈ −1,5) et 0,95
+   (b < −1), contre 0,38.
+
+**Part de l'écart à b égal passant par h'_a : environ 0** (−0,7 %). (a) − (b) = −0,004 chez les références induites à
+b ≈ −1,5, pour un écart (a) références induites − (a) exposés de 0,55.
+
+### Lecture
+
+- **H5 est infirmée telle que formulée** : l'écart ne passe pas spécifiquement par h'_a.
+- **Chez les références induites, l'action atteint le critic par les deux canaux, de façon redondante.** Couper l'un ou
+  l'autre ne change rien : (b) et (c) restent à 0,89–0,95.
+- **Chez les exposés, les deux canaux sont éteints** : (a), (b) et (c) sont tous au hasard, et V(h'_a, z̄) ne classe
+  pas les actions selon la distance (ρ ≈ −0,1).
+- **Ce que b manque.** Sous −1 bit, la prédiction décodée des références induites se trompe sur l'action dirigée dans la
+  moitié des pas (§ 18), mais les z' tirés par action portent encore, pour le critic, l'information sur la case d'arrivée
+  ((b) : 0,95 à b < −1).
+  - b est lu par le décodeur et l'appariement aux gabarits. Il mesure une contrôlabilité que l'induction dégrade dans
+    l'image décodée, pas dans ce que le critic lit du latent.
+  - L'écart d'environ 0,5 à b égal sépare donc la contrôlabilité décodée (b) de la contrôlabilité lisible par le critic,
+    que le test 2 estime directement. À b égal, l'exposé l'a perdue et la référence induite l'a gardée.
+
+### Points d'attention
+
+- **Recouvrement en b faible.** Les références induites bien localisées n'ont que 40 pas dans la classe −1,5 et 69 à
+  b ≈ −1,5 (IC [0,81 ; 1,00]), 283 sous −1. Les exposés n'ont que 40 pas à −1,0 et aucun au-dessus. Les conclusions à
+  b ≈ −1,5 reposent sur ces 69 pas, mais le même résultat tient sur les 283 pas sous −1.
+- Le test 2 dépend du choix de z̄ (mélange des priors). Un z̄ tiré d'un seul prior ou du h moyen n'a pas été essayé.
+- Le constat de redondance est contrefactuel, pas par pas. Le rejeu en épisodes de (b) le confirme sur les runs à
+  localisation tenue, mais ne teste pas (c).
+
+### Coût (CPU, 1 thread par processus, 8 processus)
+
+| Runs | par agent |
+|---|---|
+| contrefactuel (E6 + induction B, 16 jeux) | 1 240–1 410 s |
+| rejeu de (b) (références, 15 jeux) | 1 080–1 330 s |
+
+Environ 24 min de temps réel ; l'analyse prend moins de 3 min.
