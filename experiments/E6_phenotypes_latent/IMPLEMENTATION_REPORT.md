@@ -879,3 +879,122 @@ Critères chiffrés fixés ici ; « part dirigée » = part ε-greedy d'E6, sauf
 
 Si H3 et H4 sont toutes deux confirmées, leurs parts dans l'écart de 0,5 sont estimées : pour H3, par l'écart absorbé
 par C_dir dans la régression ; pour H4, par l'écart de l'anti-oracle par tirage à b ≈ −1,5.
+
+### Ce qui a été fait
+
+- **Tâche 1.** E6 (les deux modèles) et l'induction B (reverse et reverse_random, 7 α) ont été rejoués avec l'option
+  `action_kernel` de `run_episodes`. À chaque pas et pour chaque action, elle enregistre la masse du noyau d'I_s sur la
+  vraie case et dit si l'argmax du noyau est la vraie case. Les rejeux sont identiques à E6 (8 sur 8 : états, actions, Q,
+  I, localisation, masse jouée).
+  - Groupes : 3 968 pas bien localisés pour les exposés ; 30 996 pour les références induites (runs B dont la
+    localisation reste à 0,05 près d'E6, plus E6 référence).
+- **Tâche 2.** Anti-oracle par tirages à k = 1 sur les 4 références, p de 0 à 1 par pas de 0,1 : variante principale
+  (un tirage par action et par draw) et secondaire (un tirage par pas). À k = 5, ce sont les particules du § 17
+  (Bernoulli par particule et par pas imaginé : c'est déjà la version par tirages).
+- Poids identiques avant et après les 12 runs (hash). p = 0 donne `q_values` lui-même (testé).
+- Code : `run_e7_d5.py`, `analyse_e7_d5.py`, `lookahead.sampled_mixed_policy_q`, option `action_kernel`.
+- Sorties légères : `results/E7_dissociation/d5/` (`d5_cdir_bins.csv`, `d5_cdir_share.csv`, `d5_regression.csv`,
+  `d5_njuste.csv`, `d5_sampled.csv`, `d5_forms.json`, figures `d5_cdir.png` et `d5_sampled.png`, méta des 12 runs).
+
+### Écarts au prompt
+
+1. **« Lue avec le même objet que la politique » n'est pas possible au sens strict** : la politique ne décode jamais
+   ((58).3). La prédiction par action est lue sur le noyau d'I_s : même prior, 16 autres tirages décodés.
+2. **La décomposition de b par action n'est pas calculée.** I = (1/A) Σ_a KL(p_a ‖ p̄) demanderait une seconde
+   implémentation de la mesure de contrôlabilité (règle de CLAUDE.md). La masse sur la vraie case par action est reportée
+   à la place.
+3. Régression à effets fixes par agent (IRLS en numpy, sans nouvelle dépendance), et non à effets aléatoires.
+4. La variante secondaire par tirages n'a pas été faite à k = 5 (coût).
+
+### Tâche 1 — résultats
+
+Part de pas avec C_dir = 1 (argmax ; le seuil de masse ≥ 0,5 donne les mêmes chiffres à 0,02 près) :
+
+| Classe de b | −2,5 à −1,0 | −1,5 | −1,25 | −1,0 | −0,75 | −0,5 | −0,25 | ≥ 0 |
+|---|---|---|---|---|---|---|---|---|
+| Exposés | 0,000–0,006 | 0,00 | 0,00 | 0,00 | — | — | — | — |
+| Références induites | — | 0,44 (48 pas) | 0,62 | 0,59 | 0,81 | 0,94 | 0,99 | 1,00 |
+
+Part dirigée sachant C_dir (pas bien localisés, IC à 95 % par épisodes) :
+
+| Classe de b | Exposés, C_dir = 0 | Références, C_dir = 1 | Références, C_dir = 0 |
+|---|---|---|---|
+| −2,25 | 0,36 [0,34 ; 0,39] | — | — |
+| −1,5 | 0,36 [0,30 ; 0,42] | — (< 30 pas) | — (< 30 pas) |
+| −1,25 | 0,49 [0,37 ; 0,59] | 0,87 [0,82 ; 0,93] | 0,91 [0,84 ; 0,96] |
+| −1,0 | 0,47 [0,35 ; 0,60] | 0,93 [0,90 ; 0,96] | 0,92 [0,88 ; 0,96] |
+| −0,75 | — | 0,91 [0,89 ; 0,93] | 0,91 [0,88 ; 0,95] |
+
+- **Les exposés ne prédisent jamais juste une action dirigée.** La masse maximale du noyau sur la vraie case d'une
+  action dirigée vaut 0,003 en moyenne à b ≈ −1,5. Le seul n_juste = 1 fréquent (35 %) est probablement l'action dont
+  la vraie case coïncide avec celle du tapis (non vérifié).
+- **Les références induites prédisent faux l'action dirigée dans 40 à 56 % des pas sous −1 bit, et restent pourtant
+  dirigées à 0,91–0,92 quand C_dir = 0.**
+- **Régression** (`d5_regression.csv`, log-odds) :
+
+| Plage | β groupe exposé, M0 | β groupe exposé, M1 (+ C_dir) | β C_dir, M1 | part absorbée (log-odds / probabilité) |
+|---|---|---|---|---|
+| tous les pas (n = 34 964) | −2,18 (0,13) | −2,11 (0,16) | +0,11 (0,14) | 3 % / 5 % |
+| plage commune [−1,5 ; −0,75) (n = 1 040) | −1,91 (0,24) | −1,89 (0,30) | +0,03 (0,28) | 1 % / 1 % |
+
+  En M2, C_dir × groupe n'est pas estimable dans la plage commune : C_dir = 1 n'existe pas chez les exposés.
+- **n_juste à b ≈ −1,5** (classes −1,75 et −1,5) :
+  - exposés : 0 action juste dans 64 % des pas, 1 dans 35 %, 2 dans 0,5 % ;
+  - références induites : 0 dans 17 %, 1 dans 33 %, 2 dans 48 % (69 pas).
+
+### Tâche 2 — résultats (moyenne des 4 références)
+
+| p | 0 | 0,3 | 0,5 | 0,7 | 0,8 | 0,9 | 1 |
+|---|---|---|---|---|---|---|---|
+| En espérance (§ 17) | 0,94 | 0,94 | 0,94 | 0,94 | 0,94 | 0,94 | 0,39 |
+| Par tirages, principal | 0,94 | 0,94 | 0,94 | 0,94 | 0,92 | 0,89 | 0,39 |
+| Par tirages, un tirage par pas | 0,94 | 0,79 | 0,66 | 0,55 | 0,50 | 0,45 | 0,39 |
+| Particules, k = 5 (§ 17) | 0,94 | 0,93 | 0,87 | 0,78 | 0,70 | 0,60 | 0,39 |
+
+- La moyenne sur 16 tirages lisse presque tout le bruit d'échantillonnage. La version par tirages ne décolle de
+  l'espérance qu'à p ≥ 0,8.
+- La variante « un tirage par pas » est graduée, mais de façon triviale : chaque pas est entièrement sous le tapis ou
+  pas du tout, et la part est le mélange linéaire (1 − p) · 0,94 + p · 0,39.
+- Localisation : 1,00 à tout p.
+
+### Verdicts des formes attendues
+
+1. **H3, parts dirigées sachant C_dir : infirmée.**
+   - Sachant C_dir = 1, la comparaison est impossible : les exposés n'ont aucun pas avec C_dir = 1.
+   - Sachant C_dir = 0, les exposés sont au hasard (0,36–0,49), mais les références induites sont à 0,91–0,92, loin du
+     hasard.
+2. **H3, plus de C_dir = 1 chez les références à b ≈ −1,5 : confirmée.** 0,44 (48 pas) à −1,5 et 0,62 à −1,25, contre
+   0,00 chez les exposés.
+3. **H3, régression : infirmée.** L'ajout de C_dir absorbe 3 % de l'effet du groupe (1 % sur la plage commune) ; son
+   coefficient est nul (+0,11 ± 0,14).
+4. **H4, courbe graduée dès k = 1 : infirmée** pour la variante principale. À p = 0,8, la part ne baisse que de 0,02
+   par rapport à p = 0 (critère : plus de 0,05). La courbe ne descend sous l'espérance qu'à p ≥ 0,8.
+5. **H4, rapprochement de l'exposé à b effectif ≈ −1,5 : infirmée** pour la variante principale. La part y est à 0,94
+   contre 0,36 pour l'exposé, soit un écart de 0,58, non réduit. La variante « un tirage par pas » est à 0,58 (écart
+   0,22) mais pour une raison triviale (voir ci-dessus).
+
+Ni H3 ni H4 n'explique l'écart d'environ 0,5 ; il n'y a donc pas de parts respectives à estimer.
+
+### Points d'attention
+
+- **La prédiction décodée n'est pas ce que lit la politique.** Chez les références induites, le noyau d'I_s se trompe
+  sur l'action dirigée dans près de la moitié des pas sous −1 bit, sans effet sur le choix.
+  - La politique ne lit pas de case : elle évalue V sur (h'_a, z'). Le § 17 l'a déjà montré : avec un h'_a propre à
+    l'action, la référence reste dirigée à 0,92–0,94 même quand la case prédite est celle du tapis (variante h'_a).
+  - **Hypothèse suivante, non testée ici : l'écart restant à b égal est porté par ce que h'_a transmet de l'action au
+    critic (et à la tête but).** Ni b, ni la case décodée, ni le bruit des tirages ne le capturent. Un test direct serait
+    un échange de h'_a entre exposé et référence, ou une mesure de l'information sur l'action contenue dans V(h'_a, ·) à
+    z fixé.
+- Les deux groupes se recouvrent mal en b. Les références induites bien localisées descendent rarement sous −1,25
+  (48 pas à −1,5), les exposés remontent rarement au-dessus de −1. La plage commune ne compte que 1 040 pas.
+- L'exposé à −1,5 est à 0,36 ici (pas bien localisés uniquement), contre 0,41 au § 17 (tous les pas).
+
+### Coût (CPU, 1 thread par processus, 12 processus)
+
+| Runs | par agent |
+|---|---|
+| kernels (E6 + induction B avec prédictions par action) | 1 530–1 900 s |
+| par tirages, principal (11 p) | 750–840 s |
+| par tirages, un tirage par pas (11 p) | 1 030–1 130 s |
+
+Environ 32 min de temps réel ; l'analyse prend moins de 3 min.
