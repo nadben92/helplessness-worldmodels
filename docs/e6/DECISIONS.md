@@ -218,3 +218,92 @@ with alpha": no rise larger than 0.02 bit between consecutive alphas.
 A (commented out with a TODO until trained), and the relaunch of the failed f = 1 run. (32) relaunched it as TWO runs,
 seeds E = 402 and F = 502, both against seed B's f = 1 reference: both are listed (commented, TODO), the user keeps the one(s)
 that learnt. `batches.agent_ids` ignores comments.
+
+## 2026-10-26 (51) -- phase 0 of the diagnostics: how the critic is trained (implementer, read from the code)
+
+Read before any diagnostic was computed (`agents/worldmodel/imagination.py`, `policy.py`, `heads.py`,
+`pipeline/agent_run.py:565`, `configs/e4/e4.yaml`).
+1. **The critic is trained only in imagination, through the prior.** At every gradient step after the estimator switch,
+   `train_heads_step` starts from every posterior state (h, z) of the world model's replay batch (16 windows x 64 steps,
+   detached) and `imagine` rolls out `horizon` = 15 steps with `rssm.imagination_step` (GRU, then one prior draw). No real
+   return enters the critic's target: R_k = r_{k+1} + gamma c_{k+1} ((1 - lam) V_slow(s_{k+1}) + lam R_{k+1}),
+   R_H = V_slow(s_H), lam = 0.95, gamma = 0.9; the loss is weighted by the cumulative continuation (w_k = prod c), the
+   target is the slow critic (EMA, tau 0.02). H1 keeps its original form: a value learnt through the exposed prior.
+2. **The imagined trajectories follow the agent's own policy**: epsilon-greedy (epsilon = 0.1, `epsilon_greedy`) on the
+   one-step Q computed with K_imag = 4 prior draws per action (`q_values`, with the critic being trained), tie set of the
+   training tolerance (0.0751). The starts are the replay's real posterior states (in the exposed model, the states of the
+   UD slot with their real conveyor history); the rollouts are imagined.
+3. **Reward and continuation from the goal head**: p = sigmoid(g(h, z)), r = 50 p - 1 (1 - p), c = 1 - p (`heads.py`);
+   the goal head is trained by BCE on the replay's posterior states against 1[r_t > 0] (the arrival reward).
+4. **The policy's Q** (`q_values`): for every action a, h'_a = GRU(h, z, a), K_act = 16 draws z'_k ~ p(. | h'_a),
+   Q(a) = mean_k [r(h'_a, z'_k) + gamma c(h'_a, z'_k) V(h'_a, z'_k)]; epsilon-greedy with the random tie-break among the
+   actions within 0.0751 of the max.
+
+## 2026-10-26 (52) -- the diagnostics' definitions (implementer)
+
+New modules: `measures/decision_rule.py` (numpy: directed actions, Q gaps, the greedy tie set's directed share, softmax,
+bins) and `probing/lookahead.py` (torch: the cell values, the oracle one-step Q, the k-step Q in three variants). Runner
+`experiments/E7_latent_manipulation/run_e7_diagnostics.py` (phases values, induction, softmax, lookahead), analysis
+`analyse_e7_diagnostics.py`. Every weight is frozen; the runner hashes every model's state dict before and after and
+fails if it moved.
+- **Context of a cell** (diagnostics 1 and 4): E6's step 1, an episode started on the cell (h_1 = GRU(h0, 0, 0), z_1 a
+  straight-through posterior draw of the cell's image, `fresh_start_contexts`), training image, test environment (all
+  controllable). V of a cell: the critic's mean over 8 such draws (E6's `fresh_samples`). The map covers the 143
+  non-goal cells; the zone AI is the former UD slot (25 cells), its ring the 24 corridor cells around it.
+- **Directed action**: an action whose successor in the test environment is strictly closer to the goal (toric
+  distance; E6's directed step). **Greedy directed share** of a Q row: the share of directed actions in the training's
+  tie set (within 0.0751 of the max) -- the probability that the greedy branch of the training policy picks a directed
+  action. The strict argmax is reported next to it.
+- **Oracle one-step Q**: Q_or(a) = mean over K posterior draws of r + gamma c V(h'_a, z'), h'_a = GRU(h, z, a),
+  z' ~ q(z | h'_a, e(x(s'_a))), s'_a the TRUE successor; r and c TRUE (50 and c = 0 on the goal, -1 and c = 1
+  elsewhere): the transition belief AND the goal head are replaced by the truth, only V is the model's.
+- **k-step Q**: Q_k(a) = sum_{i<k} gamma^i (prod_{j<=i} c_j) r_{i+1} + gamma^k (prod_{j<=k} c_j) V(s_k), the mean over
+  K_act = 16 particles per (context, action) (the policy's 16 draws); after the first action each particle follows the
+  GREEDY one-step action (epsilon = 0, random tie-break in the training's tie set) of its own variant, computed with
+  K_imag = 4 draws (the number of the critic's training imagination). Variants: **oracle** (true successors, posterior of
+  the true image, true reward; greedy on Q_or), **model** (the prior, r and c from the goal head; greedy on `q_values`),
+  **model_corrected** (model from h_1 + d, d the constrained correction of (47) at the agent's setting of (48), optimised
+  on h_1 only, at most 300 Adam steps as the stepwise mode; exposed models only). One rollout of k_max = 10 steps gives
+  every k. Model, k = 1: `q_values` exactly (same draws; tested). b along the imagined steps (model and
+  model_corrected): I_s at the particles' (h_i, z_i) minus the reference's fresh-start I at the particle's decoded cell
+  (nearest template), on 2 particles per (context, action); the conveyor control: among the imagined transitions from a
+  cell decoded in the zone, the share whose decoded successor is the conveyor's cell (exposed training dynamics) and the
+  share that is the played action's cell (test environment).
+- **Diagnostic 2's steps**: E6's training-image episodes (exposed and reference, rerun with the same seeds: identical to
+  E6's) and plan B's induction (reverse and reverse_random, every alpha, rerun with every per-step array saved: plan B's
+  runs kept no Q). A step counts if it is taken in the zone, measured, and well localised (nearest template = true state).
+  b = b_local (I at the step minus the reference's fresh-start I at the state). Bins of 0.25 bit.
+- **Diagnostic 3**: run_episodes' `tau` option: the action drawn from softmax(Q / tau) by the inverse CDF of the
+  episode's explore uniform u (no epsilon branch; every step still draws E6's u, uniform action and scores, so the
+  streams are consumed as before). tau = None (default) is E6's epsilon-greedy, unchanged (tested); tau -> 0 is the
+  argmax (tested). The grid is fixed from diagnostic 2's gaps before diagnostic 3 runs ((53)).
+- **Diagnostic 4's episodes**: run_episodes' `q_fn` option (default None: `q_values` with the act generator, unchanged;
+  tested): Q_k oracle at every real step, k in {1, 5, 10}, epsilon-greedy as in training (epsilon 0.1, the same
+  streams), exposed and reference, training image, E6's starts; the oracle's particles draw from their own generator.
+
+## 2026-10-26 (53) -- the expected forms, written before any diagnostic was computed (implementer)
+
+- **D1 (H1, first link)**. Reference: V rises towards the goal (Spearman of V with minus the distance >= 0.8 over the
+  143 cells) and the oracle Q's greedy choice is directed on >= 0.9 of the zone's contexts. Exposed, if H1 holds: V is
+  flat or does not rise towards the goal inside the zone AI, and the oracle greedy directed share is well below the
+  reference's (<= 0.6; chance is 0.4, 2 directed actions of 5). If the exposed oracle share is close to the
+  reference's (within 0.1), the cached value at one step is not the deficit's cause: H1's first link is refuted.
+- **D2 (H2)**. If H2 holds: on well-localised steps, the greedy directed share stays near the references' level from
+  b = 0 down to about -1.5 bit and drops in the last bins (b near -2 to -2.3), while the median best-minus-second Q gap
+  shrinks gradually with b. A share that declines steadily with b from 0 refutes the step form.
+- **D3 (H2)**. tau's grid: 5 values, log-spaced from 0.1 x to 10 x the median best-minus-second gap of the references'
+  well-localised zone steps of D2 (quasi-greedy to nearly uniform at the scale of the gaps that drive the choice). If H2
+  holds: at the smallest tau the curve is the epsilon-greedy one (flat on B, low at the exposed point); at an
+  intermediate tau (around the median gap) the directed share decreases monotonically with b over B's alphas that keep
+  the localisation; at the largest tau every point is near chance. If B's Q gaps do not shrink with b, the intermediate
+  curve stays flat: the references' Q does not carry the partial belief, and H2 does not explain B's null effect.
+- **D4 (H1)**. Oracle: the reference's directed share stays high (>= 0.9) for every k; if H1 holds, the exposed share
+  rises with k towards the reference's (most of the gap closed at k = 10, where the path leaves the zone). Model: the
+  exposed share stays low for every k and the imagined transitions follow the conveyor (the control). Model_corrected:
+  b at the root is A's (about -0.3 to -0.7 bit) but falls back towards -2 from the first imagined step, and the share
+  for k >= 2 returns to the model variant's. Episodes with Q_k oracle: if H1 holds, the exposed directed share rises
+  with k towards the reference's 0.94.
+- **Methodological status.** E6's phenotype stays the one measured with the training policy (k = 1, epsilon-greedy).
+  Long lookahead and softmax are manipulations of the decision rule at test time, used to separate the transition
+  belief from the cached value, not new phenotypes. The critic learnt under epsilon-greedy: the softmax is a reading
+  rule, not the training policy.
