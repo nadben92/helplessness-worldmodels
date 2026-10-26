@@ -681,3 +681,31 @@ Environ 2 h de mur pour les 4 agents.
    sont faites contre le run sans intervention au même τ.
 8. **D4, épisodes** : les 4 agents (moins d'1 h chacun), politique ε-greedy sur Q_k oracle à chaque pas de l'épisode
    (pas seulement dans la zone). Les particules de l'oracle ont leur propre générateur.
+
+---
+
+# E7 comme dissociation croyance × critic : anti-oracle, E6 pas à pas, contrôle de D2 (2026-10-26)
+
+## 17. Dissociation
+
+Définitions : décisions (55) et (56). Même branche, mêmes 4 agents d'E4, CPU, poids gelés.
+
+### Formes attendues (écrites et commitées avant tout calcul)
+
+Critères chiffrés fixés ici ; « part dirigée » sans précision = la part ε-greedy d'E6 (transitions dans la zone qui
+rapprochent du but).
+
+1. **Anti-oracle, monotonie en p.** La part dirigée des références décroît avec p : entre deux p consécutifs, aucune
+   hausse au-delà de l'IC bootstrap à 95 % (épisodes rééchantillonnés). La localisation dans la zone reste à 0,05 près de
+   celle de p = 0 pour tout p.
+2. **p = 1, k = 1.** La part dirigée des références est au niveau d'un marcheur aléatoire (2 actions dirigées sur 5 :
+   0,4), dans [0,30 ; 0,50], le même ordre que les exposés d'E6 (0,32–0,49).
+3. **p = 1, k = 5.** Pas d'amélioration nette par rapport à k = 1 : la part à k = 5 ne dépasse pas celle à k = 1 de plus
+   de 0,05 (la trajectoire imaginée reste sous le tapis dans la zone).
+4. **Contrôle croisé.** L'exposé avec p = 1 (k = 1) est à ± 0,05 de l'exposé d'E6.
+5. **À b effectif égal.** À b ≈ −1,5 (interpolé par agent sur la courbe anti-oracle k = 1), la référence + anti-oracle
+   est plus dirigée que l'exposé pas à pas (classe −1,5 de la tâche 2). L'écart est plus faible près de b = 0 et près de
+   b = −2,1.
+6. **Tâche 3.** D2 ne gardait déjà que les pas bien localisés ((56)). Forme attendue : la courbe des références sans
+   filtre est sous celle de D2 ou égale, et le filtre au niveau du run la fait monter ou la laisse stable (à −1,5 en
+   particulier, 0,73 dans D2). Elle ne descend pas.

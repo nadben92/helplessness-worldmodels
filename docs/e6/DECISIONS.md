@@ -320,3 +320,51 @@ fails if it moved.
   checks (localisation and p_goal) compare each point to the run without intervention at the same tau.
 - D4's episodes ran on the 4 agents (under 1 h each), with the policy on Q_k oracle at every step of the episode.
 - Results and verdicts: `experiments/E6_phenotypes_latent/IMPLEMENTATION_REPORT.md`, section 16.
+
+## 2026-10-26 (55) -- E7 as a 2 x 2 dissociation: the anti-oracle (user's design; implementer for the definitions)
+
+E7 becomes belief x critic: (true belief, reference critic) = E6's reference; (true belief, exposed critic) = D4's oracle;
+(conveyor belief, exposed critic) = E6's exposed; (conveyor belief, reference critic) = the **anti-oracle**: the
+reference's PLANNER only sees, from the zone AI, the conveyor of its paired exposed environment (same agent, same
+orientation) with probability p. Nothing of h, z, the decoder, the goal head or the critic is modified; the real
+environment stays controllable. Code: `probing/lookahead.py` (oracle_q takes any successor table: the conveyor's is
+the anti-oracle's, the same code path as D4's oracle; k_step_q's variant "mixed"),
+`experiments/E7_latent_manipulation/run_e7_dissociation.py`, `analyse_e7_dissociation.py`; light outputs
+`results/E7_dissociation/`, episodes in `scratch/`.
+- **k = 1** (the policy's Q at every real step): outside the zone, Q = `q_values` (unchanged); from a state s of the zone,
+  Q(a) = (1 - p) Q_model(a) + p Q_conv(a), Q_model the policy's own `q_values` (the act generator, as E6) and Q_conv(a) =
+  mean over 16 posterior draws z' ~ q(. | h'_a, e(x(conveyor[s]))) of r + gamma c V(h'_a, z'), h'_a = GRU(h, z, a), r and
+  c TRUE (the conveyor's cell is never the goal: r = -1, c = 1), its own generator. p = 0 returns Q_model itself: E6
+  exactly (checked on every array).
+- **k = 5**: k_step_q's variant "mixed", 16 particles per action; at every imagined step from a zone cell, each particle
+  takes the conveyor branch with probability p (its own Bernoulli draw: GRU, posterior of the conveyor cell's image, true
+  r and c) or the model's (the prior, r and c from the goal head); after the first action, the greedy one-step action on
+  the expected mixed Q (4 draws per branch), epsilon = 0, the training's tie set. The particle's cell is tracked: the
+  conveyor's cell, or the test environment's successor of the action in the model branch (the reference's prior puts
+  >= 0.9 of its mass there: E4's validity), not decoded (cost).
+- **Ties**: the training's rule, unchanged -- a uniform draw (E6's per-step scores) among the actions within 0.0751 of the
+  max. At p = 1 every action reaches the same cell, but Q_conv(a) still differs through h'_a (the GRU reads the action):
+  the share of zone steps whose tie set holds all 5 actions is reported, not forced.
+- **Effective b** (step 1): the reference's s-space kernel at t = 0 of the p = 0 episodes (`step_controllability`, new
+  option `return_kernel`, off by default; 16 draws, its own generator), mixed on the zone's states as (1 - p) p_hat(. | a)
+  + p delta(conveyor[s]); I by `controllability_of_kernel` (the single implementation); b_eff(p) = I_mix(p) - I_ref at
+  step 1 (E6's), by state then zone over the nine starts. The same abscissa for k = 1 and k = 5. At p = 0 it differs from
+  E6's b = 0 only by the measurement's draws (reported). The exposed control gets the same with its own kernel.
+- **Grid**: p in {0, 0.1, ..., 1}, k in {1, 5}, the 4 references, training image (the only image whose zone is the
+  conveyor's slot with E6's training appearance; position_only left out), epsilon 0.1 and E6's streams, measured in the
+  zone. Exposed control: p in {0, 1}, k in {1, 5}.
+- **Directed shares**: the epsilon-greedy one (E6's phenotype: transitions in the zone lowering the distance), and, from
+  the Q logged at every zone step, the strict argmax's and the tie set's (as D4).
+
+## 2026-10-26 (56) -- E6 step by step, and D2's localisation control (implementer)
+
+- **E6 step by step**: E6's training-image episodes (both models), every transition taken in the zone, b = b_local (I at
+  the step, on the current h, minus the reference's fresh-start I at the state: E6's step-1 rule with the subtrahend
+  made state-wise), directed = the transition lowers the distance. Bins of 0.25 bit, bins under 30 steps masked; per bin
+  the directed share, a 95% bootstrap interval resampling episodes within each agent (1,000), the number of steps and of
+  episodes. The anti-oracle's k = 1 points are overlaid: a natural b against an effective b, flagged on the figure.
+- **D2's localisation control**: D2 ALREADY kept only well-localised steps ((52)), so "removing the badly localised
+  steps" cannot be applied to it. For the reference steps of D2 (E6's reference and plan B, both modes), per bin of b:
+  the share of steps localised, flagged when more than 0.05 under E6's reference localisation in the zone; the greedy
+  directed share over ALL steps (no filter) against D2's (well-localised steps); and a run-level filter: only the plan-B
+  runs whose localisation in the zone stays within 0.05 of E6's reference.
