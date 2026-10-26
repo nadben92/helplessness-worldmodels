@@ -295,3 +295,25 @@ def test_replay_of_the_switch_matches_the_recorded_one(runs):
     recorded = records[-1]["switch_step"]
     assert recorded is not None
     assert replay.replay(evals, rule, None, None) == {"switch_step": recorded, "rule": "threshold"}
+
+
+def test_shuffle_run_resumed_mid_episode_equals_the_uninterrupted_run(runs, tmp_path):
+    """docs/e5/DECISIONS.md (33): the resume state keeps the current episode's row offset in the replay table (its
+    assignment); before the fix a shuffle run resumed in the middle of an episode of a non-canonical assignment stopped on
+    ObservationTableMismatch. Interrupted after its resume point at 100 and resumed, the run equals the uninterrupted one."""
+    from helplessness.pipeline.agent_run import Interrupted
+
+    cfg = tiny_cfg()
+    hooks = quiet(run_e5.shuffle_hooks(cfg, CONF, 1.0))
+    run_dir = tmp_path / "interrupted"
+    run_dir.mkdir()
+    with pytest.raises(Interrupted):
+        run_one(copy.deepcopy(cfg), CONF["seed"], "experimental", run_dir, configure_runtime(cfg), hooks=hooks, interrupt_after=100)
+    state = torch.load(run_dir / "checkpoints" / "resume.pt", map_location="cpu", weights_only=False)
+    assert "obs_offset" in state["collector"]
+    run_one(copy.deepcopy(cfg), CONF["seed"], "experimental", run_dir, configure_runtime(cfg),
+            hooks=quiet(run_e5.shuffle_hooks(cfg, CONF, 1.0)), resume=True)
+    for step in (200, 300):
+        assert same_weights(weights(runs["f1_experimental"], step), weights(run_dir, step)), step
+    a, b = replay_arrays(runs["f1_experimental"]), replay_arrays(run_dir)
+    assert all(np.array_equal(a[k], b[k]) for k in a)

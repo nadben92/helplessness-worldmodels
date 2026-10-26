@@ -143,8 +143,8 @@ def probe_plan(repo: Path, batch: str, configuration: str, checkpoint: int, e4_r
     E5 run not done, never switched or locked in (check_wave.py's checks), or either run without its weights at the
     checkpoint; seed A's baseline (E4's own pair) needs its two runs' weights at the checkpoint."""
     keep, excluded = set(), {}
-    need = f"checkpoints/agent_env{int(checkpoint):06d}.pt"
-    for (name, _), (label, training, fraction) in zip(batches.probe_args(batch, configuration, checkpoint, e4_results), batches.PROBE_PAIRS[batch]):
+    for (name, job_args), (label, training, fraction) in zip(batches.probe_args(batch, configuration, checkpoint, e4_results), batches.PROBE_PAIRS[batch]):
+        need = f"checkpoints/agent_env{int(job_args[job_args.index('--checkpoint') + 1]):06d}.pt"  # the job's own checkpoint
         if training == "baseline" and label == "A":
             try:
                 for condition in ("experimental", "reference"):

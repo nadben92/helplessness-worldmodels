@@ -143,3 +143,20 @@ def test_cross_seed_reference_only_when_asked():
     with pytest.raises(SystemExit):
         mp.check_pair(exp, ref)
     mp.check_pair(exp, ref, cross_seed=True)
+
+
+def test_unmeasured_values_are_flagged_not_fatal(tmp_path):
+    """A quadrant with no measured state at an early checkpoint is written null (a NaN, pipeline.runtime._jsonable): seed
+    B's f = 1 reference at 1,000 and 1,585 (nw), the replacement F at 1,000-3,981 -- check_wave.py crashed on it
+    (2026-10-26). It is now flagged (NOT MEASURED, criterion not computable there), never fatal."""
+    exp = run_dir(tmp_path, "exp", 0.0, [3.0] * 20)
+    ref = run_dir(tmp_path, "ref", math.log2(5), [3.0] * 20)
+    recs = [json.loads(x) for x in (ref / "checkpoints.jsonl").read_text(encoding="utf-8").splitlines()]
+    recs[0]["e4"]["real_context"]["mass_true_by_region"]["nw"] = None
+    (ref / "checkpoints.jsonl").write_text("".join(json.dumps(r) + chr(10) for r in recs), encoding="utf-8")
+    runs = [cw.read_run(d) for d in (exp, ref)]
+    c = cw.check_run(runs[1])
+    assert c["not_measured"] == ["100000: mass nw"] and any(f.startswith("NOT MEASURED") for f in c["attention"])
+    pair = cw.check_pair(runs[0], runs[1])
+    assert pair["converged_at"] == [300000]
+    assert any("not computable" in f for f in pair["attention"])

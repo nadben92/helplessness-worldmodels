@@ -476,6 +476,9 @@ def run_one(cfg: dict, seed: int, condition: str, run_dir: Path, device: torch.d
         }
         if collector.episode_source is not None:  # the episode's environment and its source in one pickle: one object
             state["env"], state["episode_source"] = pickle.dumps((collector.env, collector.episode_source)), True
+            # the current episode's row offset in the replay table (its assignment): without it a run resumed in the middle
+            # of an episode of another assignment would look its images up in the wrong block (docs/e5/DECISIONS.md (33))
+            state["collector"]["obs_offset"] = collector._obs_offset
         return state
 
     def save_resume() -> None:
@@ -508,6 +511,8 @@ def run_one(cfg: dict, seed: int, condition: str, run_dir: Path, device: torch.d
         collector.N, collector.stats = c["N"], EpisodeStats(**c["stats"])
         collector._obs, collector._s, collector._arrival_reward = c["obs"], c["s"], c["arrival_reward"]
         collector._is_first, collector._episode_length = c["is_first"], c["episode_length"]
+        if "obs_offset" in c:  # a run with an episode source (absent in E3's and E4's resume states)
+            collector._obs_offset = c["obs_offset"]
         collector.filter.h, collector.filter.z, collector.filter.a_prev = (c["filter"][k].to(device) for k in ("h", "z", "a_prev"))
         _restore_streams(state["streams"], streams, gens)
         progress = state["progress"]

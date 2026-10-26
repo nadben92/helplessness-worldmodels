@@ -464,3 +464,44 @@ Ce qu'on peut attendre de chaque option :
 | Lancement des sondes | 27 oct. au matin. 6 paires dont 1 écartée, 2 à la fois sur le GPU, soit quelques heures. |
 | Fin des sondes | 27 oct. dans la journée |
 | Agrégation des sondes en local | 27–28 oct. |
+
+## 12. Validité des vagues 1 et 2 avant les sondes (2026-10-26 ; décision (33))
+
+**`check_wave.py`**
+
+- **Plantage corrigé.** Le JSON écrit un NaN comme `null`, et un quadrant n'a encore aucun état mesuré aux premiers
+  checkpoints. Ces valeurs absentes sont désormais signalées : `NOT MEASURED`, `criterion not computable`.
+- **Règle LOCK-IN.** Elle exige maintenant au moins 95 % des évaluations sous 0,01 bit. La règle « toutes sous 0,01 »
+  manquait B exposé, qui présente des pointes isolées jusqu'à 0,042.
+- **Exclusion.** Un run jamais basculé ou non terminé est exclu des paires.
+- **Test de non-régression** ajouté.
+
+**Validité** (tableaux complets dans la décision (33)) :
+
+- **La baseline B est saine et équivaut à la baseline A d'E4** : masse de 0,994 à 0,997, b(UD) de −2,32 contre −2,30,
+  convergence dès 100 000.
+- **Les runs shuffle se ressemblent** :
+  - tous ont basculé par le seuil tardif, sans retomber sous 1 bit, avec un succès de 1,0 ;
+  - masse par type sur les affectations de 0,74 à 0,93 ;
+  - b(UD) de −1,6 à −1,9 ;
+  - le critère d'E4 n'est jamais atteint.
+
+**Trajectoires** (`learning_trajectory.py`, figure `trajectory.png`) :
+
+- **Progression, pas plateau.** La masse gagne encore +0,08 à +0,17 par tranche de 100 000 pas entre 200 000 et 300 000,
+  en décélérant.
+- **Retard d'un facteur 3 à 5 en pas** sur les baselines.
+- **Seuil de masse 0,97** : vers 340 000–455 000 pas en extrapolation linéaire (borne basse), vraisemblablement entre
+  450 000 et 650 000.
+- **Déficit diffus** : tous les types de zone, les deux classes de rotation, toutes les relations UD–CD. Dans chaque run,
+  le slot UD le plus faible diffère.
+
+**Recommandation : (c), prolonger les runs shuffle.**
+
+- `run_e5.py --extend` reprend depuis le point de reprise (290 000) et reproduit l'original bit à bit jusqu'à 300 000
+  (testé).
+- Batch `e5_extend` : 5 runs jusqu'à 500 000, environ 35 h sur un seul GPU.
+- Sondes ensuite : baselines à 300 000, paires shuffle à leur checkpoint commun de convergence.
+
+**Bug de reprise trouvé et corrigé** : le décalage de ligne de l'épisode en cours n'était pas sauvegardé, ce qui aurait
+fait échouer la reprise d'un run shuffle en cours d'épisode.

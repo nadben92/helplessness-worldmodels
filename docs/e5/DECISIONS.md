@@ -609,3 +609,72 @@ is no free place: see IMPLEMENTATION_REPORT.md, section 10, for the options.
 - Tested: the two-wave table, the replacements' commands and pairing, the probe plan (healthy pairs kept; the locked-in
   and the failed left out; seed A's baseline from E4's runs), the cross-seed guard of `measure_probes.py`.
 - Calendar: IMPLEMENTATION_REPORT.md, section 11.
+
+## 2026-10-26 (33) -- validity of waves 1 and 2 before the probes: the shuffle runs are still learning; continuation proposed (implementer; the user decides)
+
+**`check_wave.py` fixed.** It crashed on wave 2 (`None >= float`): the records write a NaN as null, and a quadrant has no
+measured state at the first checkpoints (no context of it in the replay yet): seed B's f = 1 reference at 1,000 and
+1,585 (nw), F at 1,000-3,981. Wave 1 had not met it because seed B's pair was excluded; E and F are paired with that
+reference. A value not measured is now flagged (`NOT MEASURED`, `criterion not computable` at those checkpoints), never
+fatal (test). Two more corrections, seen on these exports: the LOCK-IN alert now needs the statistic below 0.01 bit on
+at least 95% of the evaluations from 6,100 on (seed B's experimental run: 98.6%, 19 isolated values up to 0.042 bit,
+which the "every evaluation" rule of (32) missed), and a run never switched or not done is excluded from every pair, as
+in the probe plan.
+
+**Validity at 300,000** (light files; `check_wave.py`, `learning_trajectory.py`):
+
+| Run | switch (grad, rule) | after it | success | smallest quadrant mass | mass by type over the 12 assignments (UD / CD / neutral) |
+|---|---|---|---|---|---|
+| E4 baseline A exp / ref | (E4: 3,051 / 3,451) | -- | -- | 0.994 / 0.994 | -- |
+| baseline B exp | 6,101, threshold | min 3.29 bits | 1.00 | 0.997 | -- |
+| baseline B ref | 3,401, threshold | min 2.04 | 1.00 | 0.994 | -- |
+| f = 1 A exp | 7,151, late | min 1.32 | 1.00 | 0.838 | 0.860 / 0.904 / 0.905 |
+| f = 1 A ref | 6,301, late | min 1.67 | 1.00 | 0.785 | 0.811 / 0.738 / 0.831 |
+| f = 1 B ref | 6,301, late | min 1.87 | 1.00 | 0.890 | 0.928 / 0.925 / 0.932 |
+| f = 1 E exp (402) | 6,301, late | min 2.02 | 1.00 | 0.690 | 0.821 / 0.839 / 0.859 |
+| f = 1 F exp (502) | 6,301, late | min 1.38 | 1.00 | 0.774 | 0.853 / 0.757 / 0.841 |
+
+| Pair | b at step 1, UD (canonical) | by type over assignments (UD) | E4's criterion |
+|---|---|---|---|
+| E4 baseline A | -2.301 | -- | met |
+| baseline B | -2.317 (CD +0.012, neutral -0.007, other +0.003) | -- | met from 100,000 on |
+| f = 1 A | -1.734 (CD +0.15, neutral +0.24, other -0.15) | -1.62 | never |
+| f = 1 E vs B ref | -1.935 (CD -0.51, neutral -0.25, other -0.20) | -1.69 | never |
+| f = 1 F vs B ref | -1.789 (CD -0.15, neutral -0.18, other -0.20) | -1.86 | never |
+
+Seed B's own f = 1 pair is excluded (its experimental run locked in). **Baseline B is healthy and equals E4's baseline A**
+(mass 0.994-0.997, b(UD) -2.32 vs -2.30, converged from 100,000): E5's procedure is not at fault; the deficit is the
+shuffle's. The shuffle runs are alike: every switch by the late threshold, no fall below 1 bit after it, success 1.0,
+mass 0.74-0.93 by type, b(UD) -1.6 to -1.9 -- the same stage of learning, short of E4's criterion.
+
+**Trajectory: still learning, not a plateau.** From 200,000 to 300,000 every shuffle run's mass rises (smallest
+quadrant +0.08 to +0.17, UD-type mass +0.09 to +0.16 per 100,000 steps), decelerating (UD-type gains per 50,000 steps:
+e.g. 0.106 then 0.038 for A's reference, 0.059 then 0.028 for B's), and b(UD) still falls (A: -1.30 at 200,000, -1.73
+at 300,000). The baselines converged by 60,000-100,000 steps; the shuffle runs lag by a factor of about 3-5 in steps (12
+images per state to learn). Linear extrapolation reaches mass 0.97 at about 340,000-455,000 steps; the deceleration makes
+that a lower bound -- likely 450,000-650,000. The deficit is diffuse: every zone type, both rotation classes (A / B) and
+every UD-CD relation alike, the canonical assignment included (0.77-0.92 at its UD slot); within a run the three weakest
+assignments share one UD slot, a different one in each run (sw, ne, se, nw): a general lag, not a targeted failure.
+
+**Recommendation (implementer): (c) continue the shuffle runs before probing.** At 300,000 the shuffle models are short
+of the learning the baselines reached (b(UD) -1.6 to -1.9 against -2.3; their references' masses 0.79-0.93), so a
+probe's b would mix where the belief sits with how far it has formed; and the probes' validity criterion (the reference
+must predict at step 1, mass >= 0.90) would exclude more shuffle probes than baseline ones, an asymmetric selection.
+Normalising (option (b): a probe's b over the same model's b(UD) in its training world) assumes the belief scales
+linearly with learning and does not fix the validity asymmetry. Continuing is cheap: from each run's last resume point
+(290,000), `run_e5.py --extend` (the run's own config and planned budget, checkpoints every 25,000 and every assignment
+every 50,000 past 300,000; identical to the original up to 300,000 on the same device, tested), batch `e5_extend` (A exp,
+A ref, B ref, E, F) to 500,000; the continuation of a continuation starts from its own resume point if 500,000 is not
+enough. Baselines stay at 300,000 (converged). Cost: 210,000 steps per run, five runs in one pod: about 35 hours (one
+GPU; observed 7,700-9,000 steps per hour per run with three or four runs in parallel). The probes then go at the first
+common checkpoint where the shuffle pairs meet E4's criterion (`check_wave.py` on the continuations, readable while they
+train), the baselines at 300,000 (`e5_probes_all`: baselines at `batches.PROBES_CHECKPOINT`, shuffle pairs at
+`--checkpoint`).
+
+**A resume bug, found by the continuation test and fixed (library).** The resume state of `run_one` did not keep the
+current episode's row offset in the replay table (`ClosedLoopCollector._obs_offset`, the episode's assignment): a shuffle
+run resumed in the middle of an episode of a non-canonical assignment looked its images up in the wrong block and
+stopped (`ObservationTableMismatch`). No run of waves 1-2 was resumed, so none is affected; a resume after an incident
+would have failed. The offset is now saved and restored (only with an episode source: E3's and E4's resume states are
+unchanged); tested (a shuffle run interrupted and resumed equals the uninterrupted run; the continuation equals the
+original at 600).
