@@ -152,3 +152,33 @@ def test_kernel_option_and_anti_oracle(world, agent):
     mixed_ep = fs.run_model(agent, tw, images[0], E6, 0.1, q_fn=lambda h_, z_, s_, g: mixed_policy_q(agent, tw, emb, h_, z_, s_, 0.0, zone, alt, g, None))
     for key in plain_ep:
         assert np.array_equal(plain_ep[key], mixed_ep[key], equal_nan=True), key
+
+
+def test_action_kernel_and_anti_oracle_by_draws(world, agent):
+    from helplessness.probing.lookahead import mixed_policy_q, sampled_mixed_policy_q
+
+    images, tw = world
+    plain = fs.run_model(agent, tw, images[0], E6, 0.1)
+    rich = fs.run_model(agent, tw, images[0], E6, 0.1, action_kernel=True)
+    for key in plain:  # the option adds arrays, never changes one
+        assert np.array_equal(plain[key], rich[key], equal_nan=True), key
+    played = np.take_along_axis(rich["mass_true_all"], np.clip(rich["actions"], 0, None)[..., None], axis=2)[..., 0]
+    measured = np.isfinite(rich["mass_played"])
+    assert np.allclose(played[measured], rich["mass_played"][measured])
+    assert set(np.unique(rich["argmax_true"][np.isfinite(rich["argmax_true"])])) <= {0.0, 1.0}
+    conf = {**setup.configuration(CFG, "p1-b-d1"), "seed": 2}
+    alt = np.repeat(setup.successors(setup.world(CFG, conf, "experimental"))[:, 4][:, None], 5, axis=1)
+    zone = np.zeros(two_zones.N_STATES, dtype=bool)
+    zone[fs.zone_states(images[0]["slot"])] = True
+    states = fs.interior_states(images[0]["slot"])[:4]
+    h, z = fresh_start_contexts(agent.rssm, tw, states, torch.Generator().manual_seed(3))
+    emb = embeddings(agent, tw)
+    g = lambda s: torch.Generator().manual_seed(s)  # noqa: E731
+    q_pol = q_values(agent.rssm, agent.goal_head, agent.critic, h, z, agent.cfg.k_act, agent.cfg, g(9))
+    assert torch.equal(sampled_mixed_policy_q(agent, tw, emb, h, z, states, 0.0, zone, alt, g(9), g(5)), q_pol)
+    q1 = sampled_mixed_policy_q(agent, tw, emb, h, z, states, 1.0, zone, alt, g(9), g(5))
+    assert torch.equal(q1, q1[:, :1].expand_as(q1))  # every draw on the conveyor's cell, one h: equal Q
+    assert torch.allclose(q1, mixed_policy_q(agent, tw, emb, h, z, states, 1.0, zone, alt, g(9), g(5)))  # p = 1: the expectation's
+    qs = sampled_mixed_policy_q(agent, tw, emb, h, z, states, 0.5, zone, alt, g(9), g(5), shared=True)
+    for i in range(len(states)):  # one Bernoulli per row: the model's row or a constant row
+        assert torch.allclose(qs[i], q_pol[i]) or torch.equal(qs[i], qs[i, :1].expand_as(qs[i]))

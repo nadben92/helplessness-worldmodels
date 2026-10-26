@@ -103,16 +103,24 @@ def localise(rssm: RSSM, world: TestWorld, h: torch.Tensor, z: torch.Tensor) -> 
 
 
 def measure_contexts(agent: FrozenAgent, world: TestWorld, h: torch.Tensor, z: torch.Tensor, states: np.ndarray, draws: int,
-                     margin: float, generator: torch.Generator) -> dict[str, np.ndarray]:
-    """Every per-step measure at the contexts (h, z) whose true states are `states`."""
+                     margin: float, generator: torch.Generator, action_kernel: bool = False) -> dict[str, np.ndarray]:
+    """Every per-step measure at the contexts (h, z) whose true states are `states`. action_kernel: also argmax_true (n, A),
+    whether the I_s kernel's argmax cell for each action is its true successor (NaN where every draw is a ghost); the
+    kernel is the one I is computed from (the same draws)."""
     sc = step_controllability(agent.rssm, h, z, world.templates_t, draws, margin, generator=generator,
-                              true_successor=world.succ[states])
+                              true_successor=world.succ[states], return_kernel=action_kernel)
+    extra = {}
+    if action_kernel:
+        p_hat = sc["p_hat"]
+        ok = np.isfinite(p_hat).all(axis=-1)
+        hit = np.nan_to_num(p_hat, nan=-1.0).argmax(axis=-1) == world.succ[states]
+        extra["argmax_true"] = np.where(ok, hit.astype(float), np.nan)
     loc = localise(agent.rssm, world, h, z)
     with torch.no_grad():
         p_goal = agent.goal_head.p_goal(h, z).cpu().numpy()
     return {"I": sc["I"], "mass_true": sc["mass_true"], "ghost": np.nanmean(sc["ghost_fraction"], axis=1),
             "loc_template": loc["nearest_template"] == states, "loc_agent": loc["agent_cell"] == states, "p_goal": p_goal,
-            "decoded_template": loc["nearest_template"], "decoded_cell": loc["agent_cell"]}
+            "decoded_template": loc["nearest_template"], "decoded_cell": loc["agent_cell"], **extra}
 
 
 def fresh_start_contexts(rssm: RSSM, world: TestWorld, states: np.ndarray, generator: torch.Generator) -> tuple[torch.Tensor, torch.Tensor]:
@@ -152,14 +160,16 @@ FIELDS_STEP = ("I", "mass_played", "ghost", "loc_template", "loc_agent", "p_goal
 def run_episodes(agent: FrozenAgent, world: TestWorld, starts: np.ndarray, H: int, epsilon: float,
                  explore_seqs: list[np.random.SeedSequence], act_seed: int, measure_seed: int, zone: np.ndarray,
                  draws: int = 16, margin: float = 1e-3, measure: str = "all", hook: Hook | None = None, tau: float | None = None,
-                 q_fn: QFn | None = None) -> dict[str, np.ndarray]:
+                 q_fn: QFn | None = None, action_kernel: bool = False) -> dict[str, np.ndarray]:
     """The episodes from `starts` (n,), at most H transitions each (module docstring). measure: "all" (every step), "zone"
     (the steps whose state is in `zone` and t = 0), "first" (t = 0 only); unmeasured steps are NaN.
     Returns: states (n, H + 1) and actions (n, H) (-1 beyond the end), length, terminated, and per step (n, H): I,
     mass_played (the mass on the true successor of the action taken), ghost, loc_template, loc_agent, decoded_template and
     decoded_cell (the decoded positions, states as floats, NaN where unmeasured), p_goal, q_gap (max -
     min Q), explored, tied, plus the hook's fields; Q (n, H, n_actions). tau: None (epsilon-greedy, E6) or the softmax's
-    temperature; q_fn: None (policy.q_values with the act generator, E6) or another Q."""
+    temperature; q_fn: None (policy.q_values with the act generator, E6) or another Q. action_kernel (off by default; the
+    other arrays unchanged): also mass_true_all and argmax_true (n, H, A), every action's mass on its true successor and
+    whether the kernel's argmax is it (docs/e6/DECISIONS.md (59))."""
     rssm, cfg = agent.rssm, agent.cfg
     device = world.templates_t.device
     n, A = len(starts), rssm.cfg.n_actions
@@ -171,6 +181,7 @@ def run_episodes(agent: FrozenAgent, world: TestWorld, starts: np.ndarray, H: in
     actions = np.full((n, H), -1, dtype=np.int64)
     out = {f: np.full((n, H), np.nan) for f in FIELDS_STEP}
     Q_all = np.full((n, H, A), np.nan)
+    per_action = {f: np.full((n, H, A), np.nan) for f in ("mass_true_all", "argmax_true")} if action_kernel else {}
     extra: dict[str, np.ndarray] = {}
     length = np.zeros(n, dtype=np.int64)
     terminated = np.zeros(n, dtype=bool)
@@ -192,11 +203,13 @@ def run_episodes(agent: FrozenAgent, world: TestWorld, starts: np.ndarray, H: in
         sel = {"all": np.ones(len(rows), bool), "zone": zone[s] | (t == 0), "first": np.full(len(rows), t == 0)}[measure]
         if sel.any():
             idx = torch.as_tensor(np.flatnonzero(sel), device=device)
-            m = measure_contexts(agent, world, h[idx], z[idx], s[sel], draws, margin, meas_gen)
+            m = measure_contexts(agent, world, h[idx], z[idx], s[sel], draws, margin, meas_gen, action_kernel)
             r = rows[sel]
             for name in ("I", "ghost", "loc_template", "loc_agent", "p_goal", "decoded_template", "decoded_cell"):
                 out[name][r, t] = m[name]
             mass_t = m["mass_true"]
+            if action_kernel:
+                per_action["mass_true_all"][r, t], per_action["argmax_true"][r, t] = mass_t, m["argmax_true"]
         Q = q_values(rssm, agent.goal_head, agent.critic, h, z, cfg.k_act, cfg, act_gen) if q_fn is None else q_fn(h, z, s, act_gen)
         tied_set = tie_set(Q, cfg).cpu().numpy()
         Qn = Q.cpu().numpy()
@@ -228,4 +241,4 @@ def run_episodes(agent: FrozenAgent, world: TestWorld, starts: np.ndarray, H: in
         keep_t = torch.as_tensor(np.flatnonzero(keep), device=device)
         h, z = h[keep_t], z[keep_t]
         a_prev = F.one_hot(torch.as_tensor(a[keep], device=device), num_classes=A).to(h.dtype)
-    return {"states": states, "actions": actions, "length": length, "terminated": terminated, **out, **extra, "Q": Q_all}
+    return {"states": states, "actions": actions, "length": length, "terminated": terminated, **out, **extra, "Q": Q_all, **per_action}

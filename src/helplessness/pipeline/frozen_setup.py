@@ -228,16 +228,17 @@ def by_state_then_zone(values: np.ndarray, states: np.ndarray) -> float:
 
 
 def run_model(agent: FrozenAgent, tw: TestWorld, image: dict, e6: dict, epsilon: float, hook=None, tau: float | None = None,
-              q_fn=None) -> dict:
+              q_fn=None, action_kernel: bool = False) -> dict:
     """The episodes of one model on one (image, zone): E6's protocol (module docstring of probing.frozen_episodes). tau,
-    q_fn: the test-time decision rule's options of run_episodes (None: E6's)."""
+    q_fn: the test-time decision rule's options of run_episodes (None: E6's); action_kernel: run_episodes' per-action
+    prediction arrays (off: E6's)."""
     s = seeds(e6["seed"], image)
     starts = starts_for(image["slot"], e6["n_reps"])
     zone = np.zeros(two_zones.N_STATES, dtype=bool)
     zone[zone_states(image["slot"])] = True
     return run_episodes(agent, tw, starts, int(e6["horizon"]), epsilon, explore_sequences(s["explore_entropy"], len(starts)),
                         s["act"], s["measure"], zone, draws=int(e6["draws"]), margin=float(e6["margin"]), measure=e6["measure"], hook=hook,
-                        tau=tau, q_fn=q_fn)
+                        tau=tau, q_fn=q_fn, action_kernel=action_kernel)
 
 
 def reference_fresh(reference: FrozenAgent, tw: TestWorld, image: dict, e6: dict) -> np.ndarray:

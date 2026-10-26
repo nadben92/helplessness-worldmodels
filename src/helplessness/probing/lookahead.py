@@ -113,6 +113,46 @@ def mixed_policy_q(agent: FrozenAgent, world: TestWorld, embeds: torch.Tensor, h
     return torch.where(torch.as_tensor(on, device=h.device)[:, None], (1.0 - p_mix) * q + p_mix * q_alt, q)
 
 
+@torch.no_grad()
+def sampled_mixed_policy_q(agent: FrozenAgent, world: TestWorld, embeds: torch.Tensor, h: torch.Tensor, z: torch.Tensor, states: np.ndarray,
+                           p_mix: float, mix: np.ndarray, alt_succ: np.ndarray, act_generator: torch.Generator | None,
+                           alt_generator: torch.Generator | None, shared: bool = False) -> torch.Tensor:
+    """(n, A): the policy's Q with the anti-oracle BY DRAWS (docs/e6/DECISIONS.md (60)). The policy's K_act prior draws per
+    action (policy.lookahead with act_generator: E6's draws); from the states where `mix` is True, each draw is replaced
+    with probability p by a draw of the posterior of alt_succ's cell (the common h of (57): the mean of the h'_a; true r and
+    c), independently per (action, draw), or with shared=True by one Bernoulli per row for every action and draw; Q(a) = the
+    mean of the K values, the expression of policy.q_values term for term. p = 0 returns q_values' tensor itself."""
+    rssm, cfg = agent.rssm, agent.cfg
+    on = np.asarray(mix, dtype=bool)[np.asarray(states)]
+    if p_mix == 0 or not on.any():
+        return q_values(rssm, agent.goal_head, agent.critic, h, z, cfg.k_act, cfg, act_generator)
+    n, A, K = h.shape[0], rssm.cfg.n_actions, cfg.k_act
+    h_next, z_next = lookahead(rssm, h, z, K, act_generator)
+    h_bar = h_next.mean(dim=1)
+    z_alt, drawn = [], []
+    for a in range(A):
+        s_a = np.asarray(alt_succ)[np.asarray(states), a]
+        same = [zz for ss, zz in drawn if np.array_equal(ss, s_a)]
+        z_a = same[0] if same else _posterior_draws(agent, h_bar, embeds[torch.as_tensor(s_a, device=h.device)], K, alt_generator)
+        drawn.append((s_a, z_a))
+        z_alt.append(z_a)
+    z_alt = torch.stack(z_alt, dim=1)                                                       # (n, A, K, V, C)
+    shape = (n, 1, 1) if shared else (n, A, K)
+    use = (torch.rand(shape, generator=alt_generator, device=h.device) < p_mix).expand(n, A, K)
+    use = use & torch.as_tensor(on, device=h.device)[:, None, None]
+    flat_use = use.reshape(-1)
+    flat_h = torch.where(use[..., None], h_bar[:, None, None, :].expand(-1, A, K, -1), h_next.unsqueeze(2).expand(-1, -1, K, -1)).reshape(n * A * K, -1)
+    flat_z = torch.where(use[..., None, None], z_alt, z_next).reshape(n * A * K, *z_next.shape[-2:])
+    flat_h, flat_z = rssm.latent_hook(flat_h, flat_z, {})
+    p = agent.goal_head.p_goal(flat_h, flat_z)
+    alt_cells = np.repeat(np.asarray(alt_succ)[np.asarray(states)][:, :, None], K, axis=2).reshape(-1)
+    r_alt, c_alt = _true_reward(agent, world, alt_cells, h.device)
+    r = torch.where(flat_use, r_alt, reward_from_goal(p, cfg))
+    c = torch.where(flat_use, c_alt, continuation_from_goal(p))
+    q = r + cfg.gamma * c * agent.critic(flat_h, flat_z)
+    return q.reshape(n, A, K).mean(dim=-1)
+
+
 def greedy(Q: torch.Tensor, agent: FrozenAgent, generator: torch.Generator | None = None) -> torch.Tensor:
     """(B,) the greedy action: a uniform pick among the training's tie set (policy.tie_set), epsilon = 0."""
     tied = tie_set(Q, agent.cfg)
