@@ -111,3 +111,41 @@ def test_run_episodes_defaults_and_tau(world, agent):
     assert np.array_equal(cold["states"][:, 0], plain["states"][:, 0])
     cell_values(agent, tw, np.array([0, 1]), 2, torch.Generator().manual_seed(0))
     assert weights_hash(agent) == before
+
+
+def test_kernel_option_and_anti_oracle(world, agent):
+    from helplessness.pipeline.measure import controllability_of_kernel
+    from helplessness.probing.fixed_trajectory import step_controllability
+    from helplessness.probing.lookahead import mixed_policy_q
+
+    images, tw = world
+    conf = {**setup.configuration(CFG, "p1-b-d1"), "seed": 2}
+    conveyor = setup.successors(setup.world(CFG, conf, "experimental"))[:, 4]
+    alt = np.repeat(conveyor[:, None], 5, axis=1)
+    zone = np.zeros(two_zones.N_STATES, dtype=bool)
+    zone[fs.zone_states(images[0]["slot"])] = True
+    states = fs.interior_states(images[0]["slot"])[:4]
+    h, z = fresh_start_contexts(agent.rssm, tw, states, torch.Generator().manual_seed(3))
+    plain = step_controllability(agent.rssm, h, z, tw.templates_t, 4, 1e-3, generator=torch.Generator().manual_seed(1))
+    kern = step_controllability(agent.rssm, h, z, tw.templates_t, 4, 1e-3, generator=torch.Generator().manual_seed(1), return_kernel=True)
+    assert "p_hat" not in plain and np.array_equal(kern["I"], plain["I"], equal_nan=True)
+    assert np.array_equal(controllability_of_kernel(kern["p_hat"]), kern["I"], equal_nan=True)
+    emb = embeddings(agent, tw)
+    q0 = mixed_policy_q(agent, tw, emb, h, z, states, 0.0, zone, alt, torch.Generator().manual_seed(9), torch.Generator().manual_seed(5))
+    assert torch.equal(q0, q_values(agent.rssm, agent.goal_head, agent.critic, h, z, agent.cfg.k_act, agent.cfg, torch.Generator().manual_seed(9)))
+    q1 = mixed_policy_q(agent, tw, emb, h, z, states, 1.0, zone, alt, torch.Generator().manual_seed(9), torch.Generator().manual_seed(5))
+    assert torch.allclose(q1, oracle_q(agent, tw, emb, h, z, states, agent.cfg.k_act, torch.Generator().manual_seed(5), succ=alt))
+    for p, follows in ((0.0, tw.succ), (1.0, alt)):
+        out = k_step_q(agent, tw, h, z, states, 3, "mixed", 4, 2, torch.Generator().manual_seed(2), embeds=emb, n_trace=2, p_mix=p, mix=zone,
+                       alt_succ=alt)
+        assert torch.isfinite(out["Q"]).all()
+        s, act = out["trace_states"], out["trace_actions"].numpy()
+        assert np.array_equal(s[0], follows[np.repeat(states, 5)[:, None].reshape(4, 5)[..., None].repeat(2, -1), act[0]])
+        for i in range(1, s.shape[0]):  # p = 1: the conveyor from a zone cell, the world outside; p = 0: the world
+            expect = np.where(zone[s[i - 1]] & (p == 1.0), alt[s[i - 1], act[i]], tw.succ[s[i - 1], act[i]])
+            assert np.array_equal(s[i], expect)
+    # p = 0 at k = 1 through the episodes: E6 exactly
+    plain_ep = fs.run_model(agent, tw, images[0], E6, 0.1)
+    mixed_ep = fs.run_model(agent, tw, images[0], E6, 0.1, q_fn=lambda h_, z_, s_, g: mixed_policy_q(agent, tw, emb, h_, z_, s_, 0.0, zone, alt, g, None))
+    for key in plain_ep:
+        assert np.array_equal(plain_ep[key], mixed_ep[key], equal_nan=True), key

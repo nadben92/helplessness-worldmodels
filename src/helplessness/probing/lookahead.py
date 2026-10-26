@@ -13,7 +13,12 @@ heads' own reward and continuation -- never a reimplementation. Nothing is learn
                       computed with k_inner draws. Variant "model": the prior (agents.worldmodel.policy.lookahead, then
                       rssm.imagination_step), r and c from the goal head, greedy on policy.q_values; for k = 1 it is
                       q_values exactly (the same draws from the same generator). Variant "oracle": the true successors,
-                      the posterior of the true image, the true reward, greedy on Q_or.
+                      the posterior of the true image, the true reward, greedy on Q_or. Variant "mixed" (E7's
+                      anti-oracle, docs/e6/DECISIONS.md (55)): from a cell where `mix` is True, each particle takes with
+                      probability p the successor table `alt_succ` (oracle_q's path: posterior of that cell's image,
+                      true reward) and otherwise the prior (the model variant); greedy on the expected mixed one-step Q.
+                      The particle's cell is tracked: alt_succ's, or the world's successor of the action in the model
+                      branch.
 """
 
 from __future__ import annotations
@@ -27,7 +32,7 @@ from helplessness.agents.worldmodel.policy import lookahead, q_values, tie_set
 from helplessness.agents.worldmodel.rssm import sample_categorical_index
 from helplessness.probing.frozen_episodes import FrozenAgent, TestWorld, fresh_start_contexts
 
-VARIANTS = ("model", "oracle")
+VARIANTS = ("model", "oracle", "mixed")
 
 
 def embeddings(agent: FrozenAgent, world: TestWorld) -> torch.Tensor:
@@ -65,19 +70,37 @@ def _posterior_draws(agent: FrozenAgent, h: torch.Tensor, e: torch.Tensor, K: in
 
 @torch.no_grad()
 def oracle_q(agent: FrozenAgent, world: TestWorld, embeds: torch.Tensor, h: torch.Tensor, z: torch.Tensor, states: np.ndarray, K: int,
-             generator: torch.Generator | None = None) -> torch.Tensor:
-    """(n, A): the oracle one-step Q (module docstring) at the contexts (h, z) of the true states `states` (n,)."""
+             generator: torch.Generator | None = None, succ: np.ndarray | None = None) -> torch.Tensor:
+    """(n, A): the oracle one-step Q (module docstring) at the contexts (h, z) of the true states `states` (n,). succ
+    (n_states, A): the successor table the planner is shown (default the world's, the oracle; the conveyor's is E7's
+    anti-oracle)."""
     rssm, cfg = agent.rssm, agent.cfg
+    succ = world.succ if succ is None else np.asarray(succ)
     n, A = h.shape[0], rssm.cfg.n_actions
     out = []
     for a in range(A):
         h_a = rssm.gru_step(h, z, _onehot(torch.full((n,), a, device=h.device, dtype=torch.long), A, h.dtype))
-        s_a = world.succ[np.asarray(states), a]
+        s_a = succ[np.asarray(states), a]
         z_a = _posterior_draws(agent, h_a, embeds[torch.as_tensor(s_a, device=h.device)], K, generator)
         r, c = _true_reward(agent, world, s_a, h.device)
         v = agent.critic(h_a.unsqueeze(1).expand(-1, K, -1).reshape(n * K, -1), z_a.reshape(n * K, *z_a.shape[-2:])).reshape(n, K)
         out.append((r[:, None] + cfg.gamma * c[:, None] * v).mean(dim=1))
     return torch.stack(out, dim=1)
+
+
+@torch.no_grad()
+def mixed_policy_q(agent: FrozenAgent, world: TestWorld, embeds: torch.Tensor, h: torch.Tensor, z: torch.Tensor, states: np.ndarray,
+                   p_mix: float, mix: np.ndarray, alt_succ: np.ndarray, act_generator: torch.Generator | None,
+                   alt_generator: torch.Generator | None) -> torch.Tensor:
+    """(n, A): the policy's Q with the anti-oracle at k = 1 (docs/e6/DECISIONS.md (55)): policy.q_values (K_act draws,
+    act_generator: E6's consumption), and from the states where `mix` is True, (1 - p) Q_model + p Q_alt, Q_alt = oracle_q
+    on the successor table alt_succ (K_act posterior draws, alt_generator). p = 0 returns q_values' tensor itself."""
+    q = q_values(agent.rssm, agent.goal_head, agent.critic, h, z, agent.cfg.k_act, agent.cfg, act_generator)
+    on = np.asarray(mix, dtype=bool)[np.asarray(states)]
+    if p_mix == 0 or not on.any():
+        return q
+    q_alt = oracle_q(agent, world, embeds, h, z, states, agent.cfg.k_act, alt_generator, succ=alt_succ)
+    return torch.where(torch.as_tensor(on, device=h.device)[:, None], (1.0 - p_mix) * q + p_mix * q_alt, q)
 
 
 def greedy(Q: torch.Tensor, agent: FrozenAgent, generator: torch.Generator | None = None) -> torch.Tensor:
@@ -89,9 +112,10 @@ def greedy(Q: torch.Tensor, agent: FrozenAgent, generator: torch.Generator | Non
 @torch.no_grad()
 def k_step_q(agent: FrozenAgent, world: TestWorld, h: torch.Tensor, z: torch.Tensor, states: np.ndarray | None, k_max: int, variant: str,
              n_particles: int, k_inner: int, generator: torch.Generator | None = None, embeds: torch.Tensor | None = None,
-             n_trace: int = 0) -> dict:
+             n_trace: int = 0, p_mix: float = 0.0, mix: np.ndarray | None = None, alt_succ: np.ndarray | None = None) -> dict:
     """Q_k for k = 1..k_max at the contexts (h, z) (module docstring). states (n,): the contexts' true states (the oracle
-    only). Returns Q (n, A, k_max) and, with n_trace > 0, the first n_trace particles of every (context, action) along the
+    and the mixed variant). p_mix, mix (n_states,) bool, alt_succ (n_states, A): the mixed variant's probability, cells
+    and successor table. Returns Q (n, A, k_max) and, with n_trace > 0, the first n_trace particles of every (context, action) along the
     rollout: trace_h (k_max, n, A, n_trace, h_dim), trace_z (k_max, n, A, n_trace, V, C), trace_actions (k_max, n, A,
     n_trace) (the action that LED to each step: the first action at step 1), trace_states (oracle: the true states)."""
     if variant not in VARIANTS:
@@ -99,7 +123,37 @@ def k_step_q(agent: FrozenAgent, world: TestWorld, h: torch.Tensor, z: torch.Ten
     rssm, cfg = agent.rssm, agent.cfg
     n, A, K = h.shape[0], rssm.cfg.n_actions, int(n_particles)
     device = h.device
-    if variant == "model":  # step 1: policy.q_values' own computation, term for term
+    first_actions = torch.arange(A, device=device).view(1, A, 1).expand(n, A, K).reshape(-1)
+
+    def mixed_q(h_, z_, cells):  # the expected one-step Q of the mixed variant
+        q = q_values(rssm, agent.goal_head, agent.critic, h_, z_, int(k_inner), cfg, generator)
+        if p_mix > 0:
+            q_alt = oracle_q(agent, world, embeds, h_, z_, cells, int(k_inner), generator, succ=alt_succ)
+            on = torch.as_tensor(mix[cells], device=device)[:, None]
+            q = torch.where(on, (1.0 - p_mix) * q + p_mix * q_alt, q)
+        return q
+
+    def mixed_step(h_, z_, act, cells):  # one imagined step: alt_succ's branch with probability p_mix from a mix cell
+        out = rssm.imagination_step(h_, z_, _onehot(act, A, h_.dtype), generator=generator)
+        a_np = act.cpu().numpy()
+        alt = alt_succ[cells, a_np]
+        z_alt = _posterior_draws(agent, out["h"], embeds[torch.as_tensor(alt, device=device)], 1, generator)[:, 0]
+        use = mix[cells] & (torch.rand(len(cells), generator=generator, device=device).cpu().numpy() < p_mix)
+        on = torch.as_tensor(use, device=device)
+        z_new = torch.where(on[:, None, None], z_alt, out["z"])
+        pg = agent.goal_head.p_goal(out["h"], z_new)
+        r_alt, c_alt = _true_reward(agent, world, alt, device)
+        r_new = torch.where(on, r_alt, reward_from_goal(pg, cfg))
+        c_new = torch.where(on, c_alt, continuation_from_goal(pg))
+        return out["h"], z_new, r_new, c_new, np.where(use, alt, world.succ[cells, a_np])
+
+    if variant == "mixed":
+        if embeds is None or states is None or mix is None or alt_succ is None:
+            raise ValueError("the mixed variant needs the states, the embeddings, mix and alt_succ")
+        mix, alt_succ = np.asarray(mix, dtype=bool), np.asarray(alt_succ)
+        root = torch.arange(n, device=device).repeat_interleave(A * K)
+        flat_h, flat_z, r, c, flat_s = mixed_step(h[root], z[root], first_actions, np.repeat(np.asarray(states), A * K))
+    elif variant == "model":  # step 1: policy.q_values' own computation, term for term
         h_next, z_next = lookahead(rssm, h, z, K, generator)
         h_k = h_next.unsqueeze(2).expand(-1, -1, K, -1)
         flat_h, flat_z = h_k.reshape(-1, h_k.shape[-1]), z_next.reshape(-1, *z_next.shape[-2:])
@@ -124,7 +178,6 @@ def k_step_q(agent: FrozenAgent, world: TestWorld, h: torch.Tensor, z: torch.Ten
     v = agent.critic(flat_h, flat_z)
     Q = [(r + cfg.gamma * c * v).reshape(n, A, K).mean(dim=-1)]
     G, D = r, cfg.gamma * c
-    first_actions = torch.arange(A, device=device).view(1, A, 1).expand(n, A, K).reshape(-1)
     trace = {"h": [], "z": [], "a": [], "s": []}
 
     def record(actions):
@@ -142,6 +195,9 @@ def k_step_q(agent: FrozenAgent, world: TestWorld, h: torch.Tensor, z: torch.Ten
             flat_h, flat_z = out["h"], out["z"]
             p = agent.goal_head.p_goal(flat_h, flat_z)
             r, c = reward_from_goal(p, cfg), continuation_from_goal(p)
+        elif variant == "mixed":
+            act = greedy(mixed_q(flat_h, flat_z, flat_s), agent, generator)
+            flat_h, flat_z, r, c, flat_s = mixed_step(flat_h, flat_z, act, flat_s)
         else:
             act = greedy(oracle_q(agent, world, embeds, flat_h, flat_z, flat_s, int(k_inner), generator), agent, generator)
             flat_h = rssm.gru_step(flat_h, flat_z, _onehot(act, A, flat_h.dtype))
