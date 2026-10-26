@@ -182,3 +182,20 @@ def test_action_kernel_and_anti_oracle_by_draws(world, agent):
     qs = sampled_mixed_policy_q(agent, tw, emb, h, z, states, 0.5, zone, alt, g(9), g(5), shared=True)
     for i in range(len(states)):  # one Bernoulli per row: the model's row or a constant row
         assert torch.allclose(qs[i], q_pol[i]) or torch.equal(qs[i], qs[i, :1].expand_as(qs[i]))
+
+
+def test_channel_q(world, agent):
+    from helplessness.probing.lookahead import channel_q
+
+    _, tw = world
+    states = np.array([26, 27, 40, 50])
+    h, z = fresh_start_contexts(agent.rssm, tw, states, torch.Generator().manual_seed(3))
+    g = torch.Generator().manual_seed(9)
+    clone = torch.Generator()
+    clone.set_state(g.get_state())
+    ch = channel_q(agent, h, z, clone, torch.Generator().manual_seed(4))
+    q = q_values(agent.rssm, agent.goal_head, agent.critic, h, z, agent.cfg.k_act, agent.cfg, g)
+    assert torch.equal(ch["Q_normal"], q)  # (a): the policy's Q, bit for bit, from a clone of its generator
+    assert torch.equal(clone.get_state(), g.get_state())  # the clone consumed exactly what q_values consumes
+    for key in ("Q_hbar", "Q_zbar", "V_zbar"):
+        assert ch[key].shape == q.shape and torch.isfinite(ch[key]).all()
