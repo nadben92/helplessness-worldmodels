@@ -92,7 +92,7 @@ def collect(repo: Path, batch: str, configuration: str, weight_steps: list[int],
         files += [w for w in weights if w.is_file()]
         runs[job] = {"run": run.name, "status": meta.get("status"), "final_checkpoint": last, "weights": [w.name for w in weights if w.is_file()],
                      "weights_missing": [w.name for w in weights if not w.is_file()]}
-    for label, training, fraction in batches.PROBE_PAIRS[batch]:
+    for label, training, fraction in batches.PROBE_PAIRS.get(batch, []):  # a training-only batch has no probe pair
         tag = e5_names.training_tag(training, fraction)
         for probes in sorted(root.glob(f"probes__{configuration}__{tag}__seed{seed_of[label]:02d}__*")):
             files += [probes / name for name in PROBE_FILES if (probes / name).is_file()]

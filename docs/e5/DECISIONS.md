@@ -696,3 +696,30 @@ original at 600).
   from 290,000, about 26 h to 450,000, 34 h to 500,000, 42 h to 550,000, 58 h to the 650,000 ceiling; launched on 26
   October in the evening, the stop falls between 27 October late evening and 29 October morning; the probes (a few
   hours) follow the export, the aggregation the next day.
+
+**(33), the continuation in two batches (user, 26 October).** To have first results sooner (and start E6/E7 on them):
+- `e5_extend_a` = seed A's f = 1 pair (2 runs), then `e5_extend_b` = seed B's f = 1 reference with E and F (3 runs),
+  launched after `e5_extend_a` and its probes; the same settings (3 CPUs, `--to 650000`, checkpoints every 25,000, a
+  manual stop). `e5_extend` (the five runs in one pod) stays defined, NOT USED.
+- **One stop criterion per batch**: `check_wave.py --batch e5_extend_a` gives the synthesis line of its one pair (A),
+  `--batch e5_extend_b` that of its two pairs (E and F against B's reference, in the batch): K_a and K_b; the stop command
+  and the export take the batch's name (RUN_GPU.md, step 6b).
+- **Probes in two sets**: `e5_probes_a` = baselines A (E4's pair) and B at 300,000 and seed A's f = 1 pair at K_a (the
+  first set, on which E6/E7 start); `e5_probes_b` = E and F at K_b, later. `e5_probes_all` stays defined, NOT USED.
+- **Each shuffle pair is probed at its first checkpoint meeting E4's criterion**, the baselines at 300,000 (converged):
+  the conditions are compared at the same level of learning, not at the same number of steps. The final aggregation
+  (`analyse_probes.py`) merges the two sets, grouped by condition, each pair at its own checkpoint (recorded per pair; a
+  pair measured at several checkpoints needs `--pair-k`). Tested.
+- Also fixed: `export_batch.py create` on a training-only batch (the continuations) read `batches.PROBE_PAIRS[batch]`,
+  absent for it -- it would have stopped; it now reads none.
+- **Speed and calendar.** Measured per run (relaunched wave 1, shuffle): about 7,200 steps per hour with 4 runs in the
+  pod, about 10,000 with 3 (after seed B's experimental run stopped): the pod's total stays about 29,000-30,000 steps per
+  hour, its 3 CPUs are the bottleneck; each process uses one thread, so 2 runs should not go much faster than 3 --
+  about 10,000-11,000 per run (no measurement with 1 or 2 runs per pod). From 290,000: `e5_extend_a` reaches 500,000 in
+  about 20 h, 550,000 in 25 h, 600,000 in 30 h, the 650,000 ceiling in 34 h; `e5_extend_b`, 21 / 26 / 31 / 36 h. The
+  extrapolations of the mass put K between 500,000 and 600,000 for most runs (seed A's reference, the slowest, maybe
+  later). With `e5_extend_a` launched on 26 October at about 22:00: its end and K_a on 27 October about 18:00 to 28
+  October about 04:00 (the ceiling: 08:00); its export and `e5_probes_a` (about 1 h with the pod's start) by 28 October
+  morning at the latest; `e5_extend_b` launched right after, ending on 28 October in the evening to 29 October in the
+  evening (the ceiling: 29 October about 23:00); `e5_probes_b` on 29 October in the evening or 30 October in the
+  morning.

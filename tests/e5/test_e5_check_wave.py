@@ -187,3 +187,24 @@ def test_a_stopped_continuation_is_read_paired_and_probed(tmp_path):
     assert pair["last_common_env_step"] == 300000 and "b_step1_by_slot" in pair  # paired, read up to its last whole record
     keep, excluded = submit.probe_plan(tmp_path, "e5_probes_all", "p1-b-d1", 300000, str(tmp_path / "no_e4"))
     assert "probes_E_sh100_k300000" in keep, excluded
+
+
+
+def test_each_continuation_batch_has_its_own_synthesis(tmp_path, capsys):
+    """docs/e5/DECISIONS.md (33): check_wave.py --batch e5_extend_a gives the synthesis line of seed A's pair alone,
+    --batch e5_extend_b that of its two pairs (E and F against seed B's reference, which is in the batch)."""
+    import shutil
+
+    from helplessness.config import REPO_ROOT
+
+    for rel in ("configs/e5/e5.yaml", "configs/e4/e4.yaml"):
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(REPO_ROOT / rel, tmp_path / rel)
+    for seed, role in ((2, "exp"), (2, "ref"), (102, "ref"), (402, "exp"), (502, "exp")):
+        healthy_run(tmp_path, seed, "sh100", role, status="running")
+    cw.main(["--batch", "e5_extend_a", "--repo-dir", str(tmp_path)])
+    out_a = capsys.readouterr().out
+    cw.main(["--batch", "e5_extend_b", "--repo-dir", str(tmp_path)])
+    out_b = capsys.readouterr().out
+    assert "ALL 1 PAIRS MEET E4's CRITERION AT" in out_a and "sh100 seed 2:" in out_a
+    assert "ALL 2 PAIRS MEET E4's CRITERION AT" in out_b and "sh100 seed 402:" in out_b and "sh100 seed 502:" in out_b

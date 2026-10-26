@@ -1,6 +1,7 @@
-"""E5's probes across seeds (docs/e5/DECISIONS.md (31)): every measure_probes.py output of a condition (baseline,
-shuffle f = 1, ...) at checkpoint k, one per seed -- 2 to 4 seeds per condition, as many as were measured -- aggregated
-probe by probe.
+"""E5's probes across seeds (docs/e5/DECISIONS.md (31), (33)): every measure_probes.py output of a condition (baseline,
+shuffle f = 1, ...), one per seed -- as many seeds as were measured -- aggregated probe by probe, EACH PAIR AT ITS OWN
+CHECKPOINT (a shuffle pair at its first checkpoint meeting E4's criterion, K_a or K_b; the baselines at 300,000): the two
+probe sets (e5_probes_a, e5_probes_b) merge into one table; a pair measured at several checkpoints needs --pair-k.
 
 Per probe (axis, k, position): b at the first step in the zone (the main measure: curves.npz, experimental minus
 reference at step 1) for each seed whose probe is VALID (E4's criterion on the reference, docs/e5/DECISIONS.md (22)),
@@ -74,13 +75,32 @@ def newest_per_seed(measures: list[dict]) -> list[dict]:
     return list(keep.values())
 
 
+def one_k_per_pair(measures: list[dict], pair_k: dict[tuple[str, int], int]) -> list[dict]:
+    """One measurement per (condition, seed): each pair at ITS checkpoint (docs/e5/DECISIONS.md (33): a shuffle pair at
+    its first checkpoint meeting E4's criterion, the baselines at 300,000). A pair measured at several checkpoints needs
+    --pair-k <condition>:<seed>=<k>."""
+    by_pair: dict = {}
+    for m in measures:
+        by_pair.setdefault((m["condition"], m["seed"]), []).append(m)
+    out = []
+    for (cond, seed), ms in sorted(by_pair.items()):
+        if (cond, seed) in pair_k:
+            ms = [m for m in ms if m["k"] == pair_k[(cond, seed)]]
+            if not ms:
+                raise SystemExit(f"{cond} seed {seed}: no measurement at k = {pair_k[(cond, seed)]}")
+        if len(ms) > 1:
+            raise SystemExit(f"{cond} seed {seed} measured at several checkpoints {sorted(m['k'] for m in ms)}: give --pair-k {cond}:{seed}=<k>")
+        out.append(ms[0])
+    return out
+
+
 def aggregate(measures: list[dict]) -> tuple[list[dict], list[dict], list[dict], dict]:
     by_seed, groups, extremes, seeds = [], {}, [], {}
     for m in measures:
-        seeds.setdefault(f"{m['condition']}@k{m['k']}", []).append(m["seed"])
+        seeds.setdefault(m["condition"], []).append([m["seed"], m["k"]])
         for p in m["probes"]:
             by_seed.append({"condition": m["condition"], "k_checkpoint": m["k"], "seed": m["seed"], **{x: p[x] for x in ("axis", "k", "position", "b_step1", "valid")}})
-            groups.setdefault((m["condition"], m["k"], p["axis"], p["k"], p["position"]), []).append((m["seed"], p["b_step1"], p["valid"]))
+            groups.setdefault((m["condition"], p["axis"], p["k"], p["position"]), []).append((m["seed"], p["b_step1"], p["valid"]))
         ud = [t["b_step1"] for t in m["training"] if t["role"] == "ud"]
         extremes.append({"condition": m["condition"], "k_checkpoint": m["k"], "seed": m["seed"], "probe": "training_image_ud",
                          "b_step1": ud[0] if ud else float("nan"), "valid": None})
@@ -90,9 +110,9 @@ def aggregate(measures: list[dict]) -> tuple[list[dict], list[dict], list[dict],
                     extremes.append({"condition": m["condition"], "k_checkpoint": m["k"], "seed": m["seed"], "probe": name,
                                      "b_step1": p["b_step1"], "valid": p["valid"]})
     aggregated = []
-    for (cond, kc, axis, kk, pos), vals in sorted(groups.items()):
+    for (cond, axis, kk, pos), vals in sorted(groups.items()):
         valid = [b for _, b, ok in vals if ok]
-        aggregated.append({"condition": cond, "k_checkpoint": kc, "axis": axis, "k": kk, "position": pos, "n_seeds": len(vals),
+        aggregated.append({"condition": cond, "axis": axis, "k": kk, "position": pos, "n_seeds": len(vals),
                            "n_valid": len(valid), "b_step1_mean": float(np.mean(valid)) if valid else float("nan"),
                            "b_step1_sd": float(np.std(valid, ddof=1)) if len(valid) > 1 else float("nan"),
                            "seeds_valid": " ".join(str(s) for s, _, ok in vals if ok)})
@@ -112,7 +132,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("dirs", type=Path, nargs="*")
     parser.add_argument("--root", type=Path, default=None, help="a results root: every finished probe measurement under it")
-    parser.add_argument("--checkpoint", type=int, default=None, help="keep this k only")
+    parser.add_argument("--checkpoint", type=int, default=None, help="keep this k only (one common checkpoint)")
+    parser.add_argument("--pair-k", nargs="*", default=[], help="<condition>:<seed>=<k>: the checkpoint of a pair measured at several")
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args(argv)
     dirs = list(args.dirs) + (find_probe_dirs(args.root) if args.root else [])
@@ -121,6 +142,12 @@ def main(argv: list[str] | None = None) -> int:
     measures = newest_per_seed([load_probe_dir(d) for d in dirs])
     if args.checkpoint is not None:
         measures = [m for m in measures if m["k"] == args.checkpoint]
+    pair_k = {}
+    for item in args.pair_k:
+        cond_seed, k = item.split("=")
+        cond, seed = cond_seed.rsplit(":", 1)
+        pair_k[(cond, int(seed))] = int(k)
+    measures = one_k_per_pair(measures, pair_k)
     by_seed, aggregated, extremes, seeds = aggregate(measures)
     args.out.mkdir(parents=True, exist_ok=True)
     write_csv(args.out / "probes_by_seed.csv", by_seed)
@@ -129,7 +156,7 @@ def main(argv: list[str] | None = None) -> int:
     (args.out / "summary.json").write_text(json.dumps({"seeds": seeds, "measures": [m["dir"].name for m in measures]}, indent=1),
                                            encoding="utf-8")
     for key, s in seeds.items():
-        print(f"{key}: {len(s)} seed(s) {s}", flush=True)
+        print(f"{key}: {len(s)} pair(s), [seed, checkpoint] {s}", flush=True)
     return 0
 
 

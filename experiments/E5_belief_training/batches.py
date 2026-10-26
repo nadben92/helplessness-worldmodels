@@ -32,12 +32,20 @@ WAVES: dict[str, dict[str, tuple]] = {
                  "E_sh100_experimental": ("E", "shuffle", 1.0, "experimental"), "F_sh100_experimental": ("F", "shuffle", 1.0, "experimental")},
     "e5_probes_baseline_A": {},  # probes only: seed A's baseline is E4's own pair, re-probed with E5's protocol
     # probes only, ONE batch after wave 2 at K = PROBES_CHECKPOINT (docs/e5/DECISIONS.md (31), (32)): every healthy pair
-    "e5_probes_all": {},
-    # docs/e5/DECISIONS.md (33): the five healthy shuffle runs continued from their resume point to EXTEND_TO steps
+    "e5_probes_all": {},  # NOT USED since (33)'s two sets: e5_probes_a, e5_probes_b
+    "e5_probes_a": {},
+    "e5_probes_b": {},
+    # docs/e5/DECISIONS.md (33): the healthy shuffle runs continued from their resume point to EXTEND_TO steps, in two
+    # batches (one pod at a time): seed A's pair first, then seed B's reference with the replacements E and F
+    "e5_extend_a": {"A_sh100_experimental": ("A", "shuffle", 1.0, "experimental"), "A_sh100_reference": ("A", "shuffle", 1.0, "reference")},
+    "e5_extend_b": {"B_sh100_reference": ("B", "shuffle", 1.0, "reference"), "E_sh100_experimental": ("E", "shuffle", 1.0, "experimental"),
+                    "F_sh100_experimental": ("F", "shuffle", 1.0, "experimental")},
+    # NOT USED (replaced by e5_extend_a and e5_extend_b, (33)): the five runs in one pod
     "e5_extend": {"A_sh100_experimental": ("A", "shuffle", 1.0, "experimental"), "A_sh100_reference": ("A", "shuffle", 1.0, "reference"),
                   "B_sh100_reference": ("B", "shuffle", 1.0, "reference"), "E_sh100_experimental": ("E", "shuffle", 1.0, "experimental"),
                   "F_sh100_experimental": ("F", "shuffle", 1.0, "experimental")},
 }
+EXTEND_BATCHES = ("e5_extend_a", "e5_extend_b", "e5_extend")
 EXTEND_TO = 650000  # environment steps, a ceiling: the user stops the pod once every pair meets E4's criterion (docs/e5/DECISIONS.md (33))
 # an experimental run measured against the reference of ANOTHER seed (docs/e5/DECISIONS.md (32)): the replacements of seed
 # B's experimental run (locked in) are paired with seed B's f = 1 reference. Absent: the run's own seed.
@@ -60,6 +68,10 @@ PROBE_PAIRS: dict[str, list[tuple]] = {
     # f = 1 pair, whose experimental run locked in, is replaced by E and F against B's reference)
     "e5_probes_all": [("A", "baseline", None), ("B", "baseline", None), ("A", "shuffle", 1.0), ("B", "shuffle", 1.0),
                       ("E", "shuffle", 1.0), ("F", "shuffle", 1.0)],
+    # docs/e5/DECISIONS.md (33): the probes in two sets, each shuffle pair at ITS first checkpoint meeting E4's criterion:
+    # the baselines A and B at PROBES_CHECKPOINT and seed A's f = 1 pair at K_a (--checkpoint); then E and F at K_b
+    "e5_probes_a": [("A", "baseline", None), ("B", "baseline", None), ("A", "shuffle", 1.0)],
+    "e5_probes_b": [("E", "shuffle", 1.0), ("F", "shuffle", 1.0)],
 }
 BATCHES = WAVES
 BATCH_CPUS = {name: 3 for name in BATCHES}  # as E4: 4 processes, one thread each, on the job's 3 CPUs
@@ -75,7 +87,7 @@ def batch_runs(batch: str) -> dict[str, tuple]:
 def train_args(batch: str, job: str, configuration: str, switch_step: int | None = None, post_steps: int | None = None) -> list[str]:
     """run_e5.py's arguments of one job."""
     seed_label, training, fraction, condition = batch_runs(batch)[job]
-    if batch == "e5_extend":  # the continuation of the finished run of this job (run_e5.py --extend auto)
+    if batch in EXTEND_BATCHES:  # the continuation of the finished run of this job (run_e5.py --extend auto)
         return ["--extend", "auto", "--to", str(EXTEND_TO), "--configuration", configuration, "--seed-label", seed_label,
                 "--training", training, "--fraction", str(fraction), "--condition", condition]
     args = ["--config", CONFIG, "--configuration", configuration, "--seed-label", seed_label, "--training", training]
@@ -102,7 +114,7 @@ def probe_args(batch: str, configuration: str, checkpoint: int, e4_results: str 
     out = []
     for seed_label, training, fraction in PROBE_PAIRS[batch]:
         # e5_probes_all: the baselines at PROBES_CHECKPOINT, the shuffle pairs at `checkpoint` (docs/e5/DECISIONS.md (33))
-        k = PROBES_CHECKPOINT if batch == "e5_probes_all" and training == "baseline" else int(checkpoint)
+        k = PROBES_CHECKPOINT if batch in ("e5_probes_all", "e5_probes_a") and training == "baseline" else int(checkpoint)
         args = ["--config", CONFIG, "--configuration", configuration, "--checkpoint", str(k), "--find-runs", "results",
                 "--training", training, "--seed-label", seed_label]
         ref_label = REFERENCE_SEED_OF.get((seed_label, training))

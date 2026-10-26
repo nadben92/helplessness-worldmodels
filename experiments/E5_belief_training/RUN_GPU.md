@@ -12,7 +12,8 @@ deadline; since 2026-10-23 the campaign is two waves (docs/e5/DECISIONS.md (32))
 |---|---|---|
 | `e5_wave1` | shuffle f = 1, seeds A and B (exp, ref): 4 runs (seed B's experimental run locked in) | about 45-50 h |
 | `e5_wave2` | seed B's baseline (exp, ref; the reference keeps its full state at 100,000 steps, for E8) and two shuffle f = 1 experimental runs, seeds E (402) and F (502), replacing seed B's and measured against seed B's f = 1 reference: 4 runs | about 45-50 h |
-| `e5_probes_all` | no training: every healthy pair of waves 1-2 and seed A's baseline (E4's own pair), at K = 300,000 | a few hours |
+| `e5_extend_a` / `e5_extend_b` | continuations of the shuffle runs (seed A's pair; then B's reference, E, F) from 290,000, stopped at their convergence checkpoint K_a / K_b (ceiling 650,000) | a and b: about 20-35 h each |
+| `e5_probes_a` / `e5_probes_b` | no training: baselines A, B at 300,000 and seed A's f = 1 pair at K_a; then E and F at K_b | about 1 h each |
 
 Shuffle f = 0.5 is abandoned for E5 (docs/e5/DECISIONS.md (31)); the immunisation moved to E8 (both in `batches.DEFERRED`,
 never submitted). The durations scale E4's 40-45 h for 300,000 steps (four runs in parallel) by the shuffle runs' extra
@@ -237,86 +238,105 @@ One run only: add `--resume results/E5_belief_training/<the run's directory name
 
 A run stopped by a training guard (`SeparationNotReachedError`, `CollapseAfterSwitchError`) is a result: report it.
 
-## Step 6b -- continue the shuffle runs before the probes (docs/e5/DECISIONS.md (33))
+## Step 6b -- continue the shuffle runs before the probes, in two batches (docs/e5/DECISIONS.md (33))
 
 At 300,000 steps the shuffle runs are still learning (mass 0.74-0.93, b(UD) -1.6 to -1.9; the baselines converged by
-100,000). The five healthy shuffle runs (A exp, A ref, B ref, E, F) continue from their last resume point (290,000), in
-ONE pod of 3 CPUs, in new run directories (the originals untouched), up to a ceiling of 650,000 steps; the user stops the
-pod as soon as every pair meets E4's criterion at one common checkpoint.
+100,000). They continue from their last resume point (290,000), in new run directories (the originals untouched), up
+to a ceiling of 650,000 steps, in TWO batches, one pod of 3 CPUs at a time, each stopped by the user at its own
+convergence checkpoint:
 
-**Launch** (after the user has pushed `e5`):
+| Batch | Runs | Its K | Then |
+|---|---|---|---|
+| `e5_extend_a` | f = 1 seed A, experimental and reference (2 runs) | K_a: its pair meets E4's criterion | `e5_probes_a` |
+| `e5_extend_b` | f = 1 seed B's reference, E (402) and F (502) experimental (3 runs) | K_b: both pairs (E and F against B's reference) meet it | `e5_probes_b` |
+
+(`e5_extend`, the five runs in one pod, stays defined but is NOT USED.) The order: `e5_extend_a`, its export, the probes
+`e5_probes_a` (step 7), then `e5_extend_b`, its export, `e5_probes_b`.
+
+**Launch a batch** (`B` = `e5_extend_a`, later `e5_extend_b`; after the user has pushed `e5`):
 
 ```bash
 cd /scratch/helplessness-worldmodels-e5
 git pull --ff-only && git status --short --untracked-files=no                                             # prints nothing
-python experiments/E5_belief_training/submit_kubeflow.py --batch e5_extend --repo-dir /scratch/helplessness-worldmodels-e5 --dry-run
-python experiments/E5_belief_training/submit_kubeflow.py --batch e5_extend --repo-dir /scratch/helplessness-worldmodels-e5
+python experiments/E5_belief_training/submit_kubeflow.py --batch $B --repo-dir /scratch/helplessness-worldmodels-e5 --dry-run
+python experiments/E5_belief_training/submit_kubeflow.py --batch $B --repo-dir /scratch/helplessness-worldmodels-e5
 ```
 
-The dry run shows `"cpus": 3` and five jobs `run_e5.py --extend auto --to 650000 ...` (the newest finished run of each
-seed and condition, from its `checkpoints/resume.pt`). Checkpoints every 25,000 steps past 300,000 (every assignment
-measured every 50,000).
+The dry run shows `"cpus": 3` and the batch's jobs, each `run_e5.py --extend auto --to 650000 ...` (the newest finished
+run of that seed and condition, from its `checkpoints/resume.pt`). Checkpoints every 25,000 steps past 300,000 (every
+assignment measured every 50,000).
 
-**Watch the convergence** (any time, readable while the runs train; E and F are paired with B's reference by
-themselves):
+**Watch the convergence** (any time, readable while the runs train):
 
 ```bash
-python experiments/E5_belief_training/check_wave.py --batch e5_extend --out exports/e5_extend_check.json
+python experiments/E5_belief_training/check_wave.py --batch $B --out exports/${B}_check.json
 ```
 
-Its last lines: `PAIRS ... converged at [...]` for each pair and `ALL 3 PAIRS MEET E4's CRITERION AT: [...]`. As soon
-as that list is not empty, its first value is **K**.
+Its last line, `ALL <n> PAIRS MEET E4's CRITERION AT: [...]` (n = 1 for `e5_extend_a`: seed A's pair; n = 2 for
+`e5_extend_b`: E and F against B's reference, which is in the batch). As soon as that list is not empty, its first value
+is the batch's K (`K_a`, then `K_b`).
 
 **Stop the pod** (only then):
 
 ```bash
-SUP=$(ls -d logs/kubeflow/e5-train-e5_extend-* | grep -v submission | tail -1)
+SUP=$(ls -d logs/kubeflow/e5-train-${B}-* | grep -v submission | tail -1)
 JOB=$(python -c "import json; print(json.load(open('$SUP.submission.json'))['job_id'])")
 echo $JOB
 kubectl delete trainjob $JOB
 kubectl get pods                                                   # its pod Terminating, then gone
-python experiments/E5_belief_training/check_wave.py --batch e5_extend --out exports/e5_extend_check.json   # K still listed
-ls results/E5_belief_training/*/checkpoints/agent_env$(printf %06d $K).pt                                 # the five runs' weights at K
+python experiments/E5_belief_training/check_wave.py --batch $B --out exports/${B}_check.json   # K still listed
+ls results/E5_belief_training/*/checkpoints/agent_env$(printf %06d $K).pt                       # the batch's runs' weights at K
 ```
 
 A stop leaves usable checkpoints: every `agent_env<N>.pt` is written atomically (whole or absent; at most an orphan
 `.tmp`), and a checkpoint appears in the records only after its weights are saved. The stopped runs keep status
-`running` (they are not failed: the check and the probe plan keep them); a truncated last record line is ignored. They
-have no `replay_final.npz` (not needed by the probes).
+`running` (not failed: the check and the probe plan keep them); a truncated last record line is ignored. They have no
+`replay_final.npz` (not needed by the probes).
 
 **Export** (with the weights at K):
 
 ```bash
-python experiments/E5_belief_training/export_batch.py create --batch e5_extend --configuration p1-b-d1 --weights-checkpoints $K
+python experiments/E5_belief_training/export_batch.py create --batch $B --configuration p1-b-d1 --weights-checkpoints $K
 ```
 
-If 650,000 is reached without a common K: report the check; a further continuation (a larger `EXTEND_TO`) starts from
-each continuation's own resume point.
+If 650,000 is reached without K: report the check; a further continuation (a larger `EXTEND_TO`) starts from each
+continuation's own resume point.
 
-## Step 7 -- the probes: ONE batch after wave 2, at K = 300,000 (docs/e5/DECISIONS.md (31), (32))
+## Step 7 -- the probes, in two sets (docs/e5/DECISIONS.md (33))
 
-After wave 2 has finished, been exported and checked, every healthy pair of waves 1 and 2 is probed in one batch,
-`e5_probes_all`: the baselines at 300,000 (`batches.PROBES_CHECKPOINT`, converged), the shuffle pairs at `--checkpoint`
-(the continuations' common convergence checkpoint K of step 6b): seed A's baseline (E4's own pair of p1-b-d1, under
-`--e4-results`), seed B's baseline, shuffle f = 1 seed A, and the replacements E and F against seed B's f = 1 reference.
-At submission (dry run included), a pair is LEFT OUT, with its reason printed, when one of its runs is not `done`, never
-switched, locked in (check_wave.py's criteria) or lacks its weights at K: seed B's own f = 1 pair (its experimental run
-locked in) is left out this way, and a replacement that fails is too; if both replacements succeed, both are probed.
+Each shuffle pair is probed at ITS first checkpoint meeting E4's criterion (K_a, K_b), the baselines at 300,000
+(converged): comparable by their level of learning, not by their number of steps.
+
+**First set, `e5_probes_a`** (after `e5_extend_a` is stopped and exported; before `e5_extend_b`): baselines A (E4's own
+pair of p1-b-d1, under `--e4-results`) and B at 300,000, seed A's f = 1 pair at K_a:
 
 ```bash
 cd /scratch/helplessness-worldmodels-e5
-python experiments/E5_belief_training/submit_kubeflow.py --batch e5_probes_all --phase probes --checkpoint 300000     --e4-results /scratch/helplessness-worldmodels-e4/results --repo-dir /scratch/helplessness-worldmodels-e5 --dry-run
-python experiments/E5_belief_training/submit_kubeflow.py --batch e5_probes_all --phase probes --checkpoint 300000     --e4-results /scratch/helplessness-worldmodels-e4/results --repo-dir /scratch/helplessness-worldmodels-e5
+python experiments/E5_belief_training/submit_kubeflow.py --batch e5_probes_a --phase probes --checkpoint $K_a     --e4-results /scratch/helplessness-worldmodels-e4/results --repo-dir /scratch/helplessness-worldmodels-e5 --dry-run
+python experiments/E5_belief_training/submit_kubeflow.py --batch e5_probes_a --phase probes --checkpoint $K_a     --e4-results /scratch/helplessness-worldmodels-e4/results --repo-dir /scratch/helplessness-worldmodels-e5
+python experiments/E5_belief_training/export_batch.py create --batch e5_probes_a --configuration p1-b-d1
 ```
 
-The dry run prints the `LEFT OUT <job>: <reason>` lines, then the jobs; two run at a time on the GPU; 150 walks, the full
-grid, the validity of every probe and the reconstruction diagnostic (docs/e5/DECISIONS.md (22)). Then one export per wave
-(the probes are included) and, locally, `export_batch.py verify` and the aggregation over the seeds of each condition (2
-to 3: the replacements count as experimental runs of f = 1 against B's reference):
+Three jobs (`probes_A_base_k300000`, `probes_B_base_k300000`, `probes_A_sh100_k<K_a>`), two at a time on the GPU.
+
+**Second set, `e5_probes_b`** (after `e5_extend_b` is stopped and exported): E and F against B's reference at K_b:
 
 ```bash
-python experiments/E5_belief_training/analyse_probes.py --root <extracted results root(s)> --checkpoint 300000 --out <dir>
+python experiments/E5_belief_training/submit_kubeflow.py --batch e5_probes_b --phase probes --checkpoint $K_b     --repo-dir /scratch/helplessness-worldmodels-e5 --dry-run
+python experiments/E5_belief_training/submit_kubeflow.py --batch e5_probes_b --phase probes --checkpoint $K_b     --repo-dir /scratch/helplessness-worldmodels-e5
+python experiments/E5_belief_training/export_batch.py create --batch e5_probes_b --configuration p1-b-d1
 ```
+
+At submission (dry run included), a pair is LEFT OUT, with its reason printed, when one of its runs failed, never
+switched, locked in, or lacks its weights at its checkpoint. 150 walks, the full grid, the validity of every probe and
+the reconstruction diagnostic (docs/e5/DECISIONS.md (22)). Locally, `export_batch.py verify`, then the two sets merged,
+each pair at its own checkpoint (a pair measured at several checkpoints needs `--pair-k <condition>:<seed>=<k>`):
+
+```bash
+python experiments/E5_belief_training/analyse_probes.py --root <extracted results root(s) of both sets> --out <dir>
+```
+
+(`e5_probes_all`, one set at one common checkpoint, stays defined but is NOT USED.)
 
 **Keep every checkpoint until then.** The probes need every run's `checkpoints/agent_env<K>.pt` on the volume, E4's runs of
 p1-b-d1 included (`/scratch/helplessness-worldmodels-e4/results/E4_generalization_gradient/`). Nothing in the code deletes
