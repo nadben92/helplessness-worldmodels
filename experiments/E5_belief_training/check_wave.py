@@ -21,8 +21,8 @@ another wave is added):
   converged at      the checkpoints where that criterion holds (the candidates for the common probe checkpoint)
 A run is flagged ATTENTION when it failed, never switched, had a stretch of 5 evaluations below 1.0 bit after its switch,
 or misses the mass threshold at its last checkpoint; LOCK-IN when it has not switched and its statistic stayed below 0.01
-bit on every evaluation from gradient step 6,100 on (at least 20) -- a locked-in run is EXCLUDED from every pair (and so
-from the probes), listed apart; NaN/inf when a training loss present in a record or
+bit on at least 95% of the evaluations from gradient step 6,100 on (at least 20) -- a run locked in, never switched or
+not done is EXCLUDED from every pair (and so from the probes), listed apart; NaN/inf when a training loss present in a record or
 the statistic is not finite (the agent heads' losses are ABSENT before the switch -- the console prints them as nan --
 and are not flagged); a pair when it misses E4's criterion at its last checkpoint.
 
@@ -48,9 +48,10 @@ LOG2_5 = math.log2(5)
 ROLES = {"ud": "nw", "cd": "se", "neutral": "ne", "other": "sw"}
 QUADRANTS = ("nw", "ne", "se", "sw")
 MASS_MIN, B_UD_TOL, B_CD_MAX, COLLAPSE_BITS, COLLAPSE_CONSECUTIVE = 0.97, 0.15, 0.1, 1.0, 5
-# lock-in (docs/e5/DECISIONS.md (32)): no switch, and the switch statistic below LOCK_BITS on every evaluation from the
-# late threshold's activation on (LOCK_AFTER) over at least LOCK_MIN_EVALS evaluations
-LOCK_BITS, LOCK_AFTER, LOCK_MIN_EVALS = 0.01, 6100, 20
+# lock-in (docs/e5/DECISIONS.md (32), (33)): no switch, and the switch statistic below LOCK_BITS on at least LOCK_SHARE of
+# the evaluations from the late threshold's activation on (LOCK_AFTER), at least LOCK_MIN_EVALS of them (isolated spikes
+# allowed: seed B's locked-in run had 19 of 1,375 evaluations between 0.01 and 0.042 bit)
+LOCK_BITS, LOCK_AFTER, LOCK_MIN_EVALS, LOCK_SHARE = 0.01, 6100, 20, 0.95
 
 
 def read_run(run_dir: Path) -> dict:
@@ -82,12 +83,13 @@ def collapse_of(run: dict, switch_grad: int | None) -> dict:
 
 
 def lock_in_of(run: dict, switched: bool) -> dict | None:
-    """Not switched, and the statistic below LOCK_BITS on every evaluation from LOCK_AFTER on: the latent locked on the
-    background (docs/e5/DECISIONS.md (31), (32))."""
+    """Not switched, and the statistic below LOCK_BITS on at least LOCK_SHARE of the evaluations from LOCK_AFTER on: the
+    latent locked on the background (docs/e5/DECISIONS.md (31)-(33))."""
     after = [float(e[1]) for r in run["records"] for e in (r.get("switch_pairs") or {}).get("evals", []) if int(e[0]) >= LOCK_AFTER]
     if switched or len(after) < LOCK_MIN_EVALS:
         return None
-    return {"evaluations": len(after), "max": max(after)} if max(after) < LOCK_BITS else None
+    share = sum(v < LOCK_BITS for v in after) / len(after)
+    return {"evaluations": len(after), "share_below": share, "max": max(after)} if share >= LOCK_SHARE else None
 
 
 def non_finite_of(run: dict) -> list[str]:
@@ -104,9 +106,29 @@ def non_finite_of(run: dict) -> list[str]:
     return out
 
 
+def number(v) -> float | None:
+    """A recorded number, or None when it was not measured: the records write a NaN as null (pipeline.runtime._jsonable),
+    e.g. a quadrant with no measured state at the first checkpoints (no context of that region in the replay yet)."""
+    if v is None:
+        return None
+    v = float(v)
+    return v if math.isfinite(v) else None
+
+
 def mass_of(record: dict) -> dict:
+    """Quadrant -> the prior's mass on the true successor, None when not measured."""
     m = record["e4"]["real_context"]["mass_true_by_region"]
-    return {q: m[q] for q in QUADRANTS}
+    return {q: number(m.get(q)) for q in QUADRANTS}
+
+
+def missing_of(run: dict) -> list[str]:
+    """The checkpoints where a quadrant's mass or a slot's I at step 1 was not measured (null in the record)."""
+    out = []
+    for r in run["records"]:
+        gaps = [f"mass {q}" for q, v in mass_of(r).items() if v is None] + [f"I step 1 {q}" for q in QUADRANTS if step1(r, q) is None]
+        if gaps:
+            out.append(f"{r['env_step']}: {', '.join(gaps)}")
+    return out
 
 
 def mean_over_assignments(run: dict) -> tuple[int | None, dict | None]:
@@ -117,16 +139,22 @@ def mean_over_assignments(run: dict) -> tuple[int | None, dict | None]:
     return None, None
 
 
-def step1(record: dict, slot: str) -> float:
-    return float(record["e4"]["walks"][slot]["I_curve"][0])
+def step1(record: dict, slot: str) -> float | None:
+    return number(record["e4"]["walks"][slot]["I_curve"][0])
 
 
 def criterion(exp: dict, ref: dict) -> dict:
-    b = {q: step1(exp, q) - step1(ref, q) for q in QUADRANTS}
-    mass_ok = all(v >= MASS_MIN for rec in (exp, ref) for v in mass_of(rec).values())
+    """E4's convergence criterion at one checkpoint; a value not measured makes it unmet (missing lists what)."""
+    e1, r1 = ({q: step1(rec, q) for q in QUADRANTS} for rec in (exp, ref))
+    b = {q: None if e1[q] is None or r1[q] is None else e1[q] - r1[q] for q in QUADRANTS}
+    masses = [v for rec in (exp, ref) for v in mass_of(rec).values()]
+    missing = [f"mass ({sum(v is None for v in masses)} quadrant value(s))"] if any(v is None for v in masses) else []
+    missing += [f"b {q}" for q in QUADRANTS if b[q] is None]
+    mass_ok = not any(v is None for v in masses) and all(v >= MASS_MIN for v in masses)
     corridor_like = [ROLES["cd"], ROLES["neutral"], ROLES["other"]]
-    ok = mass_ok and abs(b[ROLES["ud"]] + LOG2_5) <= B_UD_TOL and all(abs(b[q]) <= B_CD_MAX for q in corridor_like)
-    return {"b_step1_by_slot": b, "mass_ok": mass_ok, "converged": ok}
+    ok = (mass_ok and not missing and abs(b[ROLES["ud"]] + LOG2_5) <= B_UD_TOL
+          and all(abs(b[q]) <= B_CD_MAX for q in corridor_like))
+    return {"b_step1_by_slot": b, "mass_ok": mass_ok, "converged": ok, "missing": missing}
 
 
 def check_run(run: dict) -> dict:
@@ -137,10 +165,13 @@ def check_run(run: dict) -> dict:
     k_all, mo = mean_over_assignments(run)
     lock = lock_in_of(run, sw["grad_step"] is not None)
     nan = non_finite_of(run)
+    missing = missing_of(run)
     flags = []
+    if missing:
+        flags.append(f"NOT MEASURED (null) at checkpoint(s) {'; '.join(missing[:4])}" + (" ..." if len(missing) > 4 else ""))
     if lock is not None:
-        flags.append(f"LOCK-IN: no switch, statistic < {LOCK_BITS} bit on all {lock['evaluations']} evaluations from {LOCK_AFTER} on "
-                     f"(max {lock['max']:.4f})")
+        flags.append(f"LOCK-IN: no switch, statistic < {LOCK_BITS} bit on {lock['share_below']:.1%} of the {lock['evaluations']} "
+                     f"evaluations from {LOCK_AFTER} on (max {lock['max']:.4f})")
     if nan:
         flags.append(f"NaN/inf at checkpoint(s) {'; '.join(nan[:3])}" + (" ..." if len(nan) > 3 else ""))
     if run["meta"].get("status") != "done":
@@ -149,13 +180,14 @@ def check_run(run: dict) -> dict:
         flags.append("never switched")
     if col["longest_below_1bit"] >= COLLAPSE_CONSECUTIVE:
         flags.append(f"{col['longest_below_1bit']} consecutive evaluations below {COLLAPSE_BITS} bit after the switch")
-    if mass and min(mass.values()) < MASS_MIN:
-        flags.append(f"quadrant mass {min(mass.values()):.3f} < {MASS_MIN}")
+    measured = [v for v in mass.values() if v is not None]
+    if measured and min(measured) < MASS_MIN:
+        flags.append(f"quadrant mass {min(measured):.3f} < {MASS_MIN}")
     return {"run": run["name"], "tag": run["tag"], "role": run["role"], "seed": run["seed"], "status": run["meta"].get("status"),
             "last_env_step": last["env_step"] if last else None, "switch": sw, "collapse": col, "mass_by_quadrant": mass,
             "mass_by_type_mean_over_assignments": None if mo is None else {"env_step": k_all, **mo.get("mass_true_by_type", {})},
             "success_rate": last.get("success_rate") if last else None, "episode_length": last.get("episode_length") if last else None,
-            "lock_in": lock, "non_finite": nan, "attention": flags}
+            "lock_in": lock, "non_finite": nan, "not_measured": missing, "attention": flags}
 
 
 def check_pair(exp: dict, ref: dict) -> dict:
@@ -169,10 +201,14 @@ def check_pair(exp: dict, ref: dict) -> dict:
     _, mo_r = mean_over_assignments(ref)
     by_type = None
     if mo_e and mo_r:
-        by_type = {t: mo_e["I_step1_by_type"][t] - mo_r["I_step1_by_type"][t] for t in mo_e["I_step1_by_type"]}
+        by_type = {t: None if number(mo_e["I_step1_by_type"][t]) is None or number(mo_r["I_step1_by_type"][t]) is None
+                   else number(mo_e["I_step1_by_type"][t]) - number(mo_r["I_step1_by_type"][t]) for t in mo_e["I_step1_by_type"]}
     out = {"pair": f"{exp['tag']} seed {exp['seed']}", "last_common_env_step": last, "b_step1_by_slot": crit[last]["b_step1_by_slot"],
            "b_step1_by_type_mean_over_assignments": by_type, "converged_at_last": crit[last]["converged"],
            "converged_at": [s for s, c in crit.items() if c["converged"]], "attention": []}
+    unmeasured = [f"{s}: {', '.join(c['missing'])}" for s, c in crit.items() if c["missing"]]
+    if unmeasured:
+        out["attention"].append(f"criterion not computable (value not measured) at {'; '.join(unmeasured[:4])}" + (" ..." if len(unmeasured) > 4 else ""))
     if not crit[last]["converged"]:
         out["attention"].append("E4's convergence criterion not met at the last checkpoint")
     return out
@@ -228,7 +264,9 @@ def main(argv: list[str] | None = None) -> int:
     runs = [read_run(d) for d in dirs]
     run_checks = [check_run(r) for r in runs]
     pairs, excluded = [], []
-    locked = {c["run"] for c in run_checks if c["lock_in"] is not None}
+    # a run in no pair (docs/e5/DECISIONS.md (32), (33)): locked in, never switched or not done -- as the probe plan
+    locked = {c["run"]: ("LOCK-IN" if c["lock_in"] is not None else "never switched" if c["switch"]["grad_step"] is None else f"status {c['status']}")
+              for c in run_checks if c["lock_in"] is not None or c["switch"]["grad_step"] is None or c["status"] != "done"}
     repo = args.repo_dir.resolve()
     for exp in (r for r in runs if r["role"] == "experimental"):
         ref_seed = reference_seed(repo, exp["tag"], exp["seed"])
@@ -237,7 +275,7 @@ def main(argv: list[str] | None = None) -> int:
             continue
         if exp["name"] in locked or ref["name"] in locked:  # docs/e5/DECISIONS.md (32): a locked-in run is in no pair
             excluded.append({"pair": f"{exp['tag']} seed {exp['seed']} (reference seed {ref_seed})",
-                             "reason": "LOCK-IN: " + ", ".join(r["name"] for r in (exp, ref) if r["name"] in locked)})
+                             "reason": "; ".join(f"{r['role']} {locked[r['name']]}" for r in (exp, ref) if r["name"] in locked)})
             continue
         pair = check_pair(exp, ref)
         pair["reference_seed"] = ref_seed
@@ -247,18 +285,18 @@ def main(argv: list[str] | None = None) -> int:
         sw, col = c["switch"], c["collapse"]
         print(f"  {c['tag']} seed {c['seed']} {c['role']}: {c['status']} at {c['last_env_step']} | switch {fmt(sw['grad_step'])} "
               f"(env {fmt(sw['env_step'])}, {sw['rule'] or '-'}) | after it: longest {col['longest_below_1bit']} below 1 bit, min "
-              f"{fmt(col['min_after_switch'])}, last {fmt(col['last'])} | mass min {fmt(min(c['mass_by_quadrant'].values()) if c['mass_by_quadrant'] else None)} "
+              f"{fmt(col['min_after_switch'])}, last {fmt(col['last'])} | mass min {fmt(min([v for v in c['mass_by_quadrant'].values() if v is not None], default=None))} "
               f"| success {fmt(c['success_rate'])} | {'ATTENTION: ' + '; '.join(c['attention']) if c['attention'] else 'OK'}")
     print("PAIRS")
     for p in pairs:
         b = p.get("b_step1_by_slot", {})
         print(f"  {p['pair']}: at {p.get('last_common_env_step')} b step 1 UD {fmt(b.get(ROLES['ud']))} CD {fmt(b.get(ROLES['cd']))} "
               f"neutral {fmt(b.get(ROLES['neutral']))} other {fmt(b.get(ROLES['other']))}"
-              + (f" | by type over assignments {({t: round(v, 3) for t, v in p['b_step1_by_type_mean_over_assignments'].items()})}"
+              + (f" | by type over assignments {({t: None if v is None else round(v, 3) for t, v in p['b_step1_by_type_mean_over_assignments'].items()})}"
                  if p.get("b_step1_by_type_mean_over_assignments") else "")
               + f" | converged at {p.get('converged_at')} | {'ATTENTION: ' + '; '.join(p['attention']) if p['attention'] else 'OK'}")
     if excluded:
-        print("EXCLUDED (locked in: no pair, no probe)")
+        print("EXCLUDED (a run locked in, never switched or not done: no pair, no probe)")
         for e in excluded:
             print(f"  {e['pair']}: {e['reason']}")
     if args.out:

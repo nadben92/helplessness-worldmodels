@@ -33,11 +33,16 @@ WAVES: dict[str, dict[str, tuple]] = {
     "e5_probes_baseline_A": {},  # probes only: seed A's baseline is E4's own pair, re-probed with E5's protocol
     # probes only, ONE batch after wave 2 at K = PROBES_CHECKPOINT (docs/e5/DECISIONS.md (31), (32)): every healthy pair
     "e5_probes_all": {},
+    # docs/e5/DECISIONS.md (33): the five healthy shuffle runs continued from their resume point to EXTEND_TO steps
+    "e5_extend": {"A_sh100_experimental": ("A", "shuffle", 1.0, "experimental"), "A_sh100_reference": ("A", "shuffle", 1.0, "reference"),
+                  "B_sh100_reference": ("B", "shuffle", 1.0, "reference"), "E_sh100_experimental": ("E", "shuffle", 1.0, "experimental"),
+                  "F_sh100_experimental": ("F", "shuffle", 1.0, "experimental")},
 }
+EXTEND_TO = 500000  # environment steps (docs/e5/DECISIONS.md (33))
 # an experimental run measured against the reference of ANOTHER seed (docs/e5/DECISIONS.md (32)): the replacements of seed
 # B's experimental run (locked in) are paired with seed B's f = 1 reference. Absent: the run's own seed.
 REFERENCE_SEED_OF: dict[tuple[str, str], str] = {("E", "shuffle"): "B", ("F", "shuffle"): "B"}
-PROBES_CHECKPOINT = 300000
+PROBES_CHECKPOINT = 300000  # the baselines' probe checkpoint (converged from 100,000 on); the shuffle pairs' is --checkpoint
 DEFERRED: dict[str, dict[str, tuple]] = {
     # f = 0.5: abandoned for E5 (docs/e5/DECISIONS.md (31)), kept defined
     "f050": {"A_sh050_experimental": ("A", "shuffle", 0.5, "experimental"), "A_sh050_reference": ("A", "shuffle", 0.5, "reference"),
@@ -58,6 +63,7 @@ PROBE_PAIRS: dict[str, list[tuple]] = {
 }
 BATCHES = WAVES
 BATCH_CPUS = {name: 3 for name in BATCHES}  # as E4: 4 processes, one thread each, on the job's 3 CPUs
+BATCH_CPUS["e5_extend"] = 4  # five processes
 PROBES_MAX_PARALLEL = 2
 
 
@@ -70,6 +76,9 @@ def batch_runs(batch: str) -> dict[str, tuple]:
 def train_args(batch: str, job: str, configuration: str, switch_step: int | None = None, post_steps: int | None = None) -> list[str]:
     """run_e5.py's arguments of one job."""
     seed_label, training, fraction, condition = batch_runs(batch)[job]
+    if batch == "e5_extend":  # the continuation of the finished run of this job (run_e5.py --extend auto)
+        return ["--extend", "auto", "--to", str(EXTEND_TO), "--configuration", configuration, "--seed-label", seed_label,
+                "--training", training, "--fraction", str(fraction), "--condition", condition]
     args = ["--config", CONFIG, "--configuration", configuration, "--seed-label", seed_label, "--training", training]
     if condition is not None:
         args += ["--condition", condition]
@@ -93,7 +102,9 @@ def probe_args(batch: str, configuration: str, checkpoint: int, e4_results: str 
     immunisation)."""
     out = []
     for seed_label, training, fraction in PROBE_PAIRS[batch]:
-        args = ["--config", CONFIG, "--configuration", configuration, "--checkpoint", str(int(checkpoint)), "--find-runs", "results",
+        # e5_probes_all: the baselines at PROBES_CHECKPOINT, the shuffle pairs at `checkpoint` (docs/e5/DECISIONS.md (33))
+        k = PROBES_CHECKPOINT if batch == "e5_probes_all" and training == "baseline" else int(checkpoint)
+        args = ["--config", CONFIG, "--configuration", configuration, "--checkpoint", str(k), "--find-runs", "results",
                 "--training", training, "--seed-label", seed_label]
         ref_label = REFERENCE_SEED_OF.get((seed_label, training))
         if ref_label is not None:
@@ -105,5 +116,5 @@ def probe_args(batch: str, configuration: str, checkpoint: int, e4_results: str 
                 raise ValueError(f"the {training} of seed A is (or is measured against) E4's own runs: --e4-results <E4 results root>")
             args += ["--e4-results", e4_results]
         tag = {"baseline": "base", "immunisation": "imm"}.get(training) or f"sh{int(round(fraction * 100)):03d}"
-        out.append((f"probes_{seed_label}_{tag}_k{int(checkpoint):06d}", args))
+        out.append((f"probes_{seed_label}_{tag}_k{k:06d}", args))
     return out

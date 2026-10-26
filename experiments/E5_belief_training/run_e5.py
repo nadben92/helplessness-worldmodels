@@ -255,6 +255,42 @@ def run_spec(cfg: dict) -> dict:
     return cfg["e5"]["run"]
 
 
+def extension_config(run_dir: Path, to: int, every: int, all_every: int) -> tuple[dict, Path]:
+    """The config of the continuation of a finished run (docs/e5/DECISIONS.md (33)): its own resolved config, unchanged
+    (the same planned budget, so the same beta_rep ramp; the same procedure), with the run continued to `to` environment
+    steps (total_env_steps), checkpoints every `every` steps past its grid and every assignment measured every `all_every`
+    steps past it (shuffle runs). It starts from the run's last full state (checkpoints/resume.pt, its last resume point:
+    the steps after it up to the run's end are recomputed, identical on the same device)."""
+    cfg = e5_setup.load_config(run_dir / "config.yaml")  # a continuation may itself be continued, from its own resume point
+    state_path = run_dir / "checkpoints" / "resume.pt"
+    if not state_path.is_file():
+        raise SystemExit(f"{run_dir}: no checkpoints/resume.pt to continue from")
+    last = max(int(c) for c in cfg["checkpoints"]["grid"])
+    if to <= last:
+        raise SystemExit(f"--to {to} must exceed the run's last checkpoint {last}")
+    cfg["checkpoints"]["grid"] = sorted(set(cfg["checkpoints"]["grid"]) | set(range(last + every, to + 1, every)) | {to})
+    sr = cfg["e5"].get("shuffle_records") or {}
+    if sr.get("all_assignments_at") is not None:
+        sr["all_assignments_at"] = sorted(set(sr["all_assignments_at"]) | set(range(last + all_every, to + 1, all_every)) | {to})
+    chain = list(cfg["e5"]["run"].get("extension_chain") or []) + [str(run_dir)]
+    cfg["e5"]["run"] = {**cfg["e5"]["run"], "extend_to": int(to), "extended_from": str(run_dir), "extension_chain": chain}
+    return cfg, state_path
+
+
+def original_run(out_dir: Path, configuration: str, seed_label: str, training: str, condition: str, fraction) -> Path:
+    """The run to continue: the newest FINISHED run of (configuration, seed, training, condition) -- the original, or its
+    latest continuation (continued from its own resume point)."""
+    cfg = e5_setup.load_config(e5_setup.DEFAULT_CONFIG)
+    seed = e5_setup.configuration(cfg, configuration, seed_label)["seed"]
+    pattern = e5_setup.run_glob(configuration, training, condition, seed, fraction)
+    for d in sorted((Path(out_dir) / e5_setup.EXPERIMENT_ID).glob(pattern), reverse=True):
+        meta = yaml.safe_load((d / "meta.yaml").read_text(encoding="utf-8"))
+        run_cfg = yaml.safe_load((d / "config.yaml").read_text(encoding="utf-8"))
+        if meta.get("status") == "done" and (d / "checkpoints" / "resume.pt").is_file():
+            return d
+    raise SystemExit(f"no finished {training} {condition} run of {configuration} seed {seed} with a resume point under {out_dir}")
+
+
 def build(cfg: dict) -> tuple[dict, str, ClosedLoopHooks, dict]:
     """(conf, run_one condition, hooks, run_one keyword arguments) of the run described by cfg["e5"]["run"]."""
     spec = run_spec(cfg)
@@ -271,6 +307,8 @@ def build(cfg: dict) -> tuple[dict, str, ClosedLoopHooks, dict]:
         condition = "reference"
         hooks = immunisation_hooks(cfg, conf, int(spec["switch_step"]), int(spec["post_steps"]))
         kwargs["total_env_steps"] = int(spec["switch_step"]) + int(spec["post_steps"]) + int(cfg["episode"]["max_steps"])
+    if spec.get("extend_to") is not None:  # docs/e5/DECISIONS.md (33): a finished run continued to extend_to steps
+        kwargs["total_env_steps"] = int(spec["extend_to"])
     apply_e5_procedure(cfg)  # docs/e5/DECISIONS.md (19), (20): every E5 run, one procedure
     return conf, condition, hooks, kwargs
 
@@ -294,9 +332,28 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default=None)
     parser.add_argument("--out-dir", type=Path, default=e5_setup.REPO_ROOT / "results")
     parser.add_argument("--resume", type=Path, default=None, help="continue the interrupted run in this directory")
+    parser.add_argument("--extend", default=None,
+                        help="continue a FINISHED run to --to steps, in a new run directory (docs/e5/DECISIONS.md (33)): its directory, "
+                             "or `auto` (the newest finished, non-continued run of --configuration/--seed-label/--training/--condition/--fraction)")
+    parser.add_argument("--to", type=int, default=None, help="--extend: the new length in environment steps")
+    parser.add_argument("--extend-every", type=int, default=25000, help="--extend: checkpoints every this many steps past the grid")
+    parser.add_argument("--extend-all-every", type=int, default=50000, help="--extend: every assignment measured every this many steps")
     args = parser.parse_args(argv)
     os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
-    if args.resume:
+    if args.extend is not None:
+        if args.to is None:
+            parser.error("--extend needs --to")
+        original = (original_run(args.out_dir, args.configuration, args.seed_label, args.training, args.condition, args.fraction)
+                    if args.extend == "auto" else Path(args.extend))
+        cfg, branch = extension_config(original, args.to, args.extend_every, args.extend_all_every)
+        spec = cfg["e5"]["run"]
+        conf = e5_setup.configuration(cfg, spec["configuration"], spec["seed_label"])
+        name = make_run_name(two_zones.GRID_SHAPE, e5_setup.zone_preset(spec["configuration"], spec["training"], spec.get("fraction")),
+                             e5_setup.pair_role(spec["training"], spec.get("condition") or "reference"), e5_setup.AGENT_TYPE, conf["seed"])
+        run_dir = make_run_dir(args.out_dir, e5_setup.EXPERIMENT_ID, name)
+        max_env_steps, resume = None, False
+        print(f"[run_e5] continuing {original.name} from its resume point to {args.to} steps in {run_dir.name}", flush=True)
+    elif args.resume:
         run_dir = args.resume
         cfg = e5_setup.load_config(run_dir / "config.yaml")
         meta = yaml.safe_load((run_dir / "meta.yaml").read_text(encoding="utf-8"))
