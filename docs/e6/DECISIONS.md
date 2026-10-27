@@ -463,3 +463,27 @@ Task 2 is run, with the policy's 16 draws per action.
 - **Episode replay of (b)** (complement): the references' plan-B runs and E6's reference rerun with the policy on Q_b
   (computed on the act generator itself: the generator is consumed exactly as by `q_values`), epsilon-greedy, measured in
   the zone.
+
+## 2026-10-27 (62) -- D7: b against the controllability the critic reads (implementer)
+
+- **Measures per zone step**, D6's (`lookahead.channel_q`, on a clone of the act generator: the policy's own 16 draws):
+  C1 = the strict argmax of V(h'_a, z_bar) is directed; C2 = Spearman's rho between V(h'_a, z_bar) and minus the distance
+  to the goal of a's true successor; C3 = the greedy directed share (training's tie set) of variant (b), common h; b =
+  b_local. **z_bar**: main, D6's (16 draws of the mixture of the 5 priors, shared by the actions); second, the MEAN of the
+  5 priors' probabilities (a soft z, the mixture's expectation; deterministic) -- `channel_q`'s new option `mean_zbar`
+  (off by default: D6's outputs unchanged).
+- **Task 1** (natural agents): E6's training-image episodes of both models, rerun with the counterfactual q_fn (as D6),
+  every zone step measured and well localised (sensitivity: localised or not); plan B's induced references rerun the same
+  way for the overlay (D6's run filter). Recovery: the exposed steps by bin of b and by index j of the first stay in the
+  zone. Bins of 0.25 bit, < 30 steps masked, 95% bootstrap by episodes within each agent.
+- **Task 2** (correction A): the constrained stepwise correction at alpha = 1 on the training image, each agent's setting
+  of (48) (the recorded plan-A run: p1-a lam 0.1 mu_pos 1; p1-b lam 0.01 mu_pos 1; p2-a lam 0.01 mu_pos 10; p2-b lam 0.1
+  mu_pos 1) and lam 0.01 with mu_pos 1 and 10 where different; mu_goal from the agent's sweep row of that (lam, mu_pos).
+  The hook (run_e7_apply.stepwise_hook, unchanged) is wrapped to keep the step's UNCORRECTED h and to measure its I (its
+  own generator: the run's streams are untouched); the q_fn computes C1-C3 on the corrected and on the uncorrected h
+  from two clones of the act generator and of the z_bar generator (common random numbers), and returns the policy's own Q
+  on the corrected h. Before / after on every corrected step: b_raw = I(h) - I_ref_fresh(s), b = I(h + d) -
+  I_ref_fresh(s). The recorded run's rows (directed share, b at step 1, localisation) are reproduced exactly (checked).
+- **Position on the natural curve**: per bin of b (corrected steps, after correction), C1 of the corrected steps minus C1
+  of the natural agents (exposed and references pooled) in the same bin, weighted by the corrected steps over the bins
+  where both have >= 30 steps.

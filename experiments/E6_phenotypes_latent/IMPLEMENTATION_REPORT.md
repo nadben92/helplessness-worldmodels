@@ -1119,3 +1119,31 @@ b ≈ −1,5, pour un écart (a) références induites − (a) exposés de 0,55.
 | rejeu de (b) (références, 15 jeux) | 1 080–1 330 s |
 
 Environ 24 min de temps réel ; l'analyse prend moins de 3 min.
+
+---
+
+# D7 : concordance de b et de la contrôlabilité vue par le critic (2026-10-27)
+
+## 20. D7
+
+Décision (62). Mêmes 4 agents d'E4, CPU, poids gelés, k = 1. C1, C2, C3 comme en D6 (test 2 et variante (b)).
+
+### Formes attendues (écrites et commitées avant tout calcul)
+
+Pas de zone mesurés et bien localisés ; « agents naturels » = exposés et références d'E6, sans intervention.
+
+1. **Tâche 1.**
+   - C2 croît avec b : ρ de Spearman pas à pas entre b et C2 ≥ 0,5, tous agents naturels confondus.
+   - Exposés à b ≈ −2,1 (classes −2,25 et −2,0) : C1 au hasard (0,4 ± 0,10).
+   - Références à b ≈ 0 (classes −0,25 à +0,25) : C1 ≥ 0,85.
+2. **Tâche 1, récupération des exposés.** C1 et C2 croissent avec b sans saut brutal : ρ(b, C2) > 0 chez les exposés,
+   et aucun saut de C1 de plus de 0,25 entre deux classes voisines non masquées.
+3. **Tâche 1.** À b égal, les références induites de D6 sont au-dessus de la courbe des agents naturels : C1 plus haut
+   de plus de 0,10 dans les classes où les deux ont au moins 30 pas.
+4. **Tâche 2**, deux issues fixées à l'avance :
+   - **réelle** : ΔC1 > 0 et ΔC2 > 0 (IC au-dessus de 0), et les pas corrigés tombent sur la courbe des agents naturels
+     (écart pondéré de C1 ≤ 0,10 en valeur absolue) ;
+   - **mesure trompée** : Δb ≥ 1 bit mais ΔC1 ≤ 0,10, et les pas corrigés tombent sous la courbe (écart pondéré de C1
+     < −0,10).
+   Toute autre issue est rapportée comme intermédiaire, avec les chiffres. Le verdict est donné par agent et par réglage.
+5. **Sensibilité.** Avec le second z̄ (moyenne des 5 priors), les verdicts des formes 1 à 4 sont inchangés.
