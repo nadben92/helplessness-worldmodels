@@ -1147,3 +1147,118 @@ Pas de zone mesurés et bien localisés ; « agents naturels » = exposés et r�
      < −0,10).
    Toute autre issue est rapportée comme intermédiaire, avec les chiffres. Le verdict est donné par agent et par réglage.
 5. **Sensibilité.** Avec le second z̄ (moyenne des 5 priors), les verdicts des formes 1 à 4 sont inchangés.
+
+### Ce qui a été fait
+
+- **Tâche 1.** E6 (les deux modèles) et l'induction B ont été rejoués avec le `q_fn` contrefactuel de D6 et le second z̄
+  (`channel_q`, option `mean_zbar`). Rejeux identiques à D6 (états, actions, Q, V(h'_a, z̄), Q_b) et à E6 (4 agents sur
+  4).
+- **Tâche 2.** La correction contrainte pas à pas (α = 1, image d'entraînement) a été rejouée pour 10 couples (agent,
+  réglage) : le réglage enregistré de chaque agent, plus λ 0,01 avec μ_pos 1 et 10.
+  - Le hook d'origine est enveloppé pour garder le h non corrigé et mesurer son I.
+  - C1–C3 sont calculés avant et après correction sur les mêmes tirages (clones des générateurs).
+  - Les 4 runs enregistrés sont reproduits exactement : part dirigée, b au pas 1, localisation au pas 1 et dans la zone.
+- Poids identiques avant et après les 14 runs (hash).
+- Code : `run_e7_d7.py`, `analyse_e7_d7.py`. Sorties légères : `results/E7_dissociation/d7/` (`d7_bins.csv`,
+  `d7_corr.csv`, `d7_recovery.csv`, `d7_correction.csv`, `d7_identity.csv`, `d7_forms.json`, figure
+  `d7_concordance.png`, méta des 14 runs).
+
+### Écarts au prompt
+
+1. **Les runs de correction enregistrés sont ceux du § 11** (application de A), pas du § 15. λ 0,01 μ_pos 1 n'est le
+   réglage enregistré que de p1-b, et λ 0,01 μ_pos 10 que de p2-a. Ailleurs, ces réglages ont été rejoués sans run
+   enregistré à comparer.
+2. **Second z̄ : la moyenne des probabilités des 5 priors.** C'est un z « doux », déterministe, hors de la distribution
+   des z one-hot que le critic a vus. C'est une sensibilité, pas une alternative équivalente.
+3. **« Agents naturels » = exposés et références d'E6.** Leur courbe commune est faite des exposés sous −0,75 bit et des
+   références au-dessus de −0,5 bit, presque sans recouvrement.
+
+### Tâche 1 — agents naturels (z̄ principal ; le second donne les mêmes chiffres à 0,05 près)
+
+| Classe de b | −2,5 | −2,25 | −2,0 | −1,75 | −1,5 | −1,25 | −1,0 | −0,5 | −0,25 | 0 | +0,25 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| Exposés, C1 | 0,45 | 0,37 | 0,36 | 0,32 | 0,43 | 0,45 | 0,50 | — | — | — | — |
+| Exposés, C2 | −0,11 | −0,05 | −0,09 | −0,16 | −0,10 | −0,03 | −0,01 | — | — | — | — |
+| Références, C1 | — | — | — | — | — | — | — | 0,95 | 0,98 | 1,00 | 1,00 |
+| Références, C2 | — | — | — | — | — | — | — | 0,84 | 0,86 | 0,93 | 0,94 |
+| Références induites (D6), C1 | — | — | — | — | 0,93 | 0,95 | 0,99 | 0,98 | 0,98 | 0,99 | 1,00 |
+
+- **ρ(b, C2) pas à pas** :
+  - 0,77 sur tous les agents naturels confondus ;
+  - 0,00 chez les exposés ;
+  - 0,18 chez les références ;
+  - 0,16 chez les références induites (second z̄ : 0,77, 0,01, 0,16, 0,19).
+- **Récupération dans l'épisode** (`d7_recovery.csv`, indice j du premier séjour) : de j = 1 à j = 12, b passe de −2,13
+  à −1,91–1,98. C1 passe de 0,52 au premier pas à 0,30–0,41 ensuite ; C2 reste entre −0,16 et +0,08.
+
+### Tâche 2 — correction A (moyennes sur les pas corrigés bien localisés ; IC par épisodes dans `d7_correction.csv`)
+
+| Agent, réglage | b avant → après | C1 avant → après [IC de ΔC1] | C2 avant → après | C3 avant → après | écart de C1 à la courbe naturelle | issue |
+|---|---|---|---|---|---|---|
+| p1-a λ 0,1 μ 1 (enregistré) | −1,96 → −0,71 | 0,39 → 0,36 [−0,09 ; 0,03] | −0,12 → −0,10 | 0,39 → 0,68 | −0,28 | mesure trompée |
+| p1-a λ 0,01 μ 1 | −1,92 → −0,43 | 0,43 → 0,38 | −0,05 → −0,13 | 0,36 → 0,70 | −0,44 | mesure trompée |
+| p1-a λ 0,01 μ 10 | −1,94 → −0,49 | 0,44 → 0,35 | −0,05 → −0,19 | 0,39 → 0,67 | −0,42 | mesure trompée |
+| p1-b λ 0,01 μ 1 (enregistré) | −2,07 → −0,43 | 0,54 → 0,74 [0,15 ; 0,27] | 0,05 → 0,34 | 0,45 → 0,73 | −0,10 | **réelle** |
+| p1-b λ 0,01 μ 10 | −2,09 → −0,38 | 0,55 → 0,73 [0,12 ; 0,24] | 0,05 → 0,39 | 0,50 → 0,74 | −0,12 | intermédiaire |
+| p2-a λ 0,01 μ 10 (enregistré) | −1,99 → −0,23 | 0,43 → 0,45 [−0,03 ; 0,07] | 0,08 → 0,04 | 0,38 → 0,69 | −0,47 | mesure trompée |
+| p2-a λ 0,01 μ 1 | −1,97 → −0,22 | 0,45 → 0,43 | 0,12 → 0,03 | 0,37 → 0,70 | −0,50 | mesure trompée |
+| p2-b λ 0,1 μ 1 (enregistré) | −1,94 → −0,12 | 0,53 → 0,41 [−0,17 ; −0,05] | 0,13 → 0,04 | 0,48 → 0,58 | −0,53 | mesure trompée |
+| p2-b λ 0,01 μ 1 | −1,92 → −0,08 | 0,56 → 0,48 | 0,14 → 0,06 | 0,39 → 0,63 | −0,47 | mesure trompée |
+| p2-b λ 0,01 μ 10 | −1,91 → −0,05 | 0,57 → 0,44 | 0,16 → 0,05 | 0,40 → 0,65 | −0,53 | mesure trompée |
+
+- La correction fait gagner 1,2 à 1,9 bit de b dans tous les cas.
+- Pour 3 agents sur 4, la contrôlabilité vue par le critic à z commun (C1, C2) ne bouge pas ou baisse ; les pas corrigés
+  tombent bien sous la courbe des agents naturels (de −0,28 à −0,53).
+- Chez p1-b seulement, C1 et C2 montent (C1 +0,19, C2 +0,30), et les pas corrigés frôlent la courbe (−0,10 et −0,12).
+- **C3 monte partout** (+0,10 à +0,34) : la correction rend les z' tirés par action lisibles par le critic.
+
+### Verdicts des formes attendues
+
+1. **Confirmée telle qu'écrite, mais portée par les deux amas.** ρ(b, C2) = 0,77 tous agents naturels confondus. Les
+   exposés à b ≈ −2,1 ont C1 = 0,37 (hasard), les références à b ≈ 0 ont C1 = 1,00. Dans chaque groupe, la corrélation
+   est nulle ou faible (exposés 0,00, références 0,18).
+2. **Infirmée.** Il n'y a aucun saut brutal (le plus grand écart de C1 entre classes voisines est de 0,10), mais rien ne
+   monte non plus : chez les exposés, ρ(b, C2) = 0,00, et C1 et C2 restent au hasard. La récupération de b dans l'épisode
+   (+0,2 bit) ne s'accompagne d'aucune récupération de C1 ou C2.
+3. **Confirmée sous −0,75 bit, sans objet au-dessus.**
+   - Sous −0,75 bit, les références induites dépassent la courbe naturelle (où elle n'est faite que des exposés) de
+     +0,40 à +0,50.
+   - De −0,5 à +0,25, l'écart est de +0,06 à −0,01 : les deux courbes sont au plafond.
+4. **Mesure trompée pour 7 réglages sur 10, dont 3 des 4 réglages enregistrés (p1-a, p2-a, p2-b) ; réelle pour p1-b au
+   réglage enregistré ; intermédiaire pour p1-b λ 0,01 μ 10** (ΔC1 et ΔC2 positifs, mais écart de −0,12).
+5. **Confirmée, à une exception limite près.** Avec le second z̄, les formes 1 à 3 et 7 issues sur 10 de la forme 4 sont
+   inchangées. p1-b λ 0,01 μ 1 passe de « réelle » à « intermédiaire » : son écart de −0,098 devient −0,117, juste
+   au-delà du seuil de 0,10.
+
+### Points d'attention
+
+- **Recouvrement en b.** Les agents naturels n'ont aucun pas entre −0,75 et −0,5 bit, et presque aucun recouvrement entre
+   exposés (sous −0,75) et références (au-dessus de −0,5). Les classes masquées sont nombreuses : exposés au-dessus de
+   −1,0 (40 pas), références sous −0,5 (62 pas).
+- **La « courbe des agents naturels » est une marche entre deux amas.** Les pas corrigés (b ≈ −0,7 à −0,05) sont comparés
+  surtout aux références près de 0. Un écart de C1 à la courbe dit donc « pas au niveau des références », pas « sous une
+  courbe graduée ».
+- **C1 et C2 lisent le canal h'_a à z commun.** D6 a montré que chez les références les deux canaux sont redondants.
+  La correction A remonte le canal z (C3 de +0,10 à +0,34, comme b) sans remonter le canal h'_a, sauf chez p1-b.
+- **Sensibilité au z̄.** Le second z̄ est hors distribution. Les deux définitions concordent pourtant à 0,05 près sur
+   les agents naturels, et sur toutes les issues sauf une, limite.
+
+### Coût (CPU, 1 thread par processus, 14 processus sur 12 cœurs)
+
+| Runs | par run |
+|---|---|
+| naturels et induits (16 jeux par agent) | 1 830–2 100 s |
+| correction A rejouée (un réglage) | 1 520–2 180 s |
+
+Environ 37 min de temps réel ; l'analyse prend moins de 3 min.
+
+### Conclusions
+
+1. **b est-il une mesure valide de la croyance utilisée chez les agents naturels ?** Seulement entre groupes : là où b
+   sépare les exposés (≈ −2,1) des références (≈ 0), la contrôlabilité lue par le critic les sépare aussi (hasard contre
+   1,00). Mais b ne suit pas cette contrôlabilité dans un groupe : sa récupération de 0,2 bit dans l'épisode n'en
+   apporte aucune.
+2. **La correction (A) a-t-elle changé la croyance utilisée, ou seulement la mesure ?** Pour 3 agents sur 4, elle a
+   changé la mesure (b) et le canal z que lit aussi le critic (C3), mais pas la contrôlabilité que le critic lit à z
+   commun (C1, C2), qui reste au hasard. Chez p1-b seulement, elle a aussi changé cette contrôlabilité. C'est l'agent où
+   A avait le plus remonté le comportement (0,49 → 0,71).

@@ -1,0 +1,196 @@
+zbar,group,measure,b_lo,n_steps,n_episodes,value,lo,hi,masked
+draw,exposed,C1,-2.75,0,0,nan,nan,nan,True
+draw,exposed,C1,-2.5,746,362,0.450402144772118,0.41069233021077284,0.49259649122807014,False
+draw,exposed,C1,-2.25,2009,642,0.3713290194126431,0.34340892761132025,0.396751760596668,False
+draw,exposed,C1,-2.0,513,311,0.36062378167641324,0.31900410983381977,0.40272508646779076,False
+draw,exposed,C1,-1.75,332,221,0.32228915662650603,0.2708254179331307,0.37466585436371896,False
+draw,exposed,C1,-1.5,216,155,0.42592592592592593,0.3596028488652825,0.490660577740017,False
+draw,exposed,C1,-1.25,84,71,0.4523809523809524,0.345679012345679,0.5529411764705883,False
+draw,exposed,C1,-1.0,40,38,0.5,0.358974358974359,0.6410256410256411,False
+draw,exposed,C1,-0.75,23,23,0.34782608695652173,nan,nan,True
+draw,exposed,C1,-0.5,5,5,0.6,nan,nan,True
+draw,exposed,C1,-0.25,1,1,0.0,nan,nan,True
+draw,exposed,C1,0.0,0,0,nan,nan,nan,True
+draw,exposed,C1,0.25,0,0,nan,nan,nan,True
+draw,exposed,C2,-2.75,0,0,nan,nan,nan,True
+draw,exposed,C2,-2.5,746,362,-0.10851783927655563,-0.15243894162592148,-0.0652525947536568,False
+draw,exposed,C2,-2.25,2009,642,-0.04493928680826643,-0.07475795325031281,-0.01500759529781508,False
+draw,exposed,C2,-2.0,513,311,-0.08537533254060829,-0.1294102872609445,-0.03695892585484149,False
+draw,exposed,C2,-1.75,332,221,-0.15716138973728394,-0.22146898934082185,-0.095928095691608,False
+draw,exposed,C2,-1.5,216,155,-0.10248122046841966,-0.17491852497484306,-0.029448994271801185,False
+draw,exposed,C2,-1.25,84,71,-0.028234621965789082,-0.144371137371009,0.08591104264320358,False
+draw,exposed,C2,-1.0,40,38,-0.00790569415042095,-0.1498162909227568,0.16661326535883925,False
+draw,exposed,C2,-0.75,23,23,-0.06874516652539957,nan,nan,True
+draw,exposed,C2,-0.5,5,5,0.09486832980505136,nan,nan,True
+draw,exposed,C2,-0.25,1,1,-0.31622776601683794,nan,nan,True
+draw,exposed,C2,0.0,0,0,nan,nan,nan,True
+draw,exposed,C2,0.25,0,0,nan,nan,nan,True
+draw,exposed,C3,-2.75,0,0,nan,nan,nan,True
+draw,exposed,C3,-2.5,746,362,0.39798927613941015,0.3663605409407853,0.43107142857142866,False
+draw,exposed,C3,-2.25,2009,642,0.38617056578729053,0.3690765230609953,0.40141840856808536,False
+draw,exposed,C3,-2.0,513,311,0.3200129954515919,0.2779424649796249,0.3604533729937893,False
+draw,exposed,C3,-1.75,332,221,0.3800200803212851,0.3392397896514663,0.4267118754346997,False
+draw,exposed,C3,-1.5,216,155,0.37345679012345673,0.3162282762735884,0.43465413943355113,False
+draw,exposed,C3,-1.25,84,71,0.4484126984126984,0.3582897286821705,0.533343253968254,False
+draw,exposed,C3,-1.0,40,38,0.5083333333333333,0.383258547008547,0.6447368421052632,False
+draw,exposed,C3,-0.75,23,23,0.7608695652173914,nan,nan,True
+draw,exposed,C3,-0.5,5,5,0.6,nan,nan,True
+draw,exposed,C3,-0.25,1,1,1.0,nan,nan,True
+draw,exposed,C3,0.0,0,0,nan,nan,nan,True
+draw,exposed,C3,0.25,0,0,nan,nan,nan,True
+draw,"references, no intervention",C1,-2.75,0,0,nan,nan,nan,True
+draw,"references, no intervention",C1,-2.5,0,0,nan,nan,nan,True
+draw,"references, no intervention",C1,-2.25,0,0,nan,nan,nan,True
+draw,"references, no intervention",C1,-2.0,0,0,nan,nan,nan,True
+draw,"references, no intervention",C1,-1.75,0,0,nan,nan,nan,True
+draw,"references, no intervention",C1,-1.5,0,0,nan,nan,nan,True
+draw,"references, no intervention",C1,-1.25,1,1,1.0,nan,nan,True
+draw,"references, no intervention",C1,-1.0,2,2,1.0,nan,nan,True
+draw,"references, no intervention",C1,-0.75,13,13,1.0,nan,nan,True
+draw,"references, no intervention",C1,-0.5,62,60,0.9516129032258065,0.890625,1.0,False
+draw,"references, no intervention",C1,-0.25,209,200,0.9760765550239234,0.9563053516457495,0.9951690821256038,False
+draw,"references, no intervention",C1,0.0,3042,708,0.9980276134122288,0.9963059970648956,0.9993521688852729,False
+draw,"references, no intervention",C1,0.25,523,296,1.0,1.0,1.0,False
+draw,"references, no intervention",C2,-2.75,0,0,nan,nan,nan,True
+draw,"references, no intervention",C2,-2.5,0,0,nan,nan,nan,True
+draw,"references, no intervention",C2,-2.25,0,0,nan,nan,nan,True
+draw,"references, no intervention",C2,-2.0,0,0,nan,nan,nan,True
+draw,"references, no intervention",C2,-1.75,0,0,nan,nan,nan,True
+draw,"references, no intervention",C2,-1.5,0,0,nan,nan,nan,True
+draw,"references, no intervention",C2,-1.25,1,1,0.7905694150420948,nan,nan,True
+draw,"references, no intervention",C2,-1.0,2,2,0.9486832980505138,nan,nan,True
+draw,"references, no intervention",C2,-0.75,13,13,0.8027320214273577,nan,nan,True
+draw,"references, no intervention",C2,-0.5,62,60,0.836473445592926,0.7642069657020372,0.8942735793055548,False
+draw,"references, no intervention",C2,-0.25,209,200,0.8571436815719553,0.8291481631570263,0.8813548920024138,False
+draw,"references, no intervention",C2,0.0,3042,708,0.9313229966288135,0.9286744007709561,0.9336869775568966,False
+draw,"references, no intervention",C2,0.25,523,296,0.9371951000499019,0.9339954453562282,0.9403289733444017,False
+draw,"references, no intervention",C3,-2.75,0,0,nan,nan,nan,True
+draw,"references, no intervention",C3,-2.5,0,0,nan,nan,nan,True
+draw,"references, no intervention",C3,-2.25,0,0,nan,nan,nan,True
+draw,"references, no intervention",C3,-2.0,0,0,nan,nan,nan,True
+draw,"references, no intervention",C3,-1.75,0,0,nan,nan,nan,True
+draw,"references, no intervention",C3,-1.5,0,0,nan,nan,nan,True
+draw,"references, no intervention",C3,-1.25,1,1,1.0,nan,nan,True
+draw,"references, no intervention",C3,-1.0,2,2,1.0,nan,nan,True
+draw,"references, no intervention",C3,-0.75,13,13,0.7692307692307693,nan,nan,True
+draw,"references, no intervention",C3,-0.5,62,60,0.967741935483871,0.9180327868852459,1.0,False
+draw,"references, no intervention",C3,-0.25,209,200,0.9832535885167464,0.9661711423699915,0.9975609756097561,False
+draw,"references, no intervention",C3,0.0,3042,708,0.9990138067061144,0.9977116517728193,1.0,False
+draw,"references, no intervention",C3,0.25,523,296,1.0,1.0,1.0,False
+draw,induced references,C1,-2.75,0,0,nan,nan,nan,True
+draw,induced references,C1,-2.5,0,0,nan,nan,nan,True
+draw,induced references,C1,-2.25,2,2,0.5,nan,nan,True
+draw,induced references,C1,-2.0,8,8,1.0,nan,nan,True
+draw,induced references,C1,-1.75,29,27,0.9310344827586207,nan,nan,True
+draw,induced references,C1,-1.5,40,35,0.925,0.8378378378378378,0.9777898550724637,False
+draw,induced references,C1,-1.25,204,168,0.9509803921568627,0.9195938221915263,0.9805825242718447,False
+draw,induced references,C1,-1.0,460,366,0.9869565217391304,0.9762406150365114,0.9956709956709957,False
+draw,induced references,C1,-0.75,1052,833,0.9838403041825095,0.9756730412835131,0.9906371416570409,False
+draw,induced references,C1,-0.5,2700,1969,0.9844444444444445,0.9794139236894664,0.9890983577661333,False
+draw,induced references,C1,-0.25,4244,2937,0.9830348727615457,0.9791794539164813,0.9866614062946433,False
+draw,induced references,C1,0.0,16269,4858,0.9929313418157232,0.991572619518487,0.9942743129203202,False
+draw,induced references,C1,0.25,2140,1465,1.0,1.0,1.0,False
+draw,induced references,C2,-2.75,0,0,nan,nan,nan,True
+draw,induced references,C2,-2.5,0,0,nan,nan,nan,True
+draw,induced references,C2,-2.25,2,2,0.0790569415042095,nan,nan,True
+draw,induced references,C2,-2.0,8,8,0.7905694150420948,nan,nan,True
+draw,induced references,C2,-1.75,29,27,0.7469517921432209,nan,nan,True
+draw,induced references,C2,-1.5,40,35,0.7905694150420948,0.690261367771483,0.8760841728562321,False
+draw,induced references,C2,-1.25,204,168,0.8401737704957162,0.8044996564636722,0.8749636323730919,False
+draw,induced references,C2,-1.0,460,366,0.8438469190992792,0.825738536818768,0.8616151532314207,False
+draw,induced references,C2,-0.75,1052,833,0.8359595221414697,0.8215337896872181,0.8492853007257825,False
+draw,induced references,C2,-0.5,2700,1969,0.8759509118666411,0.8684707253052815,0.8833199965129703,False
+draw,induced references,C2,-0.25,4244,2937,0.8946622965514073,0.8890774926095125,0.8996462350139622,False
+draw,induced references,C2,0.0,16269,4858,0.9286044190600782,0.927338372012473,0.9298545108220359,False
+draw,induced references,C2,0.25,2140,1465,0.9364922743606122,0.9345067540342181,0.9382821011549376,False
+draw,induced references,C3,-2.75,0,0,nan,nan,nan,True
+draw,induced references,C3,-2.5,0,0,nan,nan,nan,True
+draw,induced references,C3,-2.25,2,2,0.7,nan,nan,True
+draw,induced references,C3,-2.0,8,8,1.0,nan,nan,True
+draw,induced references,C3,-1.75,29,27,0.853448275862069,nan,nan,True
+draw,induced references,C3,-1.5,40,35,0.925,0.8180761099365751,1.0,False
+draw,induced references,C3,-1.25,204,168,0.9632352941176471,0.9399975961538461,0.9846958199523465,False
+draw,induced references,C3,-1.0,460,366,0.9619565217391305,0.945856992817455,0.976457399103139,False
+draw,induced references,C3,-0.75,1052,833,0.9581749049429658,0.9465791940018744,0.9683953872032088,False
+draw,induced references,C3,-0.5,2700,1969,0.9567283950617285,0.9493459043100719,0.9647093033478454,False
+draw,induced references,C3,-0.25,4244,2937,0.98751178133836,0.9841059051324199,0.9904526166902404,False
+draw,induced references,C3,0.0,16269,4858,0.9989550679205852,0.9984196084176292,0.9994163596302527,False
+draw,induced references,C3,0.25,2140,1465,1.0,1.0,1.0,False
+mean,exposed,C1,-2.75,0,0,nan,nan,nan,True
+mean,exposed,C1,-2.5,746,362,0.44906166219839144,0.4107033151412346,0.4896739010747005,False
+mean,exposed,C1,-2.25,2009,642,0.3678446988551518,0.3452232563019141,0.3940157051539885,False
+mean,exposed,C1,-2.0,513,311,0.37816764132553604,0.3386278994693164,0.41904761904761906,False
+mean,exposed,C1,-1.75,332,221,0.30120481927710846,0.2462775989538802,0.3478292651919654,False
+mean,exposed,C1,-1.5,216,155,0.4212962962962963,0.36018907141135836,0.4825913535769429,False
+mean,exposed,C1,-1.25,84,71,0.4642857142857143,0.35290143084260733,0.5632404951370468,False
+mean,exposed,C1,-1.0,40,38,0.525,0.3902439024390244,0.6666666666666666,False
+mean,exposed,C1,-0.75,23,23,0.391304347826087,nan,nan,True
+mean,exposed,C1,-0.5,5,5,0.4,nan,nan,True
+mean,exposed,C1,-0.25,1,1,0.0,nan,nan,True
+mean,exposed,C1,0.0,0,0,nan,nan,nan,True
+mean,exposed,C1,0.25,0,0,nan,nan,nan,True
+mean,exposed,C2,-2.75,0,0,nan,nan,nan,True
+mean,exposed,C2,-2.5,746,362,-0.11530020423134038,-0.15700872046217088,-0.07311058605179661,False
+mean,exposed,C2,-2.25,2009,642,-0.0489531285372009,-0.07945089567375971,-0.019497745742539156,False
+mean,exposed,C2,-2.0,513,311,-0.07859462020886324,-0.1235674748737547,-0.031184521426954197,False
+mean,exposed,C2,-1.75,332,221,-0.17049629553317466,-0.23258614881482692,-0.1091619730746845,False
+mean,exposed,C2,-1.5,216,155,-0.09589314200973557,-0.16235299777856033,-0.02419844950694476,False
+mean,exposed,C2,-1.25,84,71,-0.024470005703683868,-0.14305984692030646,0.08198682956136269,False
+mean,exposed,C2,-1.0,40,38,-0.007905694150420958,-0.15406221475632823,0.13378867023789295,False
+mean,exposed,C2,-0.75,23,23,-0.054996133220319654,nan,nan,True
+mean,exposed,C2,-0.5,5,5,0.0,nan,nan,True
+mean,exposed,C2,-0.25,1,1,-0.31622776601683794,nan,nan,True
+mean,exposed,C2,0.0,0,0,nan,nan,nan,True
+mean,exposed,C2,0.25,0,0,nan,nan,nan,True
+mean,"references, no intervention",C1,-2.75,0,0,nan,nan,nan,True
+mean,"references, no intervention",C1,-2.5,0,0,nan,nan,nan,True
+mean,"references, no intervention",C1,-2.25,0,0,nan,nan,nan,True
+mean,"references, no intervention",C1,-2.0,0,0,nan,nan,nan,True
+mean,"references, no intervention",C1,-1.75,0,0,nan,nan,nan,True
+mean,"references, no intervention",C1,-1.5,0,0,nan,nan,nan,True
+mean,"references, no intervention",C1,-1.25,1,1,1.0,nan,nan,True
+mean,"references, no intervention",C1,-1.0,2,2,1.0,nan,nan,True
+mean,"references, no intervention",C1,-0.75,13,13,1.0,nan,nan,True
+mean,"references, no intervention",C1,-0.5,62,60,0.9838709677419355,0.9508196721311475,1.0,False
+mean,"references, no intervention",C1,-0.25,209,200,0.9760765550239234,0.95260663507109,0.9951690821256038,False
+mean,"references, no intervention",C1,0.0,3042,708,0.9980276134122288,0.996365858547485,0.9993529758915985,False
+mean,"references, no intervention",C1,0.25,523,296,1.0,1.0,1.0,False
+mean,"references, no intervention",C2,-2.75,0,0,nan,nan,nan,True
+mean,"references, no intervention",C2,-2.5,0,0,nan,nan,nan,True
+mean,"references, no intervention",C2,-2.25,0,0,nan,nan,nan,True
+mean,"references, no intervention",C2,-2.0,0,0,nan,nan,nan,True
+mean,"references, no intervention",C2,-1.75,0,0,nan,nan,nan,True
+mean,"references, no intervention",C2,-1.5,0,0,nan,nan,nan,True
+mean,"references, no intervention",C2,-1.25,1,1,0.7905694150420948,nan,nan,True
+mean,"references, no intervention",C2,-1.0,2,2,0.9486832980505138,nan,nan,True
+mean,"references, no intervention",C2,-0.75,13,13,0.8148946278126206,nan,nan,True
+mean,"references, no intervention",C2,-0.5,62,60,0.8517747891098696,0.792941123287221,0.9000377767862299,False
+mean,"references, no intervention",C2,-0.25,209,200,0.8601697845960399,0.8312346024671726,0.8872372878905423,False
+mean,"references, no intervention",C2,0.0,3042,708,0.934181728898854,0.9318014931060137,0.9367238603609324,False
+mean,"references, no intervention",C2,0.25,523,296,0.9399159890500467,0.9371729429427164,0.9425902775106902,False
+mean,induced references,C1,-2.75,0,0,nan,nan,nan,True
+mean,induced references,C1,-2.5,0,0,nan,nan,nan,True
+mean,induced references,C1,-2.25,2,2,0.5,nan,nan,True
+mean,induced references,C1,-2.0,8,8,1.0,nan,nan,True
+mean,induced references,C1,-1.75,29,27,0.896551724137931,nan,nan,True
+mean,induced references,C1,-1.5,40,35,0.975,0.918918918918919,1.0,False
+mean,induced references,C1,-1.25,204,168,0.9705882352941176,0.9458061015461151,0.9903846153846154,False
+mean,induced references,C1,-1.0,460,366,0.9891304347826086,0.9786768993858547,0.9978165938864629,False
+mean,induced references,C1,-0.75,1052,833,0.9866920152091255,0.9802612959285005,0.9932562620423893,False
+mean,induced references,C1,-0.5,2700,1969,0.9866666666666667,0.9820048107219012,0.9910552884038962,False
+mean,induced references,C1,-0.25,4244,2937,0.9844486333647502,0.9807454077528964,0.9878580347012212,False
+mean,induced references,C1,0.0,16269,4858,0.9928698752228164,0.9915515409950558,0.9941065606705615,False
+mean,induced references,C1,0.25,2140,1465,1.0,1.0,1.0,False
+mean,induced references,C2,-2.75,0,0,nan,nan,nan,True
+mean,induced references,C2,-2.5,0,0,nan,nan,nan,True
+mean,induced references,C2,-2.25,2,2,0.0790569415042095,nan,nan,True
+mean,induced references,C2,-2.0,8,8,0.8103336504181472,nan,nan,True
+mean,induced references,C2,-1.75,29,27,0.7360473864185022,nan,nan,True
+mean,induced references,C2,-1.5,40,35,0.7945222621173054,0.6926658633757212,0.8862876830821882,False
+mean,induced references,C2,-1.25,204,168,0.8471493829813819,0.8075142756884774,0.8769747647594202,False
+mean,induced references,C2,-1.0,460,366,0.8472841774255493,0.8306761898713891,0.86481774817345,False
+mean,induced references,C2,-0.75,1052,833,0.8398672797063166,0.8269057283052439,0.8537228282310155,False
+mean,induced references,C2,-0.5,2700,1969,0.880401524869841,0.872696335291659,0.8877536463293333,False
+mean,induced references,C2,-0.25,4244,2937,0.899840861522701,0.8945085496285823,0.9048255264062026,False
+mean,induced references,C2,0.0,16269,4858,0.9337067479419652,0.9325456752966,0.934805049955614,False
+mean,induced references,C2,0.25,2140,1465,0.9404081789397927,0.9388564985504797,0.9417576635481307,False
