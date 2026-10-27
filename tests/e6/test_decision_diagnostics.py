@@ -199,3 +199,10 @@ def test_channel_q(world, agent):
     assert torch.equal(clone.get_state(), g.get_state())  # the clone consumed exactly what q_values consumes
     for key in ("Q_hbar", "Q_zbar", "V_zbar"):
         assert ch[key].shape == q.shape and torch.isfinite(ch[key]).all()
+    clone.set_state(g.get_state())  # the option adds a key, changes nothing else
+    g2 = torch.Generator()
+    g2.set_state(torch.Generator().manual_seed(9).get_state())
+    plain = channel_q(agent, h, z, g2, torch.Generator().manual_seed(4))
+    g3 = torch.Generator().manual_seed(9)
+    rich = channel_q(agent, h, z, g3, torch.Generator().manual_seed(4), mean_zbar=True)
+    assert all(torch.equal(plain[k], rich[k]) for k in plain) and rich["V_zbar_mean"].shape == q.shape

@@ -155,7 +155,7 @@ def sampled_mixed_policy_q(agent: FrozenAgent, world: TestWorld, embeds: torch.T
 
 @torch.no_grad()
 def channel_q(agent: FrozenAgent, h: torch.Tensor, z: torch.Tensor, generator: torch.Generator | None,
-              zbar_generator: torch.Generator | None) -> dict[str, torch.Tensor]:
+              zbar_generator: torch.Generator | None, mean_zbar: bool = False) -> dict[str, torch.Tensor]:
     """The two channels through which the action reaches the critic (docs/e6/DECISIONS.md (61)), (n, A) each, from the
     policy's own K_act prior draws per action (policy.lookahead on `generator`: the same draws as q_values on a generator in
     the same state):
@@ -164,7 +164,8 @@ def channel_q(agent: FrozenAgent, h: torch.Tensor, z: torch.Tensor, generator: t
       Q_zbar    V on (h'_a, z_bar_k), z_bar_k shared by every action, drawn (zbar_generator) from the mixture of the A priors
                 (a uniform action, then a draw of its prior): only h'_a carries the action;
       V_zbar    the critic alone on (h'_a, z_bar_k), the mean over k (test 2).
-    r and c come from the goal head on the evaluated pair, as in q_values."""
+    r and c come from the goal head on the evaluated pair, as in q_values. mean_zbar (off by default, D7, docs/e6/DECISIONS.md
+    (62)): also V_zbar_mean, the critic on (h'_a, the mean of the A priors' probabilities), a soft z, deterministic."""
     rssm, cfg = agent.rssm, agent.cfg
     n, A, K = h.shape[0], rssm.cfg.n_actions, cfg.k_act
     h_next, z_next = lookahead(rssm, h, z, K, generator)
@@ -184,7 +185,11 @@ def channel_q(agent: FrozenAgent, h: torch.Tensor, z: torch.Tensor, generator: t
     mix = priors[torch.arange(n, device=h.device)[:, None], pick]                         # (n, K, V, C)
     z_bar = F.one_hot(sample_categorical_index(mix, zbar_generator), num_classes=rssm.cfg.n_classes).to(h.dtype)
     q_zbar, v_zbar = q_of(h_k, z_bar.unsqueeze(1).expand(-1, A, -1, -1, -1))
-    return {"Q_normal": q_normal, "Q_hbar": q_hbar, "Q_zbar": q_zbar, "V_zbar": v_zbar}
+    out = {"Q_normal": q_normal, "Q_hbar": q_hbar, "Q_zbar": q_zbar, "V_zbar": v_zbar}
+    if mean_zbar:
+        z_mean = priors.mean(dim=1)[:, None].expand(-1, A, -1, -1)
+        out["V_zbar_mean"] = agent.critic(h_next.reshape(n * A, -1), z_mean.reshape(n * A, *z_mean.shape[-2:])).reshape(n, A)
+    return out
 
 
 def greedy(Q: torch.Tensor, agent: FrozenAgent, generator: torch.Generator | None = None) -> torch.Tensor:
