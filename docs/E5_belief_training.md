@@ -1,6 +1,9 @@
 # E5 — Manipulating the belief through training
 
-**Status (2026-10-27): waves 1 and 2 done; the shuffle runs continue past 300,000 in two batches (docs/e5/DECISIONS.md
+**Status (2026-10-28): the continuations measured their canonical assignment against another assignment's dynamics
+from their restore (experimental runs' quadrant mass near 0.2; training unaffected); fixed, the written records
+recomputed (`recompute_checkpoints.py`), `e5_extend_b` stopped and resumed if its pairs have not converged, A resumed
+likewise (docs/e5/DECISIONS.md (35)).** Earlier status (2026-10-27): waves 1 and 2 done; the shuffle runs continue past 300,000 in two batches (docs/e5/DECISIONS.md
 (33)). `e5_extend_a` (seed A's f = 1 pair) failed at its first step on 26 October (the old resume states lack the
 row offset of the episode in progress); fixed, to be relaunched; then `e5_probes_a`, `e5_extend_b`, `e5_probes_b`
 (docs/e5/DECISIONS.md (34)).** Earlier status (2026-10-23): two waves. Wave 1 running (f = 1, seeds A and B; seed B's experimental run locked in); wave 2

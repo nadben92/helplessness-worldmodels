@@ -773,3 +773,65 @@ deleted; RUN_GPU.md step 6b). `--extend auto` would not have taken them anyway (
 `done` and a `resume.pt`; they are `failed`, without one), but `check_wave.py` and the export read the newest run of a
 seed and condition, and the relaunched runs are the ones to read. `e5_extend_b`'s runs (B's reference, E, F) start from
 states of the same age: the fix covers them.
+
+## 2026-10-28 (35) -- a restored shuffle run measured its canonical assignment against another assignment's dynamics (user's observation; implementer's diagnosis and fix)
+
+**What was seen.** At 300,000 the continuations reproduced their originals' JS and b(UD), but `check_wave.py`'s smallest
+quadrant mass of the experimental runs fell from 0.69-0.77 (wave 2) to 0.18-0.19 (A, E, F), the references unchanged
+(B: 0.890 both); A's experimental run stayed at 0.188-0.194 and was stopped as stagnating.
+
+**Cause (library, `pipeline/agent_run.py`).** On a restore (`--extend`'s branch, `--resume`) `run_one` set
+`world.env = collector.env` -- E3's line, where the collector's environment is the world's. With an episode source the
+collector's environment is the current episode's: one assignment of 12. Under shuffle the run's world IS the canonical
+assignment's world (`run_e5.assignment_worlds`), and the checkpoint records measure each assignment's mass on the true
+successor against its world's dynamics (`successors(world) = world.env.transition_tensor().argmax(-1)`): from the restore
+on, the canonical assignment was measured against the dynamics of the assignment in progress at 290,000 -- A: 3 (UD ne),
+E: 8 (UD se), F: 5 (UD ne) (the user's check on the cluster, 28 October). Where that assignment's UD zone is not the
+canonical one's (nw), two quadrants hold the wrong truth (nw: the model predicts the conveyor, the "truth" is
+controllable; the other UD quadrant: the reverse), about one action in five agreeing: a mass near 0.2, the same floor for
+every run, unrelated to learning. In the reference condition the 12 assignments share one dynamics: no effect. The other
+11 assignments' records (worlds built afresh) were identical to the originals' (difference 0, the user's check). Not
+affected: the training (the collector, the replay, the losses, the weights), the walks and b (probe worlds built afresh),
+I_s, decodability, the ghost fraction (kernel and templates only), the baselines (no episode source), and the probes
+(`measure_probes.py` loads the weights and builds its worlds with `two_zones_setup.probe_world`; it never runs `run_one`).
+
+Waves 1 and 2: no run was resumed ((33): "no run of waves 1-2 was resumed"; a shuffle run resumed mid-episode before
+cf9ef06 would have stopped on `ObservationTableMismatch` anyway); a check of every run's `meta.yaml` (`resumed_at`) is
+in RUN_GPU.md step 6b. The affected records are the continuations' only: A experimental (300,000, 325,000, 350,000), E
+and F (every checkpoint from 300,000), written before this fix.
+
+**Fix.** The restore no longer replaces the world's environment when the run has an episode source (E3's and E4's runs,
+without one, keep the line). Tested:
+- `tests/e5/test_e5_training.py`: at every checkpoint of a resumed run (`--resume`'s path) and of a branched one
+  (`--extend`'s), the dynamics the records measure the canonical assignment against are the uninterrupted run's, the
+  canonical assignment's (the episode in progress at the restore of an assignment whose UD zone is not nw). This test
+  FAILS with the old line (checked) and passes with the fix.
+- `tests/e5/test_e5_extension.py` (mini experimental f = 1 run, the same kind of episode at its resume point): its
+  continuation from a resume state without the row offset AND the same run interrupted and resumed equal the run
+  trained in one go -- training (stored steps, assignments, weights, losses) and every checkpoint record (e4 and e5,
+  every assignment measured, durations aside). These pass with the old line as well: the mini model is untrained (its
+  masses are 0.0 whatever the dynamics, nw has no context), so the records cannot show the bug there; they pin
+  everything else.
+
+**The records already written: `recompute_checkpoints.py`.** At checkpoint N it reloads `agent_env<N>.pt`, truncates the
+replay to the record's `stored_steps` (the replay never wraps around: exactly the steps stored at N, none later; from
+`checkpoints/resume.pt` when its step is >= N, else `replay_final.npz`), rebuilds the 12 worlds as the run builds them,
+and calls the checkpoint's own measurement (`real_context_by_assignment`, the record's assignments in the same order, the
+same streams and settings). Every field independent of the world (the other assignments, the canonical I_s,
+decodability, contexts, ghost fraction; the visits by type of the truncated replay) must come out as recorded:
+`reproduced` at a largest difference <= 1e-6 (exact on the same GPU model; 1e-6 allows another GPU model's float
+summation order, while other draws -- another device -- differ by 1e-3 or more and are refused). The results go to
+`checkpoints_recomputed.jsonl` beside `checkpoints.jsonl` (never rewritten): the canonical real-context record and the
+means over assignments of the mass and I_s. `check_wave.py` puts a reproduced recomputation in place of the recorded
+values (noted on the run's line; a non-reproduced one is flagged and not used). It runs on the GPU in a pod
+(`submit_kubeflow.py --phase recompute`). Validation: an untouched checkpoint (E's original, 20261024T110418Z, at 300,000,
+from its `replay_final.npz`) must come out reproduced with its canonical mass unchanged. Tested on the mini (a copy of the
+continuation with its canonical masses overwritten: recomputed exactly as the run trained in one go recorded them, from
+`resume.pt` and from `replay_final.npz`).
+
+**The criterion is unchanged.** E4's criterion on the canonical assignment (the training image) is the comparison at an
+equal level of learning of (33); it was unreachable only through the measurement. Plan (one pod at a time): stop
+`e5_extend_b`; one recompute pod (A, E, F's continuations and the validation); `check_wave.py` on both batches; resume
+(`--phase resume`, the fixed code: its new checkpoints right) only a batch whose pairs have not met the criterion at a
+checkpoint already written. A's continuation, stopped on the artefact, resumes from its own resume point if its pair has
+not met it (`--phase resume`, not `--extend auto`, which takes the newest DONE run: the original of 22 October).

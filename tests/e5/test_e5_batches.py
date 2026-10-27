@@ -207,3 +207,20 @@ def test_continuation_in_two_batches_and_two_probe_sets():
     pb = dict(submit.commands("probes", "PY", "e5_probes_b", "p1-b-d1", checkpoint=600000))
     assert sorted(pb) == ["probes_E_sh100_k600000", "probes_F_sh100_k600000"]
     assert all(cmd[cmd.index("--reference-seed-label") + 1] == "B" for cmd in pb.values())
+
+
+def test_recompute_phase_runs_one_job_per_run_on_the_gpu(tmp_path):
+    """docs/e5/DECISIONS.md (35): --phase recompute, one recompute_checkpoints.py job per run given (cuda), the steps
+    passed on; a directory that is not a run is refused."""
+    d = "results/E5_belief_training/grid12x12__2zones-p1-b-d1-sh100__pair-experimental__worldmodel-agent-e5__seed402__20261027T154700Z"
+    jobs = submit.commands("recompute", "PY", "e5_extend_b", "p1-b-d1", recompute={"runs": [d], "steps": [300000]})
+    assert jobs == [("recompute_0_seed402_exp", ["PY", "-u", "experiments/E5_belief_training/recompute_checkpoints.py", d, "--steps", "300000",
+                                                 "--device", "cuda"])]
+    jobs = submit.commands("recompute", "PY", "e5_extend_b", "p1-b-d1", recompute={"runs": [d + "@300000,325000", d], "steps": []})
+    assert jobs[0][1][4:7] == ["--steps", "300000", "325000"] and jobs[0][1][3] == d and jobs[1][1][3:] == [d, "--device", "cuda"]
+    import pytest
+
+    with pytest.raises(SystemExit):
+        submit.main(["--batch", "e5_extend_b", "--phase", "recompute", "--recompute-runs", "results/none", "--repo-dir", str(tmp_path), "--dry-run"])
+    with pytest.raises(SystemExit):
+        submit.main(["--batch", "e5_extend_b", "--phase", "recompute", "--repo-dir", str(tmp_path), "--dry-run"])

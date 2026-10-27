@@ -317,3 +317,49 @@ def test_shuffle_run_resumed_mid_episode_equals_the_uninterrupted_run(runs, tmp_
         assert same_weights(weights(runs["f1_experimental"], step), weights(run_dir, step)), step
     a, b = replay_arrays(runs["f1_experimental"]), replay_arrays(run_dir)
     assert all(np.array_equal(a[k], b[k]) for k in a)
+
+
+def test_restored_shuffle_run_measures_the_canonical_assignment_against_its_own_dynamics(tmp_path):
+    """docs/e5/DECISIONS.md (35): the checkpoint records measure the canonical assignment against the run's world (the
+    canonical assignment's world under shuffle). A restore -- a resume (--resume) or a branch (--extend) -- used to replace
+    that world's environment by the episode in progress's (another assignment), so the records took its dynamics for the
+    canonical one's. The mini model is untrained (its masses are 0 whatever the dynamics), so this test reads the
+    dynamics the records use: at every checkpoint of the resumed run and of the branched one, the run's world's
+    successors are the uninterrupted run's, the canonical assignment's; the episode in progress at the restore (100) is
+    of an assignment whose UD zone is not the canonical one's, so the old behaviour fails here."""
+    from helplessness.pipeline import two_zones_setup
+    from helplessness.pipeline.agent_run import Interrupted
+    from helplessness.pipeline.episode_sources import ASSIGNMENTS
+
+    cfg, seen = tiny_cfg(), {}
+
+    def watched(name: str) -> ClosedLoopHooks:
+        h = run_e5.shuffle_hooks(cfg, CONF, 1.0)
+
+        def record(state: dict) -> dict:
+            seen.setdefault(name, {})[state["env_step"]] = two_zones_setup.successors(state["world"]).copy()
+            return {}
+
+        return ClosedLoopHooks(episode=h.episode, build_world=h.build_world, checkpoint_record=record,
+                               finalize=lambda records, world, run_dir: {}, episode_source=h.episode_source)
+
+    def run(name: str, **kwargs):
+        run_dir = tmp_path / name
+        run_dir.mkdir()
+        run_one(copy.deepcopy(cfg), CONF["seed"], "experimental", run_dir, configure_runtime(cfg), hooks=watched(name), **kwargs)
+        return run_dir
+
+    continuous = run("continuous", save_resumable_at=(100,))
+    state = _state(continuous / "checkpoints" / "resumable_env000100.pt")
+    assert state["collector"]["obs"] is not None and ASSIGNMENTS[state["collector"]["obs_offset"] // N][0] != two_zones.roles(1)["ud"]
+    with pytest.raises(Interrupted):
+        run("resumed", interrupt_after=100)
+    run_one(copy.deepcopy(cfg), CONF["seed"], "experimental", tmp_path / "resumed", configure_runtime(cfg), hooks=watched("resumed_2"),
+            resume=True)
+    run("branched", branch_from=continuous / "checkpoints" / "resumable_env000100.pt")
+    canonical = two_zones_setup.successors(run_e5.assignment_world(CANONICAL, CONF, "experimental", cfg["render"], cfg["episode"], CONF["seed"]))
+    assert sorted(seen["continuous"]) == [100, 200, 300] and all(np.array_equal(v, canonical) for v in seen["continuous"].values())
+    assert sorted(seen["resumed_2"]) == sorted(seen["branched"]) == [200, 300]
+    for name in ("resumed_2", "branched"):
+        for step, succ in seen[name].items():
+            assert np.array_equal(succ, canonical), (name, step)

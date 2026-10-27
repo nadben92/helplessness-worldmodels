@@ -12,7 +12,10 @@ Phases:
            CPU (helplessness.cluster.resume: latest.json, resume.pt complete and loaded entirely, the same step); on any
            problem nothing is submitted;
   probes   measure_probes.py at one checkpoint k (--checkpoint; post-switch steps for the immunisation) for every pair
-           of the batch (batches.PROBE_PAIRS), batches.PROBES_MAX_PARALLEL at a time. Never launched automatically.
+           of the batch (batches.PROBE_PAIRS), batches.PROBES_MAX_PARALLEL at a time. Never launched automatically;
+  recompute  recompute_checkpoints.py on the runs given (--recompute-runs, run directories relative to --repo-dir, each
+           optionally <run>@<step>,<step>; else --recompute-steps, else every checkpoint of a continuation), one job per run, on the GPU (the device the runs measured on: the recomputation reproduces
+           their draws). --batch only names the pod and sets its CPUs (docs/e5/DECISIONS.md (35)).
 
 Batch parameters: --configuration (every phase: the E4 configuration of E5), --e4-results (probes of the baseline A: E4's
 results root). --switch-step / --post-steps serve the immunisation only, deferred to E8 (batches.DEFERRED).
@@ -52,13 +55,13 @@ IMAGE = "ghcr.io/ucl-arc-unified-ai/kubeflow-trainer-images-torch:v0.0.1"  # E3'
 SCRIPT = "experiments/E5_belief_training"
 BRANCH = "e5"
 RESULTS_SUBDIR = "results"
-PHASES = ("train", "resume", "probes")
+PHASES = ("train", "resume", "probes", "recompute")
 
 
 def commands(phase: str, python: str, batch: str, configuration: str, resume: str = "", checkpoint: int | None = None,
              switch_step: int | None = None, post_steps: int | None = None, e4_results: str | None = None,
              device: str = "cuda", n_walks: int | None = None, resume_runs: dict[str, str] | None = None,
-             probe_keep: set[str] | None = None) -> list[tuple[str, list[str]]]:
+             probe_keep: set[str] | None = None, recompute: dict | None = None) -> list[tuple[str, list[str]]]:
     """The supervisor's jobs. device: cuda on the cluster; cpu only to try the phases locally (--worker --device cpu).
     Phase resume: one run (resume, job "resume") or several (resume_runs: job name -> run directory, jobs
     "resume_<job name>"), each with the single run's command."""
@@ -69,6 +72,16 @@ def commands(phase: str, python: str, batch: str, configuration: str, resume: st
             return [("resume", [python, "-u", f"{SCRIPT}/run_e5.py", "--resume", resume, "--device", device])]
         return [(f"resume_{name}", [python, "-u", f"{SCRIPT}/run_e5.py", "--resume", d, "--device", device])
                 for name, d in resume_runs.items()]
+    if phase == "recompute":  # docs/e5/DECISIONS.md (35)
+        if not recompute or not recompute.get("runs"):
+            raise ValueError("recompute requires --recompute-runs")
+        jobs = []
+        for i, entry in enumerate(recompute["runs"]):  # <run dir> or <run dir>@<step>,<step>: that run's own steps
+            d, _, own = entry.partition("@")
+            steps = own.split(",") if own else [str(s) for s in recompute.get("steps") or []]
+            jobs.append((f"recompute_{i}_seed{Path(d).name.split('__seed')[1].split('__')[0]}_{'exp' if '__pair-experimental__' in d else 'ref'}",
+                         [python, "-u", f"{SCRIPT}/recompute_checkpoints.py", d, *(["--steps", *steps] if steps else []), "--device", device]))
+        return jobs
     if not configuration:
         raise ValueError("--configuration is required (the E4 configuration of E5)")
     if phase == "probes":
@@ -103,7 +116,7 @@ def resume_plan(repo: Path, batch: str, configuration: str, resume: str) -> tupl
 
 def _run_e5(repo_dir: str, phase: str, output: str, batch: str, configuration: str = "", resume: str = "", max_parallel: int = 0,
             checkpoint: int = 0, switch_step: int = 0, post_steps: int = 0, e4_results: str = "", n_walks: int = 0,
-            resume_runs: str = "") -> None:
+            resume_runs: str = "", recompute: str = "") -> None:
     """Serialized by CustomTrainer: imports and constants must be self-contained (as E4's _run_e4)."""
     import os
     from pathlib import Path
@@ -135,6 +148,8 @@ def _run_e5(repo_dir: str, phase: str, output: str, batch: str, configuration: s
         args += ["--e4-results", e4_results]
     if resume_runs:
         args += ["--resume-runs", resume_runs]
+    if recompute:
+        args += ["--recompute-spec", recompute]
     subprocess.run(args, cwd=repo, check=True)
 
 
@@ -181,7 +196,7 @@ def worker(args) -> int:
     keep = probe_plan(Path(args.repo_dir), args.batch, args.configuration, args.checkpoint, args.e4_results)[0] if args.phase == "probes" else None
     jobs = commands(args.phase, sys.executable, args.batch, args.configuration, args.resume, args.checkpoint, args.switch_step,
                     args.post_steps, args.e4_results, args.device, args.n_walks, cluster_resume.decode_resume_runs(args.resume_runs),
-                    probe_keep=keep)
+                    probe_keep=keep, recompute=json.loads(args.recompute_spec) if args.recompute_spec else None)
     max_parallel = args.max_parallel or (batches.PROBES_MAX_PARALLEL if args.phase == "probes" else None)
     return supervise(jobs, Path(args.repo_dir), Path(args.output), max_parallel=max_parallel)
 
@@ -224,6 +239,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--device", choices=("cuda", "cpu"), default="cuda", help=argparse.SUPPRESS)
     parser.add_argument("--resume-runs", default="", help=argparse.SUPPRESS)
+    parser.add_argument("--recompute-runs", nargs="+", default=None,
+                        help="phase recompute: shuffle run directories, relative to --repo-dir (e.g. results/E5_belief_training/<run>), "
+                             "each optionally with its own steps: <run>@300000,325000")
+    parser.add_argument("--recompute-steps", type=int, nargs="+", default=None,
+                        help="phase recompute: these checkpoints (default: every checkpoint of a continuation)")
+    parser.add_argument("--recompute-spec", default="", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     if args.status is not None:  # helplessness.cluster.batch_status: done / failed / running / STALE / not started
         rows = batch_status.batch_status(args.status, args.stale_after)
@@ -243,9 +264,18 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--phase resume without --resume needs --configuration (to find the batch's runs)")
     if (args.phase == "probes") != (args.checkpoint is not None):
         parser.error("--checkpoint is required exactly when --phase=probes")
+    if (args.phase == "recompute") != bool(args.recompute_runs or args.recompute_spec):
+        parser.error("--recompute-runs goes with --phase recompute, and is required by it")
     if args.worker:
         return worker(args)
     repo = Path(args.repo_dir).resolve()
+    recompute = None
+    if args.phase == "recompute":
+        for entry in args.recompute_runs:
+            d = entry.partition("@")[0]
+            if not (repo / d / "checkpoints.jsonl").is_file():
+                parser.error(f"{repo / d}: not a run directory (no checkpoints.jsonl)")
+        recompute = {"runs": list(args.recompute_runs), "steps": args.recompute_steps or []}
     resume_runs = None
     if args.phase == "resume":  # checked before anything is printed as a plan or submitted
         resume_runs, checks = resume_plan(repo, args.batch, args.configuration, args.resume)
@@ -253,7 +283,7 @@ def main(argv: list[str] | None = None) -> int:
             return 1
     try:
         commands(args.phase, "python", args.batch, args.configuration, args.resume, args.checkpoint, args.switch_step,
-                 args.post_steps, args.e4_results, "cuda", args.n_walks, resume_runs)
+                 args.post_steps, args.e4_results, "cuda", args.n_walks, resume_runs, recompute=recompute)
     except ValueError as err:
         parser.error(str(err))
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
@@ -266,7 +296,7 @@ def main(argv: list[str] | None = None) -> int:
         for name, reason in excluded.items():
             print(f"LEFT OUT {name}: {reason}", flush=True)
     jobs = commands(args.phase, "<venv python>", args.batch, args.configuration, args.resume, args.checkpoint, args.switch_step,
-                    args.post_steps, args.e4_results, "cuda", args.n_walks, resume_runs, probe_keep=probe_keep)
+                    args.post_steps, args.e4_results, "cuda", args.n_walks, resume_runs, probe_keep=probe_keep, recompute=recompute)
     if args.dry_run:
         print(json.dumps({"batch": args.batch, "phase": args.phase, "configuration": args.configuration, "switch_step": args.switch_step,
                           "post_steps": args.post_steps, "cpus": batches.BATCH_CPUS[args.batch], "max_parallel": max_parallel,
@@ -292,7 +322,8 @@ def main(argv: list[str] | None = None) -> int:
                        "configuration": args.configuration, "resume": args.resume, "max_parallel": max_parallel or 0,
                        "checkpoint": args.checkpoint or 0, "switch_step": args.switch_step or 0, "post_steps": args.post_steps or 0,
                        "e4_results": args.e4_results or "", "n_walks": args.n_walks or 0,
-                       "resume_runs": cluster_resume.encode_resume_runs(resume_runs)},
+                       "resume_runs": cluster_resume.encode_resume_runs(resume_runs),
+                       "recompute": json.dumps(recompute) if recompute else ""},
             resources_per_node={"cpu": str(cpus), "memory": args.memory, "nvidia.com/gpu": "1"},
         ),
     )

@@ -12,7 +12,9 @@ Per run:
                     collapse guard (1.0 bit; the guard stops a run at 5) and the lowest value; the last value
   mass              at the last checkpoint, the prior's mass on the true successor in each quadrant of the canonical
                     layout (the smallest of the four; E4's convergence threshold 0.97); shuffle runs: also by zone type,
-                    averaged over the 12 assignments, at the last checkpoint measuring every assignment
+                    averaged over the 12 assignments, at the last checkpoint measuring every assignment; where
+                    checkpoints_recomputed.jsonl holds a reproduced recomputation of the canonical record
+                    (recompute_checkpoints.py, docs/e5/DECISIONS.md (35)), its values replace the recorded ones
   success           the agent's success rate and episode length over the last episodes (at the last checkpoint)
 Per pair (experimental - reference, same training; the reference's seed is the run's own or batches.REFERENCE_SEED_OF's --
 seed B's f = 1 reference for the replacements E and F, docs/e5/DECISIONS.md (32); with --batch, such a reference from
@@ -71,10 +73,43 @@ def read_run(run_dir: Path) -> dict:
             # a pod stopped while appending a record leaves its last line truncated: that checkpoint's record is lost (its
             # weights, written atomically, are whole or absent), the others are read (docs/e5/DECISIONS.md (33))
             print(f"{run_dir.name}: last record truncated (a stopped run), ignored", flush=True)
+    records = [r for r in records if r.get("e4")]
+    recomputed, refused = apply_recomputed(run_dir, records)
     name = run_dir.name
     preset = name.split("__")[1]  # 2zones-<configuration>-<tag>
     return {"dir": run_dir, "name": name, "tag": preset.rsplit("-", 1)[1], "role": "experimental" if "__pair-experimental__" in name else "reference",
-            "seed": int(name.split("__seed")[1].split("__")[0]), "meta": meta, "records": [r for r in records if r.get("e4")]}
+            "seed": int(name.split("__seed")[1].split("__")[0]), "meta": meta, "records": records, "recomputed": recomputed,
+            "recompute_refused": refused}
+
+
+RECOMPUTED = "checkpoints_recomputed.jsonl"
+
+
+def apply_recomputed(run_dir: Path, records: list[dict]) -> tuple[list[int], list[int]]:
+    """The canonical assignment's real-context records recomputed by recompute_checkpoints.py (docs/e5/DECISIONS.md (35):
+    the checkpoints a restored run measured against another assignment's dynamics), read from checkpoints_recomputed.jsonl
+    beside checkpoints.jsonl (never rewritten) and put in place of the recorded ones in `records` (in place): e4's
+    real_context, e5's by_assignment of the canonical assignment and the means over assignments of the mass and I_s. Only a
+    recomputation that reproduced the record's other fields is used. Returns (steps replaced, steps refused)."""
+    path = run_dir / RECOMPUTED
+    if not path.is_file():
+        return [], []
+    lines = {int(x["env_step"]): x for x in map(json.loads, path.read_text(encoding="utf-8").splitlines()) if x}
+    done, refused = [], []
+    for r in records:
+        line = lines.get(int(r["env_step"]))
+        if line is None:
+            continue
+        if not line.get("reproduced"):
+            refused.append(int(r["env_step"]))
+            continue
+        canonical = str(r["e5"]["canonical"])
+        r["e4"]["real_context"] = line["e4"]["real_context"]
+        r["e5"]["by_assignment"][canonical]["real_context"] = line["e5"]["by_assignment"][canonical]["real_context"]
+        if line["e5"].get("mean_over_assignments") and r["e5"].get("mean_over_assignments"):
+            r["e5"]["mean_over_assignments"].update(line["e5"]["mean_over_assignments"])
+        done.append(int(r["env_step"]))
+    return done, refused
 
 
 def original_of(run: dict) -> Path | None:
@@ -205,6 +240,8 @@ def check_run(run: dict) -> dict:
         flags.append(f"NaN/inf at checkpoint(s) {'; '.join(nan[:3])}" + (" ..." if len(nan) > 3 else ""))
     if run["meta"].get("status") == "failed":
         flags.append(f"status failed: {run['meta'].get('error', '')[:120]}")
+    if run.get("recompute_refused"):
+        flags.append(f"recomputation NOT reproduced at {run['recompute_refused']} (recorded values kept; recompute_checkpoints.py)")
     if sw.get("original_missing"):
         flags.append(f"continuation of {sw['from']}, not found here: switch unknown")
     elif sw["grad_step"] is None:
@@ -218,7 +255,7 @@ def check_run(run: dict) -> dict:
             "last_env_step": last["env_step"] if last else None, "switch": sw, "collapse": col, "mass_by_quadrant": mass,
             "mass_by_type_mean_over_assignments": None if mo is None else {"env_step": k_all, **mo.get("mass_true_by_type", {})},
             "success_rate": last.get("success_rate") if last else None, "episode_length": last.get("episode_length") if last else None,
-            "lock_in": lock, "non_finite": nan, "not_measured": missing, "attention": flags}
+            "lock_in": lock, "non_finite": nan, "not_measured": missing, "recomputed": run.get("recomputed", []), "attention": flags}
 
 
 def check_pair(exp: dict, ref: dict) -> dict:
@@ -319,7 +356,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  {c['tag']} seed {c['seed']} {c['role']}: {c['status']} at {c['last_env_step']} | switch {fmt(sw['grad_step'])} "
               f"(env {fmt(sw['env_step'])}, {sw['rule'] or '-'}{', from the original run' if sw.get('from') else ''}) | after it: longest {col['longest_below_1bit']} below 1 bit, min "
               f"{fmt(col['min_after_switch'])}, last {fmt(col['last'])} | mass min {fmt(min([v for v in c['mass_by_quadrant'].values() if v is not None], default=None))} "
-              f"| success {fmt(c['success_rate'])} | {'ATTENTION: ' + '; '.join(c['attention']) if c['attention'] else 'OK'}")
+              f"| success {fmt(c['success_rate'])} "
+              + (f"| canonical record recomputed at {len(c['recomputed'])} checkpoint(s) " if c["recomputed"] else "")
+              + f"| {'ATTENTION: ' + '; '.join(c['attention']) if c['attention'] else 'OK'}")
     print("PAIRS")
     for p in pairs:
         b = p.get("b_step1_by_slot", {})

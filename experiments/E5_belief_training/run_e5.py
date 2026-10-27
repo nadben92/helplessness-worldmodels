@@ -131,6 +131,22 @@ def baseline_hooks(cfg: dict, conf: dict) -> ClosedLoopHooks:
     return ClosedLoopHooks(episode=base.episode, build_world=base.build_world, checkpoint_record=checkpoint_record, finalize=base.finalize)
 
 
+def assignment_worlds(world, conf: dict, condition: str, cfg: dict, seed: int) -> dict[int, object]:
+    """The 12 assignments' worlds of a shuffle run (the run's condition decides every assignment's dynamics): the canonical
+    one is the run's own world, the others built from the seed; templates on the world's device. The checkpoint records
+    measure each assignment against its world (recompute_checkpoints.py rebuilds them the same way)."""
+    canonical = canonical_assignment(conf["diagonal"])
+    if assignment_colors(canonical, conf["diagonal"], conf["t_inc"], conf["t_ctrl"]) != conf["training_colors"]:
+        raise AssertionError("the canonical assignment must be the configuration's training image")
+    device = world.templates_t.device
+    out = {}
+    for k in range(len(ASSIGNMENTS)):
+        w = world if k == canonical else assignment_world(k, conf, condition, cfg["render"], cfg["episode"], seed)
+        w.templates_t = w.templates_t.to(device)
+        out[k] = w
+    return out
+
+
 def shuffle_hooks(cfg: dict, conf: dict, fraction: float) -> ClosedLoopHooks:
     """The run's own condition decides the dynamics of every assignment (the reference: everything controllable,
     T_inc kept on the slot that would hold the conveyor)."""
@@ -144,14 +160,8 @@ def shuffle_hooks(cfg: dict, conf: dict, fraction: float) -> ClosedLoopHooks:
                     for k in range(len(ASSIGNMENTS))}
 
     def episode_source(world, cfg_, seed, condition):
-        if assignment_colors(canonical, conf["diagonal"], conf["t_inc"], conf["t_ctrl"]) != conf["training_colors"]:
-            raise AssertionError("the canonical assignment must be the configuration's training image")
-        device = world.templates_t.device
         worlds.clear()
-        for k in range(len(ASSIGNMENTS)):
-            w = world if k == canonical else assignment_world(k, conf, condition, cfg_["render"], cfg_["episode"], seed)
-            w.templates_t = w.templates_t.to(device)
-            worlds[k] = w
+        worlds.update(assignment_worlds(world, conf, condition, cfg_, seed))
         return ZoneAssignmentShuffle([worlds[k] for k in range(len(ASSIGNMENTS))], canonical, fraction, assignment_generator(seed))
 
     def checkpoint_record(state: dict) -> dict:

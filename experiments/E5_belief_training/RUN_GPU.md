@@ -329,6 +329,79 @@ python experiments/E5_belief_training/export_batch.py create --batch $B --config
 If 650,000 is reached without K: report the check; a further continuation (a larger `EXTEND_TO`) starts from each
 continuation's own resume point.
 
+### 6b bis -- the canonical masses of the continuations (docs/e5/DECISIONS.md (35))
+
+Until the fix of (35), a continuation (and any resumed shuffle run) measured its canonical assignment against the
+dynamics of the assignment in progress at its restore: the experimental runs' quadrant mass stuck near 0.2 (A, E, F),
+the references right. Training and weights are right; only those records are wrong. In order, from the notebook:
+
+**1. Stop `e5_extend_b`** (its records since 300,000 are wrong for E and F; it resumes later if needed):
+
+```bash
+cd /scratch/helplessness-worldmodels-e5
+SUP=$(ls -d logs/kubeflow/e5-train-e5_extend_b-* | grep -v submission | tail -1)
+JOB=$(python -c "import json; print(json.load(open('$SUP.submission.json'))['job_id'])")
+echo $JOB && kubectl delete trainjob $JOB
+kubectl get pods                                                   # its pod Terminating, then gone
+```
+
+**2. Update the clone and check that no wave 1-2 run was ever resumed** (only the continuations are affected):
+
+```bash
+git pull --ff-only && git log --oneline -1 && git status --short --untracked-files=no                     # prints nothing
+grep -l "^resumed_at" results/E5_belief_training/*/meta.yaml results/E5_belief_training_aborted/*/*/meta.yaml   # prints nothing
+```
+
+A run listed there is a shuffle run resumed before the fix: report it (its checkpoints after `resumed_at` would need the
+recomputation too).
+
+**3. One recompute pod** (GPU, the device the runs measured on): A's, E's and F's continuations (every checkpoint) and the
+validation on an untouched checkpoint (E's original at 300,000):
+
+```bash
+R=results/E5_belief_training
+A_EXT=$(ls -d $R/*-sh100__pair-experimental__*__seed02__* | tail -1)
+E_EXT=$(ls -d $R/*-sh100__pair-experimental__*__seed402__* | tail -1)
+F_EXT=$(ls -d $R/*-sh100__pair-experimental__*__seed502__* | tail -1)
+E_ORIG=$(ls -d $R/*-sh100__pair-experimental__*__seed402__20261024T110418Z)
+echo $A_EXT $E_EXT $F_EXT $E_ORIG                                  # three continuations (2026102[6-8]T...), E's original
+python experiments/E5_belief_training/submit_kubeflow.py --batch e5_extend_b --phase recompute --repo-dir /scratch/helplessness-worldmodels-e5     --recompute-runs $A_EXT $E_EXT $F_EXT $E_ORIG@300000 --dry-run
+python experiments/E5_belief_training/submit_kubeflow.py --batch e5_extend_b --phase recompute --repo-dir /scratch/helplessness-worldmodels-e5     --recompute-runs $A_EXT $E_EXT $F_EXT $E_ORIG@300000
+```
+
+Each job's log has one line per checkpoint: `REPRODUCED` (the fields independent of the world as recorded) and the
+canonical mass by quadrant, recorded -> recomputed. Once the pod is done:
+
+```bash
+python -c "import json, glob; [print(p.split('/')[-2][-45:], x['env_step'], x['reproduced'], '%.1e' % x['largest_difference_unaffected'], '%.1e' % x['largest_difference_canonical_mass'], [round(x['e4']['real_context']['mass_true_by_region'][q], 3) for q in ('nw', 'ne', 'se', 'sw')]) for p in sorted(glob.glob('results/E5_belief_training/*/checkpoints_recomputed.jsonl')) for x in map(json.loads, open(p))]"
+```
+
+Expected: every line `True`; E's original at 300,000 with a canonical-mass difference of 0 (the validation: an untouched
+record recomputed as recorded); the continuations' masses back near their originals' (0.69-0.77 at 300,000). Report
+these lines.
+
+**4. Read the criterion** (check_wave uses the recomputed records, "canonical record recomputed at N checkpoint(s)"):
+
+```bash
+python experiments/E5_belief_training/check_wave.py --batch e5_extend_a --out exports/e5_extend_a_check.json
+python experiments/E5_belief_training/check_wave.py --batch e5_extend_b --out exports/e5_extend_b_check.json
+```
+
+A batch whose `ALL <n> PAIRS MEET E4's CRITERION AT:` lists a checkpoint has its K: no resume, its export and probes
+(above, step 7). Otherwise:
+
+**5. Resume** that batch from its runs' last resume point (the fixed code: its new checkpoints are right; one pod at a
+time -- `e5_extend_b` first if both need it, then `e5_extend_a`; the resume check on the CPU runs first):
+
+```bash
+python experiments/E5_belief_training/submit_kubeflow.py --batch e5_extend_b --phase resume --configuration p1-b-d1 --repo-dir /scratch/helplessness-worldmodels-e5 --dry-run
+python experiments/E5_belief_training/submit_kubeflow.py --batch e5_extend_b --phase resume --configuration p1-b-d1 --repo-dir /scratch/helplessness-worldmodels-e5
+# later, the same with --batch e5_extend_a (A's stopped continuation, NOT --extend auto: that takes the 22 October original)
+```
+
+The dry run lists `resume_<job>` for the batch's continuations (status `running`), each `run_e5.py --resume <its directory>`.
+Their logs: `RESUMING`, `resumed at environment step <its last resume point>`. Watch and stop as above (check_wave).
+
 ## Step 7 -- the probes, in two sets (docs/e5/DECISIONS.md (33))
 
 Each shuffle pair is probed at ITS first checkpoint meeting E4's criterion (K_a, K_b), the baselines at 300,000

@@ -506,7 +506,11 @@ def run_one(cfg: dict, seed: int, condition: str, run_dir: Path, device: torch.d
         else:
             collector.env = pickle.loads(state["env"])
         collector.replay = replay
-        world.env = collector.env
+        if collector.episode_source is None:  # E3's and E4's run: the collector's environment IS the world's
+            world.env = collector.env
+        # with an episode source the collector's environment is the current episode's (E5: one assignment of 12, the
+        # dynamics switch's after-environment): the world stays the run's own, which the checkpoint records measure
+        # against (docs/e5/DECISIONS.md (35))
         c = state["collector"]
         collector.N, collector.stats = c["N"], EpisodeStats(**c["stats"])
         collector._obs, collector._s, collector._arrival_reward = c["obs"], c["s"], c["arrival_reward"]
