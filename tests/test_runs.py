@@ -150,3 +150,45 @@ def test_the_repository_s_own_provenance_has_both():
     root = Path(__file__).resolve().parents[1]
     prov = code_provenance(root)
     assert prov["source_sha256"] and prov["source_n_files"] > 100
+
+
+def test_commit_read_from_the_git_directory_without_the_git_executable(tmp_path, monkeypatch):
+    """docs/e5/DECISIONS.md (34): the cluster's containers have no git executable; the commit is read from .git (loose ref,
+    packed-refs, detached HEAD, a worktree's gitdir file), git_dirty left unknown."""
+    a, b, c = "a" * 40, "b" * 40, "c" * 40
+    repo = tmp_path / "repo"
+    (repo / ".git" / "refs" / "heads").mkdir(parents=True)
+    (repo / ".git" / "HEAD").write_text("ref: refs/heads/e5\n", encoding="utf-8")
+    (repo / ".git" / "refs" / "heads" / "e5").write_text(a + "\n", encoding="utf-8")
+    (repo / ".git" / "packed-refs").write_text(f"# pack-refs with: peeled\n{b} refs/heads/packed\n", encoding="utf-8")
+    _tree(repo)
+    (repo / "src" / "deep").mkdir()
+    assert runs_module.git_head_from_files(repo / "src" / "deep") == a
+    (repo / ".git" / "HEAD").write_text("ref: refs/heads/packed\n", encoding="utf-8")
+    assert runs_module.git_head_from_files(repo) == b
+    (repo / ".git" / "HEAD").write_text(c + "\n", encoding="utf-8")
+    assert runs_module.git_head_from_files(repo) == c
+    wt = tmp_path / "wt"
+    (repo / ".git" / "worktrees" / "wt").mkdir(parents=True)
+    (repo / ".git" / "worktrees" / "wt" / "HEAD").write_text("ref: refs/heads/e5\n", encoding="utf-8")
+    (repo / ".git" / "worktrees" / "wt" / "commondir").write_text("../..\n", encoding="utf-8")
+    wt.mkdir()
+    (wt / ".git").write_text(f"gitdir: {repo / '.git' / 'worktrees' / 'wt'}\n", encoding="utf-8")
+    assert runs_module.git_head_from_files(wt) == a
+    assert runs_module.git_head_from_files(tmp_path) is None  # no checkout at or above it
+
+    def no_git(*args, **kwargs):
+        raise FileNotFoundError("git")
+
+    monkeypatch.setattr(runs_module.subprocess, "run", no_git)
+    monkeypatch.setattr(runs_module.subprocess, "check_output", no_git)
+    prov = code_provenance(repo)
+    assert prov["git_commit"] == c and prov["git_commit_from"] == "files" and prov["git_dirty"] is None and prov["source_sha256"]
+    assert runs_module.git_commit_hash(repo) == c
+
+
+def test_the_repository_s_commit_read_from_files_is_git_s():
+    import subprocess
+
+    root = Path(__file__).resolve().parents[1]
+    assert runs_module.git_head_from_files(root) == subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()

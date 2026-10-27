@@ -253,6 +253,33 @@ convergence checkpoint:
 (`e5_extend`, the five runs in one pod, stays defined but is NOT USED.) The order: `e5_extend_a`, its export, the probes
 `e5_probes_a` (step 7), then `e5_extend_b`, its export, `e5_probes_b`.
 
+**`e5_extend_a`'s first launch failed (26 October, docs/e5/DECISIONS.md (34)).** Both runs stopped at their first step
+on `ObservationTableMismatch`: the resume states of waves 1-2 predate the saved row offset of the episode in progress;
+fixed (the offset is taken from the restored episode source). Before relaunching, move the two failed continuations
+(kept, not deleted; only directories with status `failed` and a `branched_from` are moved):
+
+```bash
+cd /scratch/helplessness-worldmodels-e5
+mkdir -p results/E5_belief_training_aborted/extend_a_20261026
+for R in results/E5_belief_training/grid12x12__2zones-p1-b-d1-sh100__pair-*__worldmodel-agent-e5__seed02__20261026T*; do
+  grep -q "^status: failed" $R/meta.yaml && grep -q "^branched_from:" $R/meta.yaml && mv $R results/E5_belief_training_aborted/extend_a_20261026/
+done
+ls results/E5_belief_training_aborted/extend_a_20261026/         # the 2 failed continuations (experimental, control)
+ls -d results/E5_belief_training/*-sh100__*seed02__*             # the 2 originals, 20261022T..., nothing of 20261026
+```
+
+Then pull, and check which runs `--extend auto` takes (after the pull; the originals of 22 October):
+
+```bash
+git pull --ff-only && git log --oneline -1 && git status --short --untracked-files=no                     # prints nothing
+python -c "import sys; sys.path.insert(0, 'experiments/E5_belief_training'); from pathlib import Path; import run_e5; [print(c, run_e5.original_run(Path('results'), 'p1-b-d1', 'A', 'shuffle', c, 1.0).name) for c in ('experimental', 'reference')]"
+```
+
+Then launch as below. The log's first lines now show the commit (`code: git commit <hash>`, read from `.git`: the
+container has no git) and `branched from ...20261022T...resume.pt at environment step 290000`; the first `env step
+290...` monitor lines follow (no `ObservationTableMismatch`). `check_wave.py` reads a continuation's switch from its
+original until its first checkpoint (`switch ... from the original run`).
+
 **Launch a batch** (`B` = `e5_extend_a`, later `e5_extend_b`; after the user has pushed `e5`):
 
 ```bash

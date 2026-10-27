@@ -208,3 +208,47 @@ def test_each_continuation_batch_has_its_own_synthesis(tmp_path, capsys):
     out_b = capsys.readouterr().out
     assert "ALL 1 PAIRS MEET E4's CRITERION AT" in out_a and "sh100 seed 2:" in out_a
     assert "ALL 2 PAIRS MEET E4's CRITERION AT" in out_b and "sh100 seed 402:" in out_b and "sh100 seed 502:" in out_b
+
+
+def test_continuation_carries_the_switch_of_its_original(tmp_path):
+    """docs/e5/DECISIONS.md (34): a continuation (run_e5.py --extend) branched from a run that switched carries that switch;
+    before its first checkpoint (no record yet) check_wave reads it from the original (found by name next to it, from
+    meta.yaml's branched_from, a cluster path): neither flagged "never switched" nor excluded from its pair. A continuation
+    that failed at once is still excluded, as failed, not as never switched."""
+    from helplessness.config import REPO_ROOT
+
+    originals = {role: run_dir(tmp_path, role, 0.0 if role == "exp" else math.log2(5), [3.0] * 20) for role in ("exp", "ref")}
+
+    def continuation(role: str, status: str):
+        orig = originals[role]
+        d = tmp_path / orig.name.replace("20261030T000000Z", "20261031T000000Z")
+        d.mkdir()
+        (d / "meta.yaml").write_text(f"status: {status}\nseed: 102\nbranched_from: /scratch/helplessness-worldmodels-e5/results/"
+                                     f"E5_belief_training/{orig.name}/checkpoints/resume.pt\n", encoding="utf-8")
+        (d / "checkpoints.jsonl").write_text("", encoding="utf-8")
+        return d
+
+    exp, ref = continuation("exp", "running"), continuation("ref", "running")
+    c = cw.check_run(cw.read_run(exp))
+    assert c["switch"] == {"grad_step": 6301, "env_step": 10760, "rule": "late_threshold", "from": originals["exp"].name}
+    assert c["attention"] == [] and c["lock_in"] is None
+    out = tmp_path / "check.json"
+    assert cw.main(["--runs", str(exp), str(ref), "--repo-dir", str(REPO_ROOT), "--out", str(out)]) == 0
+    report = json.loads(out.read_text(encoding="utf-8"))
+    assert report["excluded_pairs"] == [] and len(report["pairs"]) == 1
+
+    (exp / "meta.yaml").write_text((exp / "meta.yaml").read_text(encoding="utf-8").replace("status: running", "status: failed"),
+                                   encoding="utf-8")
+    c = cw.check_run(cw.read_run(exp))
+    assert c["switch"]["grad_step"] == 6301 and not any("never switched" in f for f in c["attention"])
+    assert cw.main(["--runs", str(exp), str(ref), "--repo-dir", str(REPO_ROOT), "--out", str(out)]) == 0
+    assert [e["reason"] for e in json.loads(out.read_text(encoding="utf-8"))["excluded_pairs"]] == ["experimental failed"]
+
+    lost = tmp_path / "elsewhere"
+    lost.mkdir()
+    import shutil
+
+    shutil.move(str(ref), lost / ref.name)  # its original not next to it: the switch unknown, flagged, not excluded
+    c = cw.check_run(cw.read_run(lost / ref.name))
+    assert c["switch"]["grad_step"] is None and any("switch unknown" in f for f in c["attention"])
+    assert not any("never switched" in f for f in c["attention"])

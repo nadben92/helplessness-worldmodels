@@ -145,6 +145,11 @@ class ZoneAssignmentShuffle:
     def current(self) -> int | None:
         return self.episode_assignment[-1] if self.episode_assignment else None
 
+    def current_obs_offset(self) -> int:
+        """The replay-table row offset of the episode in progress (its assignment's block; 0 before the first episode): what
+        next_episode returned at its reset. For a resume state written before the collector saved it (docs/e5/DECISIONS.md (34))."""
+        return 0 if self.current is None else self.current * self.n_states
+
     def log_arrays(self) -> dict[str, np.ndarray]:
         """The per-episode log; episode_rotation_class: 0 = "A", 1 = "B" (assignment_symmetry, relative to the canonical
         assignment) so that the analysis can split by symmetry class."""
@@ -189,6 +194,9 @@ class DynamicsSwitch:
     def post_checkpoints(self, effective: int) -> list[int]:
         end = effective + self.post_steps
         return sorted({effective + g for g in self.post_grid if 0 < g < self.post_steps} | {end})
+
+    def current_obs_offset(self) -> int:
+        return 0  # one table block
 
     def next_episode(self, env_steps_done: int) -> tuple[object, int]:
         if not self.switched and env_steps_done >= self.switch_step:

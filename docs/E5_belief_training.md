@@ -1,6 +1,9 @@
 # E5 — Manipulating the belief through training
 
-**Status (2026-10-23): two waves. Wave 1 running (f = 1, seeds A and B; seed B's experimental run locked in); wave 2
+**Status (2026-10-27): waves 1 and 2 done; the shuffle runs continue past 300,000 in two batches (docs/e5/DECISIONS.md
+(33)). `e5_extend_a` (seed A's f = 1 pair) failed at its first step on 26 October (the old resume states lack the
+row offset of the episode in progress); fixed, to be relaunched; then `e5_probes_a`, `e5_extend_b`, `e5_probes_b`
+(docs/e5/DECISIONS.md (34)).** Earlier status (2026-10-23): two waves. Wave 1 running (f = 1, seeds A and B; seed B's experimental run locked in); wave 2
 ready (seed B's baseline; f = 1 experimental seeds 402 and 502 replacing seed B's, against seed B's reference); one probe
 batch after wave 2 at K = 300,000 (docs/e5/DECISIONS.md (32)).** Earlier (2026-10-22, evening): wave 1 relaunched (f = 1, seeds A and B, 22 October about 8:50); f = 0.5 abandoned for E5;
 wave 2 (seed B's baseline, f = 1 seed C) ready; wave 3 (seed C's baseline, f = 1 seed D) to be confirmed (docs/e5/DECISIONS.md

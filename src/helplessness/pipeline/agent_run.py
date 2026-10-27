@@ -513,6 +513,9 @@ def run_one(cfg: dict, seed: int, condition: str, run_dir: Path, device: torch.d
         collector._is_first, collector._episode_length = c["is_first"], c["episode_length"]
         if "obs_offset" in c:  # a run with an episode source (absent in E3's and E4's resume states)
             collector._obs_offset = c["obs_offset"]
+        elif collector.episode_source is not None:  # a resume state written before the offset was saved (E5's waves 1 and
+            # 2): the restored source's episode in progress gives it (docs/e5/DECISIONS.md (34))
+            collector._obs_offset = collector.episode_source.current_obs_offset()
         collector.filter.h, collector.filter.z, collector.filter.a_prev = (c["filter"][k].to(device) for k in ("h", "z", "a_prev"))
         _restore_streams(state["streams"], streams, gens)
         progress = state["progress"]

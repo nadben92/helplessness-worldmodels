@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -54,7 +55,43 @@ def git_commit_hash(cwd: str | Path | None = None) -> str:
     try:
         return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=cwd, text=True).strip()
     except Exception:
-        return "unknown"
+        return git_head_from_files(Path.cwd() if cwd is None else cwd) or "unknown"
+
+
+def git_head_from_files(root: str | Path) -> str | None:
+    """The commit HEAD names, read from the checkout's .git directory (root or a parent) without the git executable: the
+    GPU cluster's training containers have none (docs/e3/DECISIONS.md: every E3 run's git_commit was "unknown"; E5's
+    e5_extend_a too, docs/e5/DECISIONS.md (34)). A branch's ref is read from its loose file, else from packed-refs; a
+    worktree's .git file (gitdir:) is followed. It says nothing of uncommitted changes: source_tree_hash does. None
+    when there is no readable checkout."""
+    try:
+        root = Path(root).resolve()
+        top = next((d for d in (root, *root.parents) if (d / ".git").exists()), None)
+        if top is None:
+            return None
+        git = top / ".git"
+        if git.is_file():
+            text = git.read_text(encoding="utf-8").strip()
+            if not text.startswith("gitdir:"):
+                return None
+            git = (top / text[len("gitdir:"):].strip()).resolve()
+        common = (git / (git / "commondir").read_text(encoding="utf-8").strip()).resolve() if (git / "commondir").is_file() else git
+        head = (git / "HEAD").read_text(encoding="utf-8").strip()
+        if not head.startswith("ref: "):
+            return head if re.fullmatch(r"[0-9a-f]{40}", head) else None
+        ref = head[len("ref: "):]
+        for base in (git, common):
+            if (base / ref).is_file():
+                sha = (base / ref).read_text(encoding="utf-8").strip()
+                return sha if re.fullmatch(r"[0-9a-f]{40}", sha) else None
+        if (common / "packed-refs").is_file():
+            for line in (common / "packed-refs").read_text(encoding="utf-8").splitlines():
+                parts = line.split()
+                if len(parts) == 2 and parts[1] == ref and re.fullmatch(r"[0-9a-f]{40}", parts[0]):
+                    return parts[0]
+    except OSError:
+        return None
+    return None
 
 
 # The code and configs a run depends on: what source_tree_hash covers. On a clean checkout these are
@@ -96,10 +133,12 @@ def source_tree_hash(root: str | Path, scope: tuple[str, ...] = SOURCE_SCOPE) ->
 
 def code_provenance(root: str | Path) -> dict:
     """What identifies the code a run was launched from: git_commit,
-    git_dirty and git_n_changed_paths when git works in root ("unknown" /
-    None otherwise -- no git executable, or not a checkout), and always the
-    content hash of source_tree_hash (source_sha256, source_n_files, and
-    source_scope), None when it cannot be computed."""
+    git_dirty and git_n_changed_paths when git works in root; without the git
+    executable (the cluster's containers), the commit read from .git
+    (git_head_from_files, git_commit_from "files"; git_dirty None: unknown);
+    "unknown" / None when there is no checkout; and always the content hash
+    of source_tree_hash (source_sha256, source_n_files, and source_scope),
+    None when it cannot be computed."""
     def git(*args: str) -> str | None:
         try:
             done = subprocess.run(["git", *args], cwd=root, capture_output=True, text=True)
@@ -112,6 +151,8 @@ def code_provenance(root: str | Path) -> dict:
     if commit and status is not None:
         changed = [line for line in status.splitlines() if line.strip()]
         out = {"git_commit": commit, "git_dirty": bool(changed), "git_n_changed_paths": len(changed)}
+    elif commit is None and (head := git_head_from_files(root)) is not None:
+        out = {"git_commit": head, "git_dirty": None, "git_n_changed_paths": None, "git_commit_from": "files"}
     else:
         out = {"git_commit": "unknown", "git_dirty": None, "git_n_changed_paths": None}
     source = source_tree_hash(root)

@@ -4,7 +4,10 @@ notebook as well as on an extracted export). No probe.
 
 Per run:
   status            meta.yaml's (done / failed, with the error)
-  switch            the estimator switch: gradient and environment steps, the rule (threshold / late_threshold)
+  switch            the estimator switch: gradient and environment steps, the rule (threshold / late_threshold); a
+                    continuation (run_e5.py --extend, meta.yaml branched_from) carries its original's switch: before its
+                    first checkpoint (or when it failed at once) it is read from the original, found by name next to it,
+                    up the continuation chain (docs/e5/DECISIONS.md (34))
   collapse          after the switch, the longest stretch of consecutive evaluations of the switch statistic below the
                     collapse guard (1.0 bit; the guard stops a run at 5) and the lowest value; the last value
   mass              at the last checkpoint, the prior's mass on the true successor in each quadrant of the canonical
@@ -36,6 +39,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import re
 import sys
 from pathlib import Path
 
@@ -73,11 +77,26 @@ def read_run(run_dir: Path) -> dict:
             "seed": int(name.split("__seed")[1].split("__")[0]), "meta": meta, "records": [r for r in records if r.get("e4")]}
 
 
+def original_of(run: dict) -> Path | None:
+    """The run a continuation was branched from (meta.yaml branched_from: <original>/checkpoints/resume.pt, a path of the
+    machine that ran it): the directory of that name next to the continuation, None for a run that is not a continuation."""
+    src = run["meta"].get("branched_from")
+    if not src:
+        return None
+    parts = [p for p in re.split(r"[\\/]", src) if p]
+    return run["dir"].parent / parts[-3] if len(parts) >= 3 and parts[-2] == "checkpoints" else None
+
+
 def switch_of(run: dict) -> dict:
     for r in reversed(run["records"]):
         sw = (r.get("e5") or {}).get("estimator_switch") or {}
         if sw.get("grad_step") is not None or r.get("switch_step") is not None:
             return {"grad_step": sw.get("grad_step", r.get("switch_step")), "env_step": sw.get("env_step"), "rule": sw.get("rule")}
+    origin = original_of(run)
+    if origin is not None:  # a continuation with no record yet: its state, switch included, is its original's
+        if not (origin / "checkpoints.jsonl").is_file():
+            return {"grad_step": None, "env_step": None, "rule": None, "from": origin.name, "original_missing": True}
+        return {**switch_of(read_run(origin)), "from": origin.name}
     return {"grad_step": None, "env_step": None, "rule": None}
 
 
@@ -186,7 +205,9 @@ def check_run(run: dict) -> dict:
         flags.append(f"NaN/inf at checkpoint(s) {'; '.join(nan[:3])}" + (" ..." if len(nan) > 3 else ""))
     if run["meta"].get("status") == "failed":
         flags.append(f"status failed: {run['meta'].get('error', '')[:120]}")
-    if sw["grad_step"] is None:
+    if sw.get("original_missing"):
+        flags.append(f"continuation of {sw['from']}, not found here: switch unknown")
+    elif sw["grad_step"] is None:
         flags.append("never switched")
     if col["longest_below_1bit"] >= COLLAPSE_CONSECUTIVE:
         flags.append(f"{col['longest_below_1bit']} consecutive evaluations below {COLLAPSE_BITS} bit after the switch")
@@ -276,8 +297,9 @@ def main(argv: list[str] | None = None) -> int:
     pairs, excluded = [], []
     # a run in no pair (docs/e5/DECISIONS.md (32), (33)): locked in, never switched or failed -- as the probe plan; a run
     # still training or stopped by the user (status running) stays in its pairs
-    locked = {c["run"]: ("LOCK-IN" if c["lock_in"] is not None else "never switched" if c["switch"]["grad_step"] is None else "failed")
-              for c in run_checks if c["lock_in"] is not None or c["switch"]["grad_step"] is None or c["status"] == "failed"}
+    never = {c["run"] for c in run_checks if c["switch"]["grad_step"] is None and not c["switch"].get("original_missing")}
+    locked = {c["run"]: ("LOCK-IN" if c["lock_in"] is not None else "never switched" if c["run"] in never else "failed")
+              for c in run_checks if c["lock_in"] is not None or c["run"] in never or c["status"] == "failed"}
     repo = args.repo_dir.resolve()
     for exp in (r for r in runs if r["role"] == "experimental"):
         ref_seed = reference_seed(repo, exp["tag"], exp["seed"])
@@ -295,7 +317,7 @@ def main(argv: list[str] | None = None) -> int:
     for c in run_checks:
         sw, col = c["switch"], c["collapse"]
         print(f"  {c['tag']} seed {c['seed']} {c['role']}: {c['status']} at {c['last_env_step']} | switch {fmt(sw['grad_step'])} "
-              f"(env {fmt(sw['env_step'])}, {sw['rule'] or '-'}) | after it: longest {col['longest_below_1bit']} below 1 bit, min "
+              f"(env {fmt(sw['env_step'])}, {sw['rule'] or '-'}{', from the original run' if sw.get('from') else ''}) | after it: longest {col['longest_below_1bit']} below 1 bit, min "
               f"{fmt(col['min_after_switch'])}, last {fmt(col['last'])} | mass min {fmt(min([v for v in c['mass_by_quadrant'].values() if v is not None], default=None))} "
               f"| success {fmt(c['success_rate'])} | {'ATTENTION: ' + '; '.join(c['attention']) if c['attention'] else 'OK'}")
     print("PAIRS")

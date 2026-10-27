@@ -723,3 +723,53 @@ original at 600).
   morning at the latest; `e5_extend_b` launched right after, ending on 28 October in the evening to 29 October in the
   evening (the ceiling: 29 October about 23:00); `e5_probes_b` on 29 October in the evening or 30 October in the
   morning.
+
+## 2026-10-27 (34) -- `e5_extend_a` failed at its first step: the continuations need the row offset the old resume states lack (implementer; the user's request)
+
+**What happened.** `e5_extend_a` (bcdcfe2, 26 October about 10:30) branched both runs of seed A's f = 1 pair from their
+`resume.pt` at 290,000 (the branch itself succeeded), then stopped at the first step: `ObservationTableMismatch`, state
+130 (experimental) and state 12 (reference), each looked up in table row = its state, i.e. the table's first block.
+
+**Cause.** The resume bug fixed in (33) (cf9ef06, 26 October): the resume state did not keep the current episode's row
+offset in the replay table (`ClosedLoopCollector._obs_offset`: the block of the episode's assignment). The fix saves it
+in every NEW resume state, but the states the continuations start from were written on 22-23 October, before it: they
+have no `obs_offset`, so the restore left the collector's default, 0. At 290,000 both runs were in the middle of an
+episode of an assignment whose block is not the first: the observation of the restored environment (that assignment's)
+was checked against block 0's image of its state. (33)'s test continued a run whose resume state was written by the fixed
+code: it could not see this.
+
+Everything else is restored, checked: the replay (its table is the 12 assignments' blocks, built from the run's seed),
+the environment and the episode source in one pickle (so the source's assignment generator, its per-episode log and the
+episode in progress), every numpy stream, the torch generators and the global torch state, the switch, the optimisers.
+"planned 300000" in the log is the planned budget (299,744 + 256), kept on purpose ((33): beta_rep's ramp); the
+assignment schedule does not depend on it -- one draw per episode from the source's own stream, whatever the run's
+length -- so past 300,000 the draws simply continue that stream, as a run planned longer would have drawn them.
+
+**Fix (library, `pipeline/agent_run.py`, `pipeline/episode_sources.py`).** A resume state with an episode source and no
+`obs_offset` takes the offset from the restored source: `current_obs_offset()`, the block of its last episode's
+assignment (the episode in progress; what `next_episode` returned at its reset), 0 for the immunisation's
+`DynamicsSwitch` (one block). Nothing else changes: states with `obs_offset` (every state written since cf9ef06) and E3's
+and E4's (no source) take the paths they took; a run that is not continued never reaches this line. Tested
+(`tests/e5/test_e5_extension.py`): a mini shuffle run whose last resume point (500) falls in an episode of a
+non-first block, its `resume.pt` stripped of the offset as waves 1-2's, continued to 800 past its planned 600 -- it
+failed with `ObservationTableMismatch` before the fix; with it, the continuation equals a run trained to 800 in one go:
+every stored step (observation row, state, action, reward, flags), the episodes' assignments, the weights at 600, 700,
+800 and the training losses recorded there.
+
+**`check_wave.py` on a continuation.** A continuation carries its original's switch (the restored state), but before
+its first checkpoint it has no record, so it showed "never switched" and its pair was excluded. Its switch is now read
+from its original (found by name next to it, from `meta.yaml`'s `branched_from`, up the chain), marked "from the
+original run"; a continuation whose original is not there is flagged "switch unknown", not excluded; a failed one stays
+excluded, as failed. Tested.
+
+**"git commit unknown".** The cluster's training containers have no git executable (as E3's runs, docs/e3/DECISIONS.md).
+The provenance now reads the commit from the checkout's `.git` directory when git does not run (`runs.git_head_from_files`:
+HEAD, the branch's loose ref or `packed-refs`, a worktree's `gitdir`), recorded with `git_commit_from: files` and
+`git_dirty` unknown (null): the content hash `source_sha256`, always recorded, stays the check of the files actually run.
+Tested on synthetic `.git` directories and against `git rev-parse HEAD` on the repository.
+
+**The two failed continuations** are moved to `results/E5_belief_training_aborted/extend_a_20261026/` (kept, not
+deleted; RUN_GPU.md step 6b). `--extend auto` would not have taken them anyway (it takes the newest run with status
+`done` and a `resume.pt`; they are `failed`, without one), but `check_wave.py` and the export read the newest run of a
+seed and condition, and the relaunched runs are the ones to read. `e5_extend_b`'s runs (B's reference, E, F) start from
+states of the same age: the fix covers them.
