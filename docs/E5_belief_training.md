@@ -1,6 +1,6 @@
 # E5 — Manipulating the belief through training
 
-**Status (2026-10-28, evening): `e5_extend_b` stopped at 475,000 (time), short of E4's criterion; PRELIMINARY probes of
+**Status (2026-10-28, night): the PRELIMINARY probes of E and F at 475,000 analysed against the baselines (`experiments/E5_belief_training/analysis_450k/REPORT.md`, expected shapes committed first): the baseline replicates E4; under shuffle the belief depends on both the theme and the position (theme only -0.91 / -0.92, position only -0.38 / -0.92, against about 0 and -2.29 for the baselines), with intermediate beliefs.** Earlier status (2026-10-28, evening): `e5_extend_b` stopped at 475,000 (time), short of E4's criterion; PRELIMINARY probes of
 E and F at 475,000 (`e5_probes_b`), compared with baseline B at its checkpoints matched to their level of learning
 (primary; `matched_checkpoint.py`, `e5_probes_baselines`) and with the baselines at 300,000 (secondary); the final
 probes (B's reference, E, F and seed A's pair to 650,000) deferred, decided before launch (docs/e5/DECISIONS.md (36)).**

@@ -1,0 +1,101 @@
+axis,k,position,n_comparisons,n_valid,difference_mean,difference_sd,comparisons_valid
+arc_ctrl,0,cd,2,0,nan,nan,
+arc_ctrl,0,neutral,2,0,nan,nan,
+arc_ctrl,0,ud,2,2,0.1710855741324695,0.0959190676129296,shuffle_f1:402@475000=baseline:102@63096 shuffle_f1:502@475000=baseline:102@63096
+arc_ctrl,1,cd,2,0,nan,nan,
+arc_ctrl,1,neutral,2,2,-0.7657599928000882,0.21182207787125765,shuffle_f1:402@475000=baseline:102@63096 shuffle_f1:502@475000=baseline:102@63096
+arc_ctrl,1,ud,2,2,0.22334323631136532,0.20700878146930246,shuffle_f1:402@475000=baseline:102@63096 shuffle_f1:502@475000=baseline:102@63096
+arc_ctrl,2,cd,2,0,nan,nan,
+arc_ctrl,2,neutral,2,1,-0.24222037600274127,nan,shuffle_f1:502@475000=baseline:102@63096
+arc_ctrl,2,ud,2,2,0.5337417969802605,0.6276202658402522,shuffle_f1:402@475000=baseline:102@63096 shuffle_f1:502@475000=baseline:102@63096
+arc_ctrl,3,cd,2,0,nan,nan,
+arc_ctrl,3,neutral,2,0,nan,nan,
+arc_ctrl,3,ud,2,2,0.6608491810300141,0.8007380324805805,shuffle_f1:402@475000=baseline:102@63096 shuffle_f1:502@475000=baseline:102@63096
+arc_ctrl,4,cd,2,0,nan,nan,
+arc_ctrl,4,neutral,2,1,-0.640637830447861,nan,shuffle_f1:402@475000=baseline:102@63096
+arc_ctrl,4,ud,2,2,0.8112400148995986,0.23745225231990522,shuffle_f1:402@475000=baseline:102@63096 shuffle_f1:502@475000=baseline:102@63096
+arc_ctrl,5,cd,2,0,nan,nan,
+arc_ctrl,5,neutral,2,0,nan,nan,
+arc_ctrl,5,ud,2,2,0.9359902650484048,0.13404195683325953,shuffle_f1:402@475000=baseline:102@63096 shuffle_f1:502@475000=baseline:102@63096
+arc_ctrl,6,cd,2,0,nan,nan,
+arc_ctrl,6,neutral,2,2,-0.08736700767180838,0.3257284446655279,shuffle_f1:402@475000=baseline:102@63096 shuffle_f1:502@475000=baseline:102@63096
+arc_ctrl,6,ud,2,0,nan,nan,
+arc_ctrl,7,cd,2,0,nan,nan,
+arc_ctrl,7,neutral,2,2,-0.06756286777313503,0.3074012207732902,shuffle_f1:402@475000=baseline:102@63096 shuffle_f1:502@475000=baseline:102@63096
+arc_ctrl,7,ud,2,0,nan,nan,
+arc_ctrl,8,cd,2,0,nan,nan,
+arc_ctrl,8,neutral,2,0,nan,nan,
+arc_ctrl,8,ud,2,0,nan,nan,
+arc_ctrl,9,cd,2,0,nan,nan,
+arc_ctrl,9,neutral,2,0,nan,nan,
+arc_ctrl,9,ud,2,0,nan,nan,
+arc_ctrl,10,cd,2,0,nan,nan,
+arc_ctrl,10,neutral,2,0,nan,nan,
+arc_ctrl,10,ud,2,0,nan,nan,
+arc_inc,0,cd,2,0,nan,nan,
+arc_inc,0,neutral,2,0,nan,nan,
+arc_inc,0,ud,2,0,nan,nan,
+arc_inc,1,cd,2,0,nan,nan,
+arc_inc,1,neutral,2,0,nan,nan,
+arc_inc,1,ud,2,0,nan,nan,
+arc_inc,2,cd,2,0,nan,nan,
+arc_inc,2,neutral,2,0,nan,nan,
+arc_inc,2,ud,2,0,nan,nan,
+arc_inc,3,cd,2,0,nan,nan,
+arc_inc,3,neutral,2,0,nan,nan,
+arc_inc,3,ud,2,0,nan,nan,
+arc_inc,4,cd,2,0,nan,nan,
+arc_inc,4,neutral,2,0,nan,nan,
+arc_inc,4,ud,2,0,nan,nan,
+arc_inc,5,cd,2,0,nan,nan,
+arc_inc,5,neutral,2,0,nan,nan,
+arc_inc,5,ud,2,0,nan,nan,
+arc_inc,6,cd,2,0,nan,nan,
+arc_inc,6,neutral,2,2,0.29288762434305937,0.004784534150253699,shuffle_f1:402@475000=baseline:102@63096 shuffle_f1:502@475000=baseline:102@63096
+arc_inc,6,ud,2,0,nan,nan,
+arc_inc,7,cd,2,0,nan,nan,
+arc_inc,7,neutral,2,0,nan,nan,
+arc_inc,7,ud,2,0,nan,nan,
+arc_inc,8,cd,2,0,nan,nan,
+arc_inc,8,neutral,2,0,nan,nan,
+arc_inc,8,ud,2,0,nan,nan,
+arc_inc,9,cd,2,0,nan,nan,
+arc_inc,9,neutral,2,0,nan,nan,
+arc_inc,9,ud,2,0,nan,nan,
+arc_inc,10,cd,2,0,nan,nan,
+arc_inc,10,neutral,2,0,nan,nan,
+arc_inc,10,ud,2,0,nan,nan,
+position_only,0,ud,2,2,1.309029661026904,0.3858019060426356,shuffle_f1:402@475000=baseline:102@63096 shuffle_f1:502@475000=baseline:102@63096
+segment,0,cd,2,0,nan,nan,
+segment,0,neutral,2,0,nan,nan,
+segment,0,ud,2,2,0.1710855741324695,0.0959190676129296,shuffle_f1:402@475000=baseline:102@63096 shuffle_f1:502@475000=baseline:102@63096
+segment,1,cd,2,0,nan,nan,
+segment,1,neutral,2,0,nan,nan,
+segment,1,ud,2,2,0.2139803602608057,0.06402049316957807,shuffle_f1:402@475000=baseline:102@63096 shuffle_f1:502@475000=baseline:102@63096
+segment,2,cd,2,0,nan,nan,
+segment,2,neutral,2,2,-0.7788185547288566,0.07692880662180172,shuffle_f1:402@475000=baseline:102@63096 shuffle_f1:502@475000=baseline:102@63096
+segment,2,ud,2,2,0.19207106902397486,0.13541836581878508,shuffle_f1:402@475000=baseline:102@63096 shuffle_f1:502@475000=baseline:102@63096
+segment,3,cd,2,0,nan,nan,
+segment,3,neutral,2,0,nan,nan,
+segment,3,ud,2,2,0.23710579987656522,0.10008055481301728,shuffle_f1:402@475000=baseline:102@63096 shuffle_f1:502@475000=baseline:102@63096
+segment,4,cd,2,0,nan,nan,
+segment,4,neutral,2,0,nan,nan,
+segment,4,ud,2,0,nan,nan,
+segment,5,cd,2,0,nan,nan,
+segment,5,neutral,2,0,nan,nan,
+segment,5,ud,2,0,nan,nan,
+segment,6,cd,2,0,nan,nan,
+segment,6,neutral,2,0,nan,nan,
+segment,6,ud,2,0,nan,nan,
+segment,7,cd,2,0,nan,nan,
+segment,7,neutral,2,0,nan,nan,
+segment,7,ud,2,0,nan,nan,
+segment,8,cd,2,0,nan,nan,
+segment,8,neutral,2,0,nan,nan,
+segment,8,ud,2,0,nan,nan,
+segment,9,cd,2,0,nan,nan,
+segment,9,neutral,2,0,nan,nan,
+segment,9,ud,2,0,nan,nan,
+segment,10,cd,2,0,nan,nan,
+segment,10,neutral,2,0,nan,nan,
+segment,10,ud,2,0,nan,nan,

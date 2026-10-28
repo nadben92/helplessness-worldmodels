@@ -1,0 +1,6 @@
+label,group,condition,seed,reference_seed,checkpoint_k,n_walks_used,probes,valid,unique_image_slots,unique_valid,dir
+baseline_A_k300000,baseline,baseline,2,2,300000,150,100,49,93,45,probes__p1-b-d1__base__seed02__k300000__20261028T125628Z
+baseline_B_k300000,baseline,baseline,102,102,300000,150,100,44,93,40,probes__p1-b-d1__base__seed102__k300000__20261028T125628Z
+baseline_B_k63096,baseline_matched,baseline,102,102,63096,150,100,20,93,18,probes__p1-b-d1__base__seed102__k063096__20261028T130310Z
+shuffle_E_k475000,shuffle,shuffle_f1,402,102,475000,150,100,55,93,50,probes__p1-b-d1__sh100__seed402__k475000__20261028T115218Z
+shuffle_F_k475000,shuffle,shuffle_f1,502,102,475000,150,100,53,93,48,probes__p1-b-d1__sh100__seed502__k475000__20261028T115218Z
