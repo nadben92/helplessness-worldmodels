@@ -1,6 +1,7 @@
 """E6 / E7 on all agents, locally on the CPU (docs/e6/DECISIONS.md (63)): the jobs of one phase, run by a pool of worker
-processes (one thread each), one log per job under --logs. The jobs are the existing scripts' command lines; nothing of
-the measures is here.
+processes (one thread each), one log per job under --logs, one output directory per job under scratch/all/<job>/ (git
+ignores it; the run scripts name their directories by agent and second, which parallel jobs of one agent would share).
+The jobs are the existing scripts' command lines; nothing of the measures is here.
 
 Phases:
   e6           run_e6.py, one job per (agent, image) of configs/e6/images_by_agent_all.yaml
@@ -35,11 +36,14 @@ IMAGES = "configs/e6/images_by_agent_all.yaml"
 E6_CONFIG, E7_CONFIG = "configs/e6/e6_all.yaml", "configs/e7/e7_all.yaml"
 E6 = "experiments/E6_phenotypes_latent/run_e6.py"
 E7 = "experiments/E7_latent_manipulation/"
+OUT = "scratch/all"
 P_LO, P_HI = ["0", "0.1", "0.2", "0.3", "0.4", "0.5"], ["0.6", "0.7", "0.8", "0.9", "1"]
 
 
 def newest(pattern: str) -> str:
-    found = sorted(d for d in glob.glob(str(REPO_ROOT / pattern)) if json.loads(Path(d, "status.json").read_text())["status"] == "done")
+    """The newest finished run directory matching <OUT>/<job>/<pattern> (newest by its name's UTC stamp)."""
+    found = sorted((d for d in glob.glob(str(REPO_ROOT / OUT / "*" / pattern))
+                    if json.loads(Path(d, "status.json").read_text())["status"] == "done"), key=lambda d: Path(d).name)
     if not found:
         raise SystemExit(f"no finished run matches {pattern}")
     return found[-1]
@@ -70,7 +74,7 @@ def jobs(phase: str, py: str, runs_root: str) -> list[tuple[str, list[str]]]:
             out.append((f"dir_{a}", [py, "-u", E7 + "run_e7_directions.py", *one, "--config", E7_CONFIG, "--images", "training"]))
         elif phase == "constrained":
             out.append((f"con_{a}", [py, "-u", E7 + "run_e7_constrained.py", *one, "--config", E7_CONFIG,
-                                     "--directions", newest(f"results/E7_latent_manipulation/e7dir__{a}__*")]))
+                                     "--directions", newest(f"E7_latent_manipulation/e7dir__{a}__*")]))
         elif phase == "oracle":
             out.append((f"oracle_{a}", [py, "-u", E7 + "run_e7_diagnostics.py", "--phase", "lookahead", *one, "--config", E7_CONFIG]))
         elif phase == "anti":
@@ -79,13 +83,13 @@ def jobs(phase: str, py: str, runs_root: str) -> list[tuple[str, list[str]]]:
                     (f"anti_{a}_ref_hi", [*dis, "--role", "reference", "--p-values", *P_HI, "--tag", "hi"]),
                     (f"anti_{a}_exp", [*dis, "--role", "experimental", "--p-values", "0", "1", "--tag", "ctl"])]
         elif phase == "corrected":
-            con = newest(f"results/E7_latent_manipulation/e7con__{a}__*")
+            con = newest(f"E7_latent_manipulation/e7con__{a}__*")
             lam, mu = best_setting(con)
             out.append((f"cor_{a}", [py, "-u", E7 + "run_e7_d7.py", "--phase", "corrected", "--lam", f"{lam:g}", "--mu-pos", f"{mu:g}",
                                      "--constrained", con, "--config", E7_CONFIG, *one]))
         else:
             raise SystemExit(f"unknown phase {phase}")
-    return out
+    return [(name, [*cmd, "--out-dir", f"{OUT}/{name}"]) for name, cmd in out]
 
 
 def main(argv: list[str] | None = None) -> int:
