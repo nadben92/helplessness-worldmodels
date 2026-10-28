@@ -66,3 +66,38 @@ Les figures ne portent aucun texte autre que les noms d'axes, les graduations et
 - **Message** : même récupération rapide puis plateau, à un niveau moins extrême en shuffle.
 - **Source** : `tables/recovery.csv`. **Oral** : « Dans l'épisode, les deux conditions récupèrent autant, puis
   plafonnent. »
+
+## Figures pour la présentation (`figures_e5/make_e5_v2.py`, n'écrit pas E5a–E5d)
+
+Message des deux figures : **avant (baseline), la croyance tenait à la position seule ; en shuffle, le thème joue.**
+Résultat intermédiaire ; les limites ci-dessous ne sont pas sur les figures.
+
+### E5a_v2 — position contre thème, deux panneaux
+- **Tracé** : panneau gauche baseline (vermillon), droit shuffle (violet), nom de la condition sous chaque panneau ;
+  barres `position only` et `theme only` = moyenne des deux graines, points = graines ; ordonnée −2,4 à 0,2 ; tirets
+  gris = 0. Mêmes valeurs qu'E5a (`tables/extremes.csv`) : baseline −2,30 / −2,27 et −0,02 / −0,00 ; shuffle −0,38 /
+  −0,92 (moyenne −0,65) et −0,91 / −0,92 (moyenne −0,91).
+- **Oral** : « Avant, seule la position portait la croyance ; en shuffle, la couleur seule suffit à la faire baisser. »
+
+### E5e — le thème seul (quadrant neutre)
+- **Tracé** : sondes valides au quadrant neutre (nord-est) seulement ; abscisse `theme distance` = distance RVB de la
+  couleur sondée à T_inc, divisée par D ; par graine, moyenne de ses sondes par classe de 0,1 D (trait fin) ;
+  moyenne des graines (trait épais) sur les classes où les deux graines ont au moins une sonde valide (une graine peut
+  n'avoir qu'une sonde dans une classe). Tirets gris = 0. Source : `tables/gradient_binned.csv` (unit = label).
+- **Valeurs (moyenne des graines)** : shuffle −0,91 (0) → −0,58 (0,2) → −0,48 (0,4) → −0,26 à −0,17 (0,5 à 1,0) ;
+  baseline entre −0,02 et 0,00 de 0 à 0,5 D.
+- **Écart à la forme demandée (« baseline plate à 0 »)** : la baseline n'est plate que jusqu'à 0,5 D ; elle descend à
+  −0,09 (0,6), −0,30 (0,7), −0,43 (0,8), −0,45 (0,9), −0,21 (1,0). Ces points viennent des sondes des arcs (couleurs
+  hors du segment T_inc–T_ctrl, loin des deux thèmes d'entraînement), surtout de la graine A (−0,41 à −0,68 sur l'arc
+  centré en T_ctrl, jusqu'à −0,55 sur l'arc centré en T_inc ; graine B −0,18 à −0,26 et ≈ 0). Déjà vu dans E4 (thème
+  seul −0,29 pour une configuration). Lecture : une couleur jamais vue sur un quadrant neutre fait un peu baisser b chez
+  la baseline ; près de T_inc, rien. L'axe n'a pas été tronqué.
+- **Oral** : « Le même quadrant neutre, peint de plus en plus près de la couleur du tapis : rien chez la baseline, une
+  croyance qui baisse chez le shuffle. »
+
+### Limites (à dire, pas sur la figure)
+- « Theme only » montre deux quadrants T_inc (la sonde ne change qu'un quadrant, l'ancienne UD garde T_inc) et
+  « position only » aucun ; le shuffle n'a vu que des images à un seul T_inc. La même chose vaut pour E5e près de
+  T_inc (deux quadrants T_inc).
+- Convergence inachevée : 475 000 pas, critère d'E4 non atteint (DECISIONS (36)) ; résultats PRÉLIMINAIRES.
+- Deux graines shuffle (E, F) partageant une référence ; shuffle A non sondé.
