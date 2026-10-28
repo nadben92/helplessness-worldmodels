@@ -224,3 +224,66 @@ orale.
 - **À dire** : correction A : monte le lecteur 3 et le lecteur 1 (b +1,2 à +1,9 bit), mais 2 reste au hasard pour 3
   agents sur 4 (D7) ; références induites : 1 dit que l'action échoue dans environ la moitié des pas (40–56 %, D5),
   2 dirige quand même (D6). Source : `IMPLEMENTATION_REPORT.md` d'E6, § 17–20.
+
+### E7f — équations de la correction latente δh
+- **Tracé** : `h ← h + δh` ; `min_δh Σ_a KL(q_target(z|a) ‖ p(z | GRU(h+δh, z, a))) + λ‖δh‖² + μ_pos·D_pos` ; sous les
+  termes : « controllability » (violet de la correction A), « small change », « keep position » ; « weights frozen ».
+  Taille de l'équation ajustée automatiquement pour tenir dans la slide (28 pt au plus).
+- **Conforme au code** (`src/helplessness/probing/belief_steering.py`) : même ordre des arguments de la KL (cible
+  d'abord), somme sur les actions et sur les variables catégorielles, pas de perte en pixels. Précisions à dire :
+  q_target(z|a) = posterior de l'image de la **vraie** case suivante pour l'action a, calculé avec le h **non
+  modifié** (q(z | h′ₐ, e(x(s′ₐ)))) ; D_pos = KL(pos(h) ‖ pos(h+δh)), pos = position douce de l'agent lue dans l'image
+  décodée (softmax, τ = 0,02) ; optimisation par Adam depuis δh = 0, une situation à la fois, poids gelés.
+- **Omis volontairement** : le terme μ_goal·(p_goal(h+δh, z) − p_goal(h, z))² du code (μ_goal calibré par agent : 10
+  pour p1-a et p1-b, 0 pour p2-a et p2-b ; rapport § 11).
+- **Oral** : « On cherche le plus petit changement de h qui fait prédire au modèle que ses actions marchent, sans
+  déplacer l'agent dans l'image. »
+
+### E7g — pourquoi la correction échoue
+- **Tracé** : deux panneaux, abscisse commune Δb (bits). Gauche : localisation dans la zone (part des pas où le gabarit
+  le plus proche de l'image décodée est la bonne case) ; droite : part dirigée (épisodes).
+- **Un point** = un (agent, réglage), image d'entraînement, 4 agents d'E4 :
+  - **cercles violet clair** : correction **sans contrainte** appliquée en épisodes (premier rapport, modes
+    « direction » et « pas à pas », α ∈ {0,25 ; 0,5 ; 0,75 ; 1 ; 1,5}), moyenne sur les 180 épisodes ;
+  - **cercles violet foncé** : correction **contrainte** appliquée en épisodes (réglage retenu par agent, α = 1, modes
+    « direction contrainte » et « pas à pas contraint ») ;
+  - **carrés** (gauche seulement) : balayage statique (100 situations par agent, pas d'épisodes), λ = 0,01 :
+    μ_pos = 0 en clair, μ_pos ∈ {1 ; 10 ; 100} en foncé ; abscisse = gain de b, ordonnée = localisation après correction.
+  - Δb en épisodes = b au pas 1 sous intervention − b au pas 1 sans intervention, même agent.
+- **Repères** : point vermillon = exposés sans intervention (moyenne des 4 : localisation 0,79, part dirigée 0,38) ;
+  correction complète = −b sans intervention, moyenne des 4 = **2,13 bit** ; étoile gauche = (2,13 ; localisation 1) ;
+  étoile droite = (2,13 ; part dirigée de l'oracle à k = 1 en épisodes, moyenne des 4 = **0,85**, étendue 0,75–0,93) ;
+  tirets gris à gauche = localisation sans intervention (0,79) ; tirets bleus à droite = références (0,94) ; tirets gris
+  à droite = hasard (0,4).
+- **Valeurs de contrôle retrouvées** : sans contrainte, pas à pas, α = 1 : b −2,13 → −0,31, part dirigée 0,38 → 0,58,
+  localisation 0,33 au pas 1 (0,34 dans la zone) ; balayage λ = 0,01, p1-a : localisation 0,27 (μ_pos = 0) → 0,74
+  (μ_pos = 1), gain +1,52 à +1,69 bit selon l'agent ; pas à pas contraint : part dirigée 0,49 → 0,71 (p1-b), 0,40 → 0,48
+  (p2-b), 0,32 → 0,44 (p1-a), 0,33 → 0,61 (p2-a).
+- **Ce que montrent les données** (ne correspond qu'en partie au message attendu) :
+  - sans contrainte : la localisation s'effondre quand Δb monte (beaucoup de points vers 0) ; en direction, Δb reste
+    souvent sous 1 bit ;
+  - direction contrainte : la localisation s'effondre quand même (0,00–0,05 dans la zone) ; Δb 0,5–1,2 ;
+  - **pas à pas contraint : la localisation est conservée** (0,63–0,88, autour du niveau sans intervention) **et Δb
+    atteint 1,4–1,9 bit**, près de la correction complète. Ces points ne tombent pas « en bas à gauche » : l'échec est
+    sur le **comportement**, à 0,44–0,71, sous l'oracle (0,85) et la référence (0,94). D7 explique pourquoi (E7d,
+    E7g_critic) : le critic ne lit pas ce gain de b, sauf chez p1-b.
+- **Sources** : `results/E7_latent_manipulation/dev_e4_cpu/analysis/checks.csv` (sans contrainte),
+  `dev_e4_cpu_v2/analysis/checks.csv` (contrainte appliquée), `dev_e4_cpu_v2/analysis/constrained_settings.csv`
+  (balayage, données de `constrained_tradeoff.png`), `dev_e4_cpu_diag/analysis/d4_episodes.csv` (oracle),
+  `results/E6_phenotypes_latent/dev_e4_cpu_v2/analysis/points.csv` (référence).
+- **Oral** : « Sans contrainte, corriger b fait perdre l'agent dans l'image ; avec contrainte, b est corrigé et
+  l'agent reste localisé, mais le comportement ne suit qu'à moitié. »
+
+### E7g_critic — même figure en contrôlabilité vue par le critic
+- **Tracé** : abscisse ΔC1 (D7, z̄ tiré ; C1 = part d'argmax dirigé de V(h′ₐ, z̄)) ; gauche localisation, droite part
+  dirigée ; **un point = un run corrigé de D7** (pas à pas contraint, α = 1, 10 couples agent × (λ, μ_pos)), ΔC1 de
+  `d7_correction.csv` (pas corrigés − non corrigés, mêmes pas), localisation et part dirigée du `summary.json` du run.
+  Les runs sans contrainte n'ont pas de ΔC1 (D7 ne les a pas rejoués) : seuls les runs contraints sont tracés.
+- **Repères** : vermillon = exposés sans intervention (runs naturels de D7, moyenne des 4 : localisation 0,79, part
+  0,38) ; correction complète en C1 = C1 des références naturelles − C1 des exposés naturels = **0,61** (`d7_bins.csv`,
+  pondéré par les pas) ; étoiles à (0,61 ; 1) et (0,61 ; 0,85) ; mêmes lignes qu'E7g.
+- **Valeurs** : ΔC1 de −0,13 à +0,02 pour 8 runs ; +0,18 et +0,20 pour p1-b (les deux points à part dirigée 0,71–0,75).
+  Le gain de Δb (+1,2 à +1,9 bit) devient presque nul en ΔC1 : il est en grande partie illusoire pour le critic.
+- **Sources** : `results/E7_dissociation/d7/analysis/d7_correction.csv`, `d7_bins.csv`, `results/E7_dissociation/d7/runs/*/summary.json`.
+- **Oral** : « Vu par le critic, la correction ne déplace presque rien, sauf chez p1-b ; c'est là que le comportement
+  remonte le plus. »
