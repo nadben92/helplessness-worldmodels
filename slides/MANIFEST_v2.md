@@ -287,3 +287,44 @@ orale.
 - **Sources** : `results/E7_dissociation/d7/analysis/d7_correction.csv`, `d7_bins.csv`, `results/E7_dissociation/d7/runs/*/summary.json`.
 - **Oral** : « Vu par le critic, la correction ne déplace presque rien, sauf chez p1-b ; c'est là que le comportement
   remonte le plus. »
+
+### E7h — la correction latente en une figure (mêmes 4 agents partout)
+- **Tracé** : 4 panneaux × 4 conditions (exposé vermillon, sans contrainte violet clair, contrainte violet foncé,
+  référence bleu) ; un marqueur par agent, même forme dans tous les panneaux (rond p1-a, carré p1-b, triangle p2-a,
+  losange p2-b) ; trait noir court = moyenne des agents disponibles ; tirets gris = hasard 2/5 (C1, part dirigée).
+  Image d'entraînement, 4 agents d'E4. E7g et E7g_critic restent inchangées.
+- **Conditions** :
+  - exposé et référence sans intervention : épisodes d'E6 (`points.csv`) ;
+  - sans contrainte : correction pas à pas, α = 1, λ = 0,01, sans μ (premier rapport, `dev_e4_cpu/analysis/checks.csv`) ;
+  - contrainte : correction pas à pas contrainte, α = 1, **réglage enregistré** de chaque agent, rejoué par D7
+    (`d7_identity.csv`, `recorded = True`) : p1-a λ = 0,1 μ_pos = 1 ; p1-b λ = 0,01 μ_pos = 1 ; p2-a λ = 0,01
+    μ_pos = 10 ; p2-b λ = 0,1 μ_pos = 1. Les runs D7 reproduisent exactement les runs enregistrés (§ 20).
+- **Mesures** :
+  - **b** : b au pas 1 (exposé − référence, 9 départs au centre de la zone, 20 épisodes chacun) ; la référence vaut 0
+    par construction. C'est la seule définition disponible dans les quatre conditions ;
+  - **critic C1** : part des pas de zone bien localisés où l'argmax de V(h′ₐ, z̄) est une action dirigée, z̄ tiré du
+    mélange des 5 priors (z̄ principal de D7). Exposé et référence : moyenne par agent sur leurs pas bien localisés,
+    extraite en lecture seule des épisodes D7 (`figures_v2/_extract_e7h_c1.py` → `data_v2/e7h_c1_natural.csv`, avec
+    `analyse_e7_d7.collect_natural`). Contrainte : `C1_corr` de `d7_correction.csv` (pas corrigés bien localisés) ;
+  - **localisation** : part des pas dans la zone où le gabarit le plus proche de l'image décodée est la bonne case
+    (`loc_template_zone`) ;
+  - **part dirigée** : part des pas dans la zone qui rapprochent du but (ε-greedy, épisodes).
+- **Moyennes par condition (b ; C1 ; localisation ; part dirigée)** :
+  - exposé : −2,13 ; 0,40 ; 0,79 ; 0,38 ;
+  - sans contrainte : −0,31 ; **manquant** ; 0,34 ; 0,58 ;
+  - contrainte : −0,38 ; 0,49 ; 0,79 ; 0,56 ;
+  - référence : 0,00 ; 1,00 ; 1,00 ; 0,94.
+- **Par agent (p1-a, p1-b, p2-a, p2-b)** : exposé C1 0,39 / 0,54 / 0,35 / 0,30 ; contrainte C1 0,36 / 0,74 / 0,45 /
+  0,41 ; contrainte part dirigée 0,44 / 0,71 / 0,61 / 0,48 ; sans contrainte localisation 0,16 / 0,53 / 0,26 / 0,41.
+- **Case vide** : C1 sans contrainte. D7 ne l'a pas calculé ; le rejeu avec la collecte de D7 coûte 1 520–2 180 s par
+  run (rapport § 20), soit environ 36 min de temps réel pour les 4 agents en parallèle, au-delà de la limite de 30 min.
+  Non relancé.
+- **Ce que montrent les données** :
+  - contrainte : b remonte presque au niveau de la référence (−0,38) et la localisation est conservée (0,79), mais C1
+    reste près du hasard pour 3 agents sur 4 (0,36–0,45 ; p1-b 0,74) ;
+  - la part dirigée remonte **à mi-chemin** (0,56) entre l'exposé (0,38) et la référence (0,94), pas « proche de
+    l'exposé » ; c'est p1-b, le seul dont C1 monte, qui remonte le plus (0,71) ;
+  - sans contrainte : b remonte autant (−0,31) mais la localisation s'effondre (0,34) ; sa part dirigée (0,58) n'est
+    donc pas interprétable comme un effet de la croyance.
+- **Oral** : « Corriger h ramène b presque au niveau de la référence. Sans contrainte, l'agent n'est plus localisé ;
+  avec contrainte, il l'est, mais le critic ne voit pas le changement, et le comportement ne remonte qu'à moitié. »
