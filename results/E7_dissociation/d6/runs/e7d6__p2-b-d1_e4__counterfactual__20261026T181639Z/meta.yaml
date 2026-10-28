@@ -1,0 +1,35 @@
+agent: p2-b-d1_e4
+condition: dev_pair2
+configuration: p2-b-d1
+phase: counterfactual
+image: training
+slot: nw
+weights:
+  experimental: scratch\e4x\all\results\E4_generalization_gradient\grid12x12__2zones-p2-b-d1__pair-experimental__worldmodel-agent-e4__seed06__20261018T140930Z\checkpoints\agent_env300000.pt
+  reference: scratch\e4x\all\results\E4_generalization_gradient\grid12x12__2zones-p2-b-d1__pair-control__worldmodel-agent-e4__seed06__20261018T140930Z\checkpoints\agent_env300000.pt
+weights_hash_before:
+  experimental: e2f8266fb2b0a639b67e5c4099cfffbe704e022ff011ed4a2d0a0a637dbcbcf8
+  reference: 46d23dd950910af563fcdc4cef5cb276b90d8b6568711337dc166760477e5091
+weights_hash_after:
+  experimental: e2f8266fb2b0a639b67e5c4099cfffbe704e022ff011ed4a2d0a0a637dbcbcf8
+  reference: 46d23dd950910af563fcdc4cef5cb276b90d8b6568711337dc166760477e5091
+agents_file: configs\e6\agents_dev_e4.yaml
+config: C:\Users\nadim\Desktop\v1_ucl\configs\e7\e7.yaml
+config_bases:
+- configs/e4/e4.yaml
+- configs/e6/e6.yaml
+device: cpu
+torch_threads: 1
+torch_version: 2.14.0+cpu
+seconds: 1256.4248705999998
+code:
+  git_commit: 845ab30affb7ff79c11f333cbe96c3801b8ceae1
+  git_dirty: false
+  git_n_changed_paths: 0
+  source_sha256: bb2a259deafd71aa4e94f601771e68b5e73f10d2450594e3748028ce1fe32a68
+  source_n_files: 383
+  source_scope:
+  - src
+  - experiments
+  - configs
+  - pyproject.toml

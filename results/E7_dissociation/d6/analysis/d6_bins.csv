@@ -1,0 +1,352 @@
+group,variant,reading,b_lo,n_steps,n_episodes,value,lo,hi,masked
+exposed,a,greedy,-2.75,0,0,nan,nan,nan,True
+exposed,a,greedy,-2.5,746,362,0.4219839142091153,0.39319495925939396,0.4512879306061679,False
+exposed,a,greedy,-2.25,2009,642,0.3630993860959018,0.34081332302848594,0.3864250701050998,False
+exposed,a,greedy,-2.0,513,311,0.32748538011695905,0.28609347631268073,0.36932271153129875,False
+exposed,a,greedy,-1.75,332,221,0.3373493975903614,0.29445967141306273,0.383293619183651,False
+exposed,a,greedy,-1.5,216,155,0.34645061728395066,0.28619613718681153,0.41150867283824744,False
+exposed,a,greedy,-1.25,84,71,0.371031746031746,0.2930675287356322,0.44938291139240505,False
+exposed,a,greedy,-1.0,40,38,0.5375,0.3901753048780488,0.675,False
+exposed,a,greedy,-0.75,23,23,0.8478260869565217,nan,nan,True
+exposed,a,greedy,-0.5,5,5,0.8,nan,nan,True
+exposed,a,greedy,-0.25,1,1,1.0,nan,nan,True
+exposed,a,greedy,0.0,0,0,nan,nan,nan,True
+exposed,a,greedy,0.25,0,0,nan,nan,nan,True
+exposed,a,argmax,-2.75,0,0,nan,nan,nan,True
+exposed,a,argmax,-2.5,746,362,0.43297587131367293,nan,nan,False
+exposed,a,argmax,-2.25,2009,642,0.3479342956694873,nan,nan,False
+exposed,a,argmax,-2.0,513,311,0.32748538011695905,nan,nan,False
+exposed,a,argmax,-1.75,332,221,0.3313253012048193,nan,nan,False
+exposed,a,argmax,-1.5,216,155,0.35185185185185186,nan,nan,False
+exposed,a,argmax,-1.25,84,71,0.38095238095238093,nan,nan,False
+exposed,a,argmax,-1.0,40,38,0.525,nan,nan,False
+exposed,a,argmax,-0.75,23,23,0.8695652173913043,nan,nan,True
+exposed,a,argmax,-0.5,5,5,0.8,nan,nan,True
+exposed,a,argmax,-0.25,1,1,1.0,nan,nan,True
+exposed,a,argmax,0.0,0,0,nan,nan,nan,True
+exposed,a,argmax,0.25,0,0,nan,nan,nan,True
+exposed,a,eps,-2.75,0,0,nan,nan,nan,True
+exposed,a,eps,-2.5,746,362,0.4197855227882038,0.3908691996060665,0.4470832329317269,False
+exposed,a,eps,-2.25,2009,642,0.36678944748631165,0.34753542668688225,0.38582539127744797,False
+exposed,a,eps,-2.0,513,311,0.3347368421052632,0.29712649945474373,0.37147115384615387,False
+exposed,a,eps,-1.75,332,221,0.3436144578313253,0.3063541958139796,0.38209277003484327,False
+exposed,a,eps,-1.5,216,155,0.3518055555555556,0.3009881578947368,0.40959186365555084,False
+exposed,a,eps,-1.25,84,71,0.37392857142857144,0.3024697580645161,0.4525338855421686,False
+exposed,a,eps,-1.0,40,38,0.5237499999999999,0.4020891075388026,0.6515384615384617,False
+exposed,a,eps,-0.75,23,23,0.8030434782608696,nan,nan,True
+exposed,a,eps,-0.5,5,5,0.76,nan,nan,True
+exposed,a,eps,-0.25,1,1,0.9400000000000001,nan,nan,True
+exposed,a,eps,0.0,0,0,nan,nan,nan,True
+exposed,a,eps,0.25,0,0,nan,nan,nan,True
+exposed,b,greedy,-2.75,0,0,nan,nan,nan,True
+exposed,b,greedy,-2.5,746,362,0.39798927613941015,0.36820265223555454,0.4298117376151357,False
+exposed,b,greedy,-2.25,2009,642,0.38617056578729053,0.37029852574309985,0.40158866690240447,False
+exposed,b,greedy,-2.0,513,311,0.3200129954515919,0.27659166957768744,0.3660628928293076,False
+exposed,b,greedy,-1.75,332,221,0.3800200803212851,0.33595227071034456,0.4230562175728687,False
+exposed,b,greedy,-1.5,216,155,0.37345679012345673,0.31041547420076165,0.4361913543978761,False
+exposed,b,greedy,-1.25,84,71,0.4484126984126984,0.366656976744186,0.5392895109851168,False
+exposed,b,greedy,-1.0,40,38,0.5083333333333333,0.3927579365079365,0.6360914304993252,False
+exposed,b,greedy,-0.75,23,23,0.7608695652173914,nan,nan,True
+exposed,b,greedy,-0.5,5,5,0.6,nan,nan,True
+exposed,b,greedy,-0.25,1,1,1.0,nan,nan,True
+exposed,b,greedy,0.0,0,0,nan,nan,nan,True
+exposed,b,greedy,0.25,0,0,nan,nan,nan,True
+exposed,b,argmax,-2.75,0,0,nan,nan,nan,True
+exposed,b,argmax,-2.5,746,362,0.3941018766756032,nan,nan,False
+exposed,b,argmax,-2.25,2009,642,0.3782976605276257,nan,nan,False
+exposed,b,argmax,-2.0,513,311,0.31773879142300193,nan,nan,False
+exposed,b,argmax,-1.75,332,221,0.3885542168674699,nan,nan,False
+exposed,b,argmax,-1.5,216,155,0.37962962962962965,nan,nan,False
+exposed,b,argmax,-1.25,84,71,0.44047619047619047,nan,nan,False
+exposed,b,argmax,-1.0,40,38,0.525,nan,nan,False
+exposed,b,argmax,-0.75,23,23,0.782608695652174,nan,nan,True
+exposed,b,argmax,-0.5,5,5,0.6,nan,nan,True
+exposed,b,argmax,-0.25,1,1,1.0,nan,nan,True
+exposed,b,argmax,0.0,0,0,nan,nan,nan,True
+exposed,b,argmax,0.25,0,0,nan,nan,nan,True
+exposed,b,eps,-2.75,0,0,nan,nan,nan,True
+exposed,b,eps,-2.5,746,362,0.3981903485254691,0.37118868117690573,0.427322768745804,False
+exposed,b,eps,-2.25,2009,642,0.3875535092085615,0.3736659770362141,0.4017616086417625,False
+exposed,b,eps,-2.0,513,311,0.3280116959064328,0.2920467402048886,0.3656511349205177,False
+exposed,b,eps,-1.75,332,221,0.3820180722891567,0.339572073699422,0.4225970813634284,False
+exposed,b,eps,-1.5,216,155,0.3761111111111112,0.3204006934234491,0.43230902777777785,False
+exposed,b,eps,-1.25,84,71,0.44357142857142856,0.3710796156221057,0.5208388157894736,False
+exposed,b,eps,-1.0,40,38,0.49749999999999994,0.38753266550522636,0.6175690789473687,False
+exposed,b,eps,-0.75,23,23,0.7247826086956521,nan,nan,True
+exposed,b,eps,-0.5,5,5,0.58,nan,nan,True
+exposed,b,eps,-0.25,1,1,0.9400000000000001,nan,nan,True
+exposed,b,eps,0.0,0,0,nan,nan,nan,True
+exposed,b,eps,0.25,0,0,nan,nan,nan,True
+exposed,c,greedy,-2.75,0,0,nan,nan,nan,True
+exposed,c,greedy,-2.5,746,362,0.4485031277926721,0.4133509825082063,0.4840896094933362,False
+exposed,c,greedy,-2.25,2009,642,0.37833914053426243,0.35414788746340115,0.4020102698039089,False
+exposed,c,greedy,-2.0,513,311,0.362735542560104,0.3266543688055751,0.4009490937411498,False
+exposed,c,greedy,-1.75,332,221,0.27133534136546184,0.22701998432601878,0.31367896796132416,False
+exposed,c,greedy,-1.5,216,155,0.3915895061728395,0.3350888242894056,0.44760860275362896,False
+exposed,c,greedy,-1.25,84,71,0.4015873015873016,0.31380894308943086,0.4925023148148148,False
+exposed,c,greedy,-1.0,40,38,0.5229166666666666,0.3948139880952381,0.6513349780701754,False
+exposed,c,greedy,-0.75,23,23,0.34782608695652173,nan,nan,True
+exposed,c,greedy,-0.5,5,5,0.5,nan,nan,True
+exposed,c,greedy,-0.25,1,1,0.0,nan,nan,True
+exposed,c,greedy,0.0,0,0,nan,nan,nan,True
+exposed,c,greedy,0.25,0,0,nan,nan,nan,True
+exposed,c,argmax,-2.75,0,0,nan,nan,nan,True
+exposed,c,argmax,-2.5,746,362,0.450402144772118,nan,nan,False
+exposed,c,argmax,-2.25,2009,642,0.3713290194126431,nan,nan,False
+exposed,c,argmax,-2.0,513,311,0.36062378167641324,nan,nan,False
+exposed,c,argmax,-1.75,332,221,0.32228915662650603,nan,nan,False
+exposed,c,argmax,-1.5,216,155,0.42592592592592593,nan,nan,False
+exposed,c,argmax,-1.25,84,71,0.4523809523809524,nan,nan,False
+exposed,c,argmax,-1.0,40,38,0.5,nan,nan,False
+exposed,c,argmax,-0.75,23,23,0.34782608695652173,nan,nan,True
+exposed,c,argmax,-0.5,5,5,0.6,nan,nan,True
+exposed,c,argmax,-0.25,1,1,0.0,nan,nan,True
+exposed,c,argmax,0.0,0,0,nan,nan,nan,True
+exposed,c,argmax,0.25,0,0,nan,nan,nan,True
+exposed,c,eps,-2.75,0,0,nan,nan,nan,True
+exposed,c,eps,-2.5,746,362,0.44365281501340487,0.4084420836928387,0.4771484434682965,False
+exposed,c,eps,-2.25,2009,642,0.38050522648083634,0.3604427525349067,0.4014750834167084,False
+exposed,c,eps,-2.0,513,311,0.3664619883040936,0.3337265311677203,0.4016194618102745,False
+exposed,c,eps,-1.75,332,221,0.2842018072289157,0.24887735043930825,0.32314362567401306,False
+exposed,c,eps,-1.5,216,155,0.3924305555555556,0.34369108741442866,0.4506276996073299,False
+exposed,c,eps,-1.25,84,71,0.4014285714285714,0.3205121753246753,0.4809828624844206,False
+exposed,c,eps,-1.0,40,38,0.5106250000000001,0.3912195121951219,0.6342307692307693,False
+exposed,c,eps,-0.75,23,23,0.3530434782608695,nan,nan,True
+exposed,c,eps,-0.5,5,5,0.49000000000000005,nan,nan,True
+exposed,c,eps,-0.25,1,1,0.04,nan,nan,True
+exposed,c,eps,0.0,0,0,nan,nan,nan,True
+exposed,c,eps,0.25,0,0,nan,nan,nan,True
+"references, no intervention",a,greedy,-2.75,0,0,nan,nan,nan,True
+"references, no intervention",a,greedy,-2.5,0,0,nan,nan,nan,True
+"references, no intervention",a,greedy,-2.25,0,0,nan,nan,nan,True
+"references, no intervention",a,greedy,-2.0,0,0,nan,nan,nan,True
+"references, no intervention",a,greedy,-1.75,0,0,nan,nan,nan,True
+"references, no intervention",a,greedy,-1.5,0,0,nan,nan,nan,True
+"references, no intervention",a,greedy,-1.25,1,1,1.0,nan,nan,True
+"references, no intervention",a,greedy,-1.0,2,2,1.0,nan,nan,True
+"references, no intervention",a,greedy,-0.75,13,13,0.8846153846153846,nan,nan,True
+"references, no intervention",a,greedy,-0.5,62,60,0.9516129032258065,0.8888888888888888,1.0,False
+"references, no intervention",a,greedy,-0.25,209,200,0.9784688995215312,0.9573305915056508,0.9951923076923077,False
+"references, no intervention",a,greedy,0.0,3042,708,0.9996712689020382,0.9987194151243299,1.0,False
+"references, no intervention",a,greedy,0.25,523,296,1.0,1.0,1.0,False
+"references, no intervention",a,argmax,-2.75,0,0,nan,nan,nan,True
+"references, no intervention",a,argmax,-2.5,0,0,nan,nan,nan,True
+"references, no intervention",a,argmax,-2.25,0,0,nan,nan,nan,True
+"references, no intervention",a,argmax,-2.0,0,0,nan,nan,nan,True
+"references, no intervention",a,argmax,-1.75,0,0,nan,nan,nan,True
+"references, no intervention",a,argmax,-1.5,0,0,nan,nan,nan,True
+"references, no intervention",a,argmax,-1.25,1,1,1.0,nan,nan,True
+"references, no intervention",a,argmax,-1.0,2,2,1.0,nan,nan,True
+"references, no intervention",a,argmax,-0.75,13,13,0.8461538461538461,nan,nan,True
+"references, no intervention",a,argmax,-0.5,62,60,0.9516129032258065,nan,nan,False
+"references, no intervention",a,argmax,-0.25,209,200,0.9808612440191388,nan,nan,False
+"references, no intervention",a,argmax,0.0,3042,708,0.9996712689020382,nan,nan,False
+"references, no intervention",a,argmax,0.25,523,296,1.0,nan,nan,False
+"references, no intervention",a,eps,-2.75,0,0,nan,nan,nan,True
+"references, no intervention",a,eps,-2.5,0,0,nan,nan,nan,True
+"references, no intervention",a,eps,-2.25,0,0,nan,nan,nan,True
+"references, no intervention",a,eps,-2.0,0,0,nan,nan,nan,True
+"references, no intervention",a,eps,-1.75,0,0,nan,nan,nan,True
+"references, no intervention",a,eps,-1.5,0,0,nan,nan,nan,True
+"references, no intervention",a,eps,-1.25,1,1,0.9400000000000001,nan,nan,True
+"references, no intervention",a,eps,-1.0,2,2,0.9400000000000001,nan,nan,True
+"references, no intervention",a,eps,-0.75,13,13,0.8361538461538462,nan,nan,True
+"references, no intervention",a,eps,-0.5,62,60,0.8964516129032256,0.8400000000000001,0.94,False
+"references, no intervention",a,eps,-0.25,209,200,0.9206220095693778,0.9024953817733989,0.9357547169811321,False
+"references, no intervention",a,eps,0.0,3042,708,0.9397041420118342,0.9390920935862012,0.9400000000000002,False
+"references, no intervention",a,eps,0.25,523,296,0.9400000000000001,0.94,0.9400000000000002,False
+"references, no intervention",b,greedy,-2.75,0,0,nan,nan,nan,True
+"references, no intervention",b,greedy,-2.5,0,0,nan,nan,nan,True
+"references, no intervention",b,greedy,-2.25,0,0,nan,nan,nan,True
+"references, no intervention",b,greedy,-2.0,0,0,nan,nan,nan,True
+"references, no intervention",b,greedy,-1.75,0,0,nan,nan,nan,True
+"references, no intervention",b,greedy,-1.5,0,0,nan,nan,nan,True
+"references, no intervention",b,greedy,-1.25,1,1,1.0,nan,nan,True
+"references, no intervention",b,greedy,-1.0,2,2,1.0,nan,nan,True
+"references, no intervention",b,greedy,-0.75,13,13,0.7692307692307693,nan,nan,True
+"references, no intervention",b,greedy,-0.5,62,60,0.967741935483871,0.9193548387096774,1.0,False
+"references, no intervention",b,greedy,-0.25,209,200,0.9832535885167464,0.9644507447528775,0.9953488372093023,False
+"references, no intervention",b,greedy,0.0,3042,708,0.9990138067061144,0.9977225949182923,1.0,False
+"references, no intervention",b,greedy,0.25,523,296,1.0,1.0,1.0,False
+"references, no intervention",b,argmax,-2.75,0,0,nan,nan,nan,True
+"references, no intervention",b,argmax,-2.5,0,0,nan,nan,nan,True
+"references, no intervention",b,argmax,-2.25,0,0,nan,nan,nan,True
+"references, no intervention",b,argmax,-2.0,0,0,nan,nan,nan,True
+"references, no intervention",b,argmax,-1.75,0,0,nan,nan,nan,True
+"references, no intervention",b,argmax,-1.5,0,0,nan,nan,nan,True
+"references, no intervention",b,argmax,-1.25,1,1,1.0,nan,nan,True
+"references, no intervention",b,argmax,-1.0,2,2,1.0,nan,nan,True
+"references, no intervention",b,argmax,-0.75,13,13,0.7692307692307693,nan,nan,True
+"references, no intervention",b,argmax,-0.5,62,60,0.967741935483871,nan,nan,False
+"references, no intervention",b,argmax,-0.25,209,200,0.9856459330143541,nan,nan,False
+"references, no intervention",b,argmax,0.0,3042,708,0.9990138067061144,nan,nan,False
+"references, no intervention",b,argmax,0.25,523,296,1.0,nan,nan,False
+"references, no intervention",b,eps,-2.75,0,0,nan,nan,nan,True
+"references, no intervention",b,eps,-2.5,0,0,nan,nan,nan,True
+"references, no intervention",b,eps,-2.25,0,0,nan,nan,nan,True
+"references, no intervention",b,eps,-2.0,0,0,nan,nan,nan,True
+"references, no intervention",b,eps,-1.75,0,0,nan,nan,nan,True
+"references, no intervention",b,eps,-1.5,0,0,nan,nan,nan,True
+"references, no intervention",b,eps,-1.25,1,1,0.9400000000000001,nan,nan,True
+"references, no intervention",b,eps,-1.0,2,2,0.9400000000000001,nan,nan,True
+"references, no intervention",b,eps,-0.75,13,13,0.7323076923076923,nan,nan,True
+"references, no intervention",b,eps,-0.5,62,60,0.9109677419354837,0.8674193548387097,0.9400000000000001,False
+"references, no intervention",b,eps,-0.25,209,200,0.9249282296650718,0.9095615238497257,0.9378788190237146,False
+"references, no intervention",b,eps,0.0,3042,708,0.9391124260355028,0.9379806719653179,0.9400000000000001,False
+"references, no intervention",b,eps,0.25,523,296,0.9400000000000001,0.94,0.9400000000000002,False
+"references, no intervention",c,greedy,-2.75,0,0,nan,nan,nan,True
+"references, no intervention",c,greedy,-2.5,0,0,nan,nan,nan,True
+"references, no intervention",c,greedy,-2.25,0,0,nan,nan,nan,True
+"references, no intervention",c,greedy,-2.0,0,0,nan,nan,nan,True
+"references, no intervention",c,greedy,-1.75,0,0,nan,nan,nan,True
+"references, no intervention",c,greedy,-1.5,0,0,nan,nan,nan,True
+"references, no intervention",c,greedy,-1.25,1,1,1.0,nan,nan,True
+"references, no intervention",c,greedy,-1.0,2,2,1.0,nan,nan,True
+"references, no intervention",c,greedy,-0.75,13,13,0.9615384615384616,nan,nan,True
+"references, no intervention",c,greedy,-0.5,62,60,0.967741935483871,0.9285714285714286,1.0,False
+"references, no intervention",c,greedy,-0.25,209,200,0.9712918660287081,0.9492753623188406,0.9904317612212349,False
+"references, no intervention",c,greedy,0.0,3042,708,0.9980276134122288,0.9966443641676712,0.9992112005935928,False
+"references, no intervention",c,greedy,0.25,523,296,1.0,1.0,1.0,False
+"references, no intervention",c,argmax,-2.75,0,0,nan,nan,nan,True
+"references, no intervention",c,argmax,-2.5,0,0,nan,nan,nan,True
+"references, no intervention",c,argmax,-2.25,0,0,nan,nan,nan,True
+"references, no intervention",c,argmax,-2.0,0,0,nan,nan,nan,True
+"references, no intervention",c,argmax,-1.75,0,0,nan,nan,nan,True
+"references, no intervention",c,argmax,-1.5,0,0,nan,nan,nan,True
+"references, no intervention",c,argmax,-1.25,1,1,1.0,nan,nan,True
+"references, no intervention",c,argmax,-1.0,2,2,1.0,nan,nan,True
+"references, no intervention",c,argmax,-0.75,13,13,1.0,nan,nan,True
+"references, no intervention",c,argmax,-0.5,62,60,0.9516129032258065,nan,nan,False
+"references, no intervention",c,argmax,-0.25,209,200,0.9760765550239234,nan,nan,False
+"references, no intervention",c,argmax,0.0,3042,708,0.9980276134122288,nan,nan,False
+"references, no intervention",c,argmax,0.25,523,296,1.0,nan,nan,False
+"references, no intervention",c,eps,-2.75,0,0,nan,nan,nan,True
+"references, no intervention",c,eps,-2.5,0,0,nan,nan,nan,True
+"references, no intervention",c,eps,-2.25,0,0,nan,nan,nan,True
+"references, no intervention",c,eps,-2.0,0,0,nan,nan,nan,True
+"references, no intervention",c,eps,-1.75,0,0,nan,nan,nan,True
+"references, no intervention",c,eps,-1.5,0,0,nan,nan,nan,True
+"references, no intervention",c,eps,-1.25,1,1,0.9400000000000001,nan,nan,True
+"references, no intervention",c,eps,-1.0,2,2,0.9400000000000001,nan,nan,True
+"references, no intervention",c,eps,-0.75,13,13,0.9053846153846153,nan,nan,True
+"references, no intervention",c,eps,-0.5,62,60,0.9109677419354838,0.8724296874999999,0.94,False
+"references, no intervention",c,eps,-0.25,209,200,0.9141626794258373,0.8930749830737982,0.9315094339622642,False
+"references, no intervention",c,eps,0.0,3042,708,0.9382248520710059,0.9368941016230203,0.9394000498338871,False
+"references, no intervention",c,eps,0.25,523,296,0.9400000000000001,0.94,0.9400000000000002,False
+induced references,a,greedy,-2.75,0,0,nan,nan,nan,True
+induced references,a,greedy,-2.5,0,0,nan,nan,nan,True
+induced references,a,greedy,-2.25,2,2,0.7,nan,nan,True
+induced references,a,greedy,-2.0,8,8,1.0,nan,nan,True
+induced references,a,greedy,-1.75,29,27,0.8620689655172413,nan,nan,True
+induced references,a,greedy,-1.5,40,35,0.9125,0.8095238095238095,1.0,False
+induced references,a,greedy,-1.25,204,168,0.9681372549019608,0.9420219501899535,0.9896946465016485,False
+induced references,a,greedy,-1.0,460,366,0.9858695652173913,0.9744542090656799,0.9955461508451894,False
+induced references,a,greedy,-0.75,1052,833,0.9748098859315589,0.9651478883893836,0.9833178423895774,False
+induced references,a,greedy,-0.5,2700,1969,0.98,0.9745883877494013,0.9849860237417098,False
+induced references,a,greedy,-0.25,4244,2937,0.9884542884071631,0.9850300541112091,0.9914303148165868,False
+induced references,a,greedy,0.0,16269,4858,0.9992931341815723,0.9988421429260381,0.9996916049828238,False
+induced references,a,greedy,0.25,2140,1465,1.0,1.0,1.0,False
+induced references,a,argmax,-2.75,0,0,nan,nan,nan,True
+induced references,a,argmax,-2.5,0,0,nan,nan,nan,True
+induced references,a,argmax,-2.25,2,2,0.5,nan,nan,True
+induced references,a,argmax,-2.0,8,8,1.0,nan,nan,True
+induced references,a,argmax,-1.75,29,27,0.8620689655172413,nan,nan,True
+induced references,a,argmax,-1.5,40,35,0.9,nan,nan,False
+induced references,a,argmax,-1.25,204,168,0.9705882352941176,nan,nan,False
+induced references,a,argmax,-1.0,460,366,0.9869565217391304,nan,nan,False
+induced references,a,argmax,-0.75,1052,833,0.9752851711026616,nan,nan,False
+induced references,a,argmax,-0.5,2700,1969,0.9803703703703703,nan,nan,False
+induced references,a,argmax,-0.25,4244,2937,0.9886899151743638,nan,nan,False
+induced references,a,argmax,0.0,16269,4858,0.999262400885119,nan,nan,False
+induced references,a,argmax,0.25,2140,1465,1.0,nan,nan,False
+induced references,a,eps,-2.75,0,0,nan,nan,nan,True
+induced references,a,eps,-2.5,0,0,nan,nan,nan,True
+induced references,a,eps,-2.25,2,2,0.67,nan,nan,True
+induced references,a,eps,-2.0,8,8,0.9400000000000001,nan,nan,True
+induced references,a,eps,-1.75,29,27,0.8158620689655175,nan,nan,True
+induced references,a,eps,-1.5,40,35,0.8612500000000001,0.7697297297297299,0.9399999999999998,False
+induced references,a,eps,-1.25,204,168,0.9113235294117645,0.8890020954341592,0.9310902063112716,False
+induced references,a,eps,-1.0,460,366,0.927282608695652,0.9175886734144689,0.9351820128479658,False
+induced references,a,eps,-0.75,1052,833,0.9173288973384031,0.9089655172413793,0.924834599658736,False
+induced references,a,eps,-0.5,2700,1969,0.9219999999999998,0.9173907676444178,0.926637718801704,False
+induced references,a,eps,-0.25,4244,2937,0.9296088595664468,0.9265865055123521,0.9324459336148061,False
+induced references,a,eps,0.0,16269,4858,0.9393638207634148,0.9389596258096036,0.9397262961013836,False
+induced references,a,eps,0.25,2140,1465,0.9400000000000001,0.94,0.9400000000000002,False
+induced references,b,greedy,-2.75,0,0,nan,nan,nan,True
+induced references,b,greedy,-2.5,0,0,nan,nan,nan,True
+induced references,b,greedy,-2.25,2,2,0.7,nan,nan,True
+induced references,b,greedy,-2.0,8,8,1.0,nan,nan,True
+induced references,b,greedy,-1.75,29,27,0.853448275862069,nan,nan,True
+induced references,b,greedy,-1.5,40,35,0.925,0.8107786357786358,1.0,False
+induced references,b,greedy,-1.25,204,168,0.9632352941176471,0.9378109452736318,0.9851485148514851,False
+induced references,b,greedy,-1.0,460,366,0.9619565217391305,0.9461933016877637,0.9765638049832962,False
+induced references,b,greedy,-0.75,1052,833,0.9581749049429658,0.9468360387479905,0.96923095703125,False
+induced references,b,greedy,-0.5,2700,1969,0.9567283950617285,0.948689185306017,0.9644186839043192,False
+induced references,b,greedy,-0.25,4244,2937,0.98751178133836,0.9840234230351299,0.9909164628956324,False
+induced references,b,greedy,0.0,16269,4858,0.9989550679205852,0.9984277195533034,0.9993840894903735,False
+induced references,b,greedy,0.25,2140,1465,1.0,1.0,1.0,False
+induced references,b,argmax,-2.75,0,0,nan,nan,nan,True
+induced references,b,argmax,-2.5,0,0,nan,nan,nan,True
+induced references,b,argmax,-2.25,2,2,1.0,nan,nan,True
+induced references,b,argmax,-2.0,8,8,1.0,nan,nan,True
+induced references,b,argmax,-1.75,29,27,0.8620689655172413,nan,nan,True
+induced references,b,argmax,-1.5,40,35,0.925,nan,nan,False
+induced references,b,argmax,-1.25,204,168,0.9656862745098039,nan,nan,False
+induced references,b,argmax,-1.0,460,366,0.9586956521739131,nan,nan,False
+induced references,b,argmax,-0.75,1052,833,0.9562737642585551,nan,nan,False
+induced references,b,argmax,-0.5,2700,1969,0.9562962962962963,nan,nan,False
+induced references,b,argmax,-0.25,4244,2937,0.98751178133836,nan,nan,False
+induced references,b,argmax,0.0,16269,4858,0.9990165345134919,nan,nan,False
+induced references,b,argmax,0.25,2140,1465,1.0,nan,nan,False
+induced references,b,eps,-2.75,0,0,nan,nan,nan,True
+induced references,b,eps,-2.5,0,0,nan,nan,nan,True
+induced references,b,eps,-2.25,2,2,0.67,nan,nan,True
+induced references,b,eps,-2.0,8,8,0.9400000000000001,nan,nan,True
+induced references,b,eps,-1.75,29,27,0.8081034482758624,nan,nan,True
+induced references,b,eps,-1.5,40,35,0.8725000000000002,0.7742105263157896,0.94,False
+induced references,b,eps,-1.25,204,168,0.9069117647058823,0.8848979591836734,0.925794995909463,False
+induced references,b,eps,-1.0,460,366,0.9057608695652174,0.8907961116759706,0.9201092105263158,False
+induced references,b,eps,-0.75,1052,833,0.9023574144486691,0.8923618222561625,0.9122386558207797,False
+induced references,b,eps,-0.5,2700,1969,0.9010555555555557,0.8940000578256828,0.9074475840302837,False
+induced references,b,eps,-0.25,4244,2937,0.928760603204524,0.9257492762846319,0.9319681091544019,False
+induced references,b,eps,0.0,16269,4858,0.9390595611285265,0.9385893134900372,0.9394537721730453,False
+induced references,b,eps,0.25,2140,1465,0.9400000000000001,0.94,0.9400000000000002,False
+induced references,c,greedy,-2.75,0,0,nan,nan,nan,True
+induced references,c,greedy,-2.5,0,0,nan,nan,nan,True
+induced references,c,greedy,-2.25,2,2,0.7,nan,nan,True
+induced references,c,greedy,-2.0,8,8,1.0,nan,nan,True
+induced references,c,greedy,-1.75,29,27,0.9137931034482759,nan,nan,True
+induced references,c,greedy,-1.5,40,35,0.95,0.881578947368421,1.0,False
+induced references,c,greedy,-1.25,204,168,0.9493464052287582,0.9149754120148856,0.9770779131863618,False
+induced references,c,greedy,-1.0,460,366,0.9865942028985507,0.976653929190249,0.9948032665181885,False
+induced references,c,greedy,-0.75,1052,833,0.9803548795944232,0.9721152296387466,0.9876502770605499,False
+induced references,c,greedy,-0.5,2700,1969,0.9828395061728394,0.9779234539310817,0.9872721690374583,False
+induced references,c,greedy,-0.25,4244,2937,0.9824850769714105,0.9784345046514659,0.986190141854462,False
+induced references,c,greedy,0.0,16269,4858,0.9922859425902022,0.9909004923805338,0.9935349176884205,False
+induced references,c,greedy,0.25,2140,1465,1.0,1.0,1.0,False
+induced references,c,argmax,-2.75,0,0,nan,nan,nan,True
+induced references,c,argmax,-2.5,0,0,nan,nan,nan,True
+induced references,c,argmax,-2.25,2,2,0.5,nan,nan,True
+induced references,c,argmax,-2.0,8,8,1.0,nan,nan,True
+induced references,c,argmax,-1.75,29,27,0.9310344827586207,nan,nan,True
+induced references,c,argmax,-1.5,40,35,0.925,nan,nan,False
+induced references,c,argmax,-1.25,204,168,0.9411764705882353,nan,nan,False
+induced references,c,argmax,-1.0,460,366,0.9869565217391304,nan,nan,False
+induced references,c,argmax,-0.75,1052,833,0.9828897338403042,nan,nan,False
+induced references,c,argmax,-0.5,2700,1969,0.9844444444444445,nan,nan,False
+induced references,c,argmax,-0.25,4244,2937,0.982799245994345,nan,nan,False
+induced references,c,argmax,0.0,16269,4858,0.9928698752228164,nan,nan,False
+induced references,c,argmax,0.25,2140,1465,1.0,nan,nan,False
+induced references,c,eps,-2.75,0,0,nan,nan,nan,True
+induced references,c,eps,-2.5,0,0,nan,nan,nan,True
+induced references,c,eps,-2.25,2,2,0.67,nan,nan,True
+induced references,c,eps,-2.0,8,8,0.9400000000000001,nan,nan,True
+induced references,c,eps,-1.75,29,27,0.8624137931034486,nan,nan,True
+induced references,c,eps,-1.5,40,35,0.8949999999999999,0.8361337209302325,0.9399999999999998,False
+induced references,c,eps,-1.25,204,168,0.8944117647058822,0.864990671641791,0.9200541271176258,False
+induced references,c,eps,-1.0,460,366,0.9279347826086954,0.9195138650953945,0.9354267959860605,False
+induced references,c,eps,-0.75,1052,833,0.922319391634981,0.9149048885099428,0.9286591787340818,False
+induced references,c,eps,-0.5,2700,1969,0.9245555555555556,0.9200397809340396,0.9283933901918976,False
+induced references,c,eps,-0.25,4244,2937,0.9242365692742696,0.9209039570586363,0.927580774008463,False
+induced references,c,eps,0.0,16269,4858,0.9330573483311818,0.9319026710585419,0.9341469796354718,False
+induced references,c,eps,0.25,2140,1465,0.9400000000000001,0.94,0.9400000000000002,False

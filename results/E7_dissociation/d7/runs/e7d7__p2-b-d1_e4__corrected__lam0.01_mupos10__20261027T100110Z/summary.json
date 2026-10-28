@@ -1,0 +1,66 @@
+{
+ "rows": [
+  {
+   "agent": "p2-b-d1_e4",
+   "setting": "lam0.01_mupos10",
+   "lam": 0.01,
+   "mu_pos": 10.0,
+   "mu_goal": 0.0,
+   "I_step1": 2.047830244996781,
+   "I_ref_step1": 2.2432740719040343,
+   "b_step1": -0.19544382690725337,
+   "b_step1_fresh_ref": -0.17098249409740696,
+   "loc_template_step1": 0.9055555555555556,
+   "loc_agent_step1": 1.0,
+   "loc_template_zone": 0.8404785643070788,
+   "loc_agent_zone": 0.8185443668993021,
+   "mass_played_step1": 0.615534003034003,
+   "ghost_step1": 0.02791666666666667,
+   "p_goal_step1": 7.219582015194428e-05,
+   "q_gap_step1": 6.084911625915104,
+   "tied_step1": 0.016666666666666666,
+   "directed_share": 0.576271186440678,
+   "seconds": 1850.5671747999877
+  }
+ ],
+ "setting": {
+  "agent": "p2-b-d1_e4",
+  "condition": "dev_pair2",
+  "image": "training",
+  "setting": "lam0.01_mupos10",
+  "lam": 0.01,
+  "mu_pos": 10.0,
+  "mu_goal": 0.0,
+  "n": 100,
+  "delta_norm": 13.3265962600708,
+  "gain_b": 1.479247601574815,
+  "gain_b_ci": [
+   1.3549591538389567,
+   1.6207515853634322
+  ],
+  "gain_b_random": 0.38745813343590785,
+  "gain_b_random_ci": [
+   0.2700081598225767,
+   0.5096070576235578
+  ],
+  "specific_gain": 1.091789468138907,
+  "specific_gain_ci": [
+   0.9813215456688839,
+   1.2040374321924714
+  ],
+  "specific": true,
+  "loc_before": 0.66,
+  "loc_after": 0.63,
+  "loc_random": 0.37,
+  "loc_after_among_localised_before": 0.9393939393939394,
+  "loc_reference": 1.0,
+  "max_abs_dp_goal": 0.002125304890796542,
+  "mean_abs_dp_goal": 2.1333598851924762e-05,
+  "kl0_mean": 139.04690551757812,
+  "kl_mean": 6.270832061767578,
+  "steps": 1000,
+  "v_hat_norm": 13.290478179828574,
+  "kept": false,
+  "seconds": 258.88326060026884
+ }
+}

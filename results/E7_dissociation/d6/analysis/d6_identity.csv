@@ -1,0 +1,5 @@
+agent,a_equals_policy_Q,states_actions_equal_D5_plan_B,E6_states_actions_Q
+p1-a-d1_e4,True,True,True
+p1-b-d1_e4,True,True,True
+p2-a-d1_e4,True,True,True
+p2-b-d1_e4,True,True,True

@@ -1,0 +1,95 @@
+agent:
+  id: p2-b-d1_e4
+  condition: dev_pair2
+  configuration: p2-b-d1
+  seed: 6
+weights:
+  experimental: scratch\e4x\all\results\E4_generalization_gradient\grid12x12__2zones-p2-b-d1__pair-experimental__worldmodel-agent-e4__seed06__20261018T140930Z\checkpoints\agent_env300000.pt
+  reference: scratch\e4x\all\results\E4_generalization_gradient\grid12x12__2zones-p2-b-d1__pair-control__worldmodel-agent-e4__seed06__20261018T140930Z\checkpoints\agent_env300000.pt
+weights_sha256:
+  experimental: 87d98787620684ff35dabb2c5f9bcacaa73d300106593d70f4f323158ce94c71
+  reference: 22b3d5f83929263b8d9171ab9cebca6ebe439c087f5df1777d477747ae047033
+agents_file: configs\e6\agents_dev_e4.yaml
+config: C:\Users\nadim\Desktop\v1_ucl\configs\e6\e6.yaml
+config_bases:
+- configs/e4/e4.yaml
+e6:
+  seed: 6006
+  images:
+  - name: training
+    axis: training
+    position: ud
+  - name: position_only
+    axis: position_only
+    k: 0
+    position: ud
+  - name: theme_only
+    axis: segment
+    k: 0
+    position: neutral
+  - name: neutral
+    axis: training
+    position: neutral
+  n_reps: 20
+  horizon: 36
+  epsilon: null
+  measure: all
+  draws: 16
+  fresh_samples: 8
+  validity:
+    n_walks: 150
+  phenotypes:
+    k_revisit: 4
+    n_min: 20
+    n_boot: 200
+  analysis:
+    phenotypes:
+      primary:
+      - directed_share
+      secondary:
+      - recovery_latency
+      - zone_share
+      - stay_share
+      - revisit_share
+      logged:
+      - exit_median_km
+    include_references: true
+    grid_step: 0.01
+    n_boot: 1000
+    window: 0.25
+    min_delta_share: 0.02
+    localisation_min: 0.9
+    min_points_per_condition: 4
+  margin: 0.001
+device: cpu
+torch_threads: 1
+torch_version: 2.14.0+cpu
+seconds: 1530.3261561002582
+timings:
+  training:
+    episodes_s: 107.42510049976408
+    reference_fresh_s: 54.34457250125706
+    validity_s: 220.63524479977787
+  position_only:
+    episodes_s: 110.0505368001759
+    reference_fresh_s: 64.64113550074399
+    validity_s: 248.3937519006431
+  theme_only:
+    episodes_s: 75.12174610048532
+    reference_fresh_s: 71.56088970042765
+    validity_s: 211.6423599999398
+  neutral:
+    episodes_s: 90.11802859976888
+    reference_fresh_s: 70.98974329978228
+    validity_s: 183.82401590049267
+code:
+  git_commit: 7f812919ee9841f1a06e9b0a59612b614e7cec1f
+  git_dirty: true
+  git_n_changed_paths: 7
+  source_sha256: 603d2644cb45312c94b3526865515de8ee4abbaaa0aec70f6d4a3eff38f57c44
+  source_n_files: 372
+  source_scope:
+  - src
+  - experiments
+  - configs
+  - pyproject.toml

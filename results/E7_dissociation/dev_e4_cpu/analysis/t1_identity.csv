@@ -1,0 +1,9 @@
+agent,model,h_mode,states,actions,Q,I_zone,I_kernel_p0_minus_E6_I
+p1-a-d1_e4,exposed,mean,True,True,True,False,-2.113508606762247
+p1-a-d1_e4,reference,mean,True,True,True,False,-0.005911132752747239
+p1-b-d1_e4,exposed,mean,True,True,True,False,-2.173449626475649
+p1-b-d1_e4,reference,mean,True,True,True,False,0.004150404128379748
+p2-a-d1_e4,exposed,mean,True,True,True,False,-2.0643503064637234
+p2-a-d1_e4,reference,mean,True,True,True,False,-0.009516555006436889
+p2-b-d1_e4,exposed,mean,True,True,True,False,-2.1750319865139103
+p2-b-d1_e4,reference,mean,True,True,True,False,0.001580828367731435

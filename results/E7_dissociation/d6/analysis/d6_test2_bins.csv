@@ -1,0 +1,118 @@
+group,quantity,b_lo,n_steps,n_episodes,value,lo,hi,masked
+exposed,t2_argmax,-2.75,0,0,nan,nan,nan,True
+exposed,t2_argmax,-2.5,746,362,0.450402144772118,0.40818602220675265,0.4897959183673469,False
+exposed,t2_argmax,-2.25,2009,642,0.3713290194126431,0.34663057553911913,0.3945105720960542,False
+exposed,t2_argmax,-2.0,513,311,0.36062378167641324,0.3199022984058195,0.40800408163265306,False
+exposed,t2_argmax,-1.75,332,221,0.32228915662650603,0.270928389229194,0.3791069879958008,False
+exposed,t2_argmax,-1.5,216,155,0.42592592592592593,0.3601760621933982,0.48910079315569016,False
+exposed,t2_argmax,-1.25,84,71,0.4523809523809524,0.35292446524064175,0.5698089700996678,False
+exposed,t2_argmax,-1.0,40,38,0.5,0.36585365853658536,0.6410256410256411,False
+exposed,t2_argmax,-0.75,23,23,0.34782608695652173,nan,nan,True
+exposed,t2_argmax,-0.5,5,5,0.6,nan,nan,True
+exposed,t2_argmax,-0.25,1,1,0.0,nan,nan,True
+exposed,t2_argmax,0.0,0,0,nan,nan,nan,True
+exposed,t2_argmax,0.25,0,0,nan,nan,nan,True
+exposed,t2_gap,-2.75,0,0,nan,nan,nan,True
+exposed,t2_gap,-2.5,746,362,0.19346759594157936,nan,nan,False
+exposed,t2_gap,-2.25,2009,642,0.1704461254131266,nan,nan,False
+exposed,t2_gap,-2.0,513,311,0.2153394552234553,nan,nan,False
+exposed,t2_gap,-1.75,332,221,0.25970964690288867,nan,nan,False
+exposed,t2_gap,-1.5,216,155,0.31872314656222306,nan,nan,False
+exposed,t2_gap,-1.25,84,71,0.22634196849096389,nan,nan,False
+exposed,t2_gap,-1.0,40,38,0.2626433491706848,nan,nan,False
+exposed,t2_gap,-0.75,23,23,0.25493721340013586,nan,nan,True
+exposed,t2_gap,-0.5,5,5,0.2910905838012695,nan,nan,True
+exposed,t2_gap,-0.25,1,1,0.26963043212890625,nan,nan,True
+exposed,t2_gap,0.0,0,0,nan,nan,nan,True
+exposed,t2_gap,0.25,0,0,nan,nan,nan,True
+exposed,t2_rho,-2.75,0,0,nan,nan,nan,True
+exposed,t2_rho,-2.5,746,362,-0.10851783927655563,nan,nan,False
+exposed,t2_rho,-2.25,2009,642,-0.04493928680826643,nan,nan,False
+exposed,t2_rho,-2.0,513,311,-0.08537533254060829,nan,nan,False
+exposed,t2_rho,-1.75,332,221,-0.15716138973728394,nan,nan,False
+exposed,t2_rho,-1.5,216,155,-0.10248122046841966,nan,nan,False
+exposed,t2_rho,-1.25,84,71,-0.028234621965789082,nan,nan,False
+exposed,t2_rho,-1.0,40,38,-0.00790569415042095,nan,nan,False
+exposed,t2_rho,-0.75,23,23,-0.06874516652539957,nan,nan,True
+exposed,t2_rho,-0.5,5,5,0.09486832980505136,nan,nan,True
+exposed,t2_rho,-0.25,1,1,-0.31622776601683794,nan,nan,True
+exposed,t2_rho,0.0,0,0,nan,nan,nan,True
+exposed,t2_rho,0.25,0,0,nan,nan,nan,True
+"references, no intervention",t2_argmax,-2.75,0,0,nan,nan,nan,True
+"references, no intervention",t2_argmax,-2.5,0,0,nan,nan,nan,True
+"references, no intervention",t2_argmax,-2.25,0,0,nan,nan,nan,True
+"references, no intervention",t2_argmax,-2.0,0,0,nan,nan,nan,True
+"references, no intervention",t2_argmax,-1.75,0,0,nan,nan,nan,True
+"references, no intervention",t2_argmax,-1.5,0,0,nan,nan,nan,True
+"references, no intervention",t2_argmax,-1.25,1,1,1.0,nan,nan,True
+"references, no intervention",t2_argmax,-1.0,2,2,1.0,nan,nan,True
+"references, no intervention",t2_argmax,-0.75,13,13,1.0,nan,nan,True
+"references, no intervention",t2_argmax,-0.5,62,60,0.9516129032258065,0.8870967741935484,1.0,False
+"references, no intervention",t2_argmax,-0.25,209,200,0.9760765550239234,0.9558060488346283,0.9951923076923077,False
+"references, no intervention",t2_argmax,0.0,3042,708,0.9980276134122288,0.9963857362736305,0.9993487622261011,False
+"references, no intervention",t2_argmax,0.25,523,296,1.0,1.0,1.0,False
+"references, no intervention",t2_gap,-2.75,0,0,nan,nan,nan,True
+"references, no intervention",t2_gap,-2.5,0,0,nan,nan,nan,True
+"references, no intervention",t2_gap,-2.25,0,0,nan,nan,nan,True
+"references, no intervention",t2_gap,-2.0,0,0,nan,nan,nan,True
+"references, no intervention",t2_gap,-1.75,0,0,nan,nan,nan,True
+"references, no intervention",t2_gap,-1.5,0,0,nan,nan,nan,True
+"references, no intervention",t2_gap,-1.25,1,1,1.2046146392822266,nan,nan,True
+"references, no intervention",t2_gap,-1.0,2,2,0.5695886611938477,nan,nan,True
+"references, no intervention",t2_gap,-0.75,13,13,0.6664984776423528,nan,nan,True
+"references, no intervention",t2_gap,-0.5,62,60,0.7298147601466025,nan,nan,False
+"references, no intervention",t2_gap,-0.25,209,200,0.6920426564923884,nan,nan,False
+"references, no intervention",t2_gap,0.0,3042,708,0.7948325158419537,nan,nan,False
+"references, no intervention",t2_gap,0.25,523,296,0.8159668559553974,nan,nan,False
+"references, no intervention",t2_rho,-2.75,0,0,nan,nan,nan,True
+"references, no intervention",t2_rho,-2.5,0,0,nan,nan,nan,True
+"references, no intervention",t2_rho,-2.25,0,0,nan,nan,nan,True
+"references, no intervention",t2_rho,-2.0,0,0,nan,nan,nan,True
+"references, no intervention",t2_rho,-1.75,0,0,nan,nan,nan,True
+"references, no intervention",t2_rho,-1.5,0,0,nan,nan,nan,True
+"references, no intervention",t2_rho,-1.25,1,1,0.7905694150420948,nan,nan,True
+"references, no intervention",t2_rho,-1.0,2,2,0.9486832980505138,nan,nan,True
+"references, no intervention",t2_rho,-0.75,13,13,0.8027320214273577,nan,nan,True
+"references, no intervention",t2_rho,-0.5,62,60,0.836473445592926,nan,nan,False
+"references, no intervention",t2_rho,-0.25,209,200,0.8571436815719553,nan,nan,False
+"references, no intervention",t2_rho,0.0,3042,708,0.9313229966288135,nan,nan,False
+"references, no intervention",t2_rho,0.25,523,296,0.9371951000499019,nan,nan,False
+induced references,t2_argmax,-2.75,0,0,nan,nan,nan,True
+induced references,t2_argmax,-2.5,0,0,nan,nan,nan,True
+induced references,t2_argmax,-2.25,2,2,0.5,nan,nan,True
+induced references,t2_argmax,-2.0,8,8,1.0,nan,nan,True
+induced references,t2_argmax,-1.75,29,27,0.9310344827586207,nan,nan,True
+induced references,t2_argmax,-1.5,40,35,0.925,0.8460526315789474,1.0,False
+induced references,t2_argmax,-1.25,204,168,0.9509803921568627,0.9158311166937589,0.9802979812614702,False
+induced references,t2_argmax,-1.0,460,366,0.9869565217391304,0.9757133922001472,0.9957365092387654,False
+induced references,t2_argmax,-0.75,1052,833,0.9838403041825095,0.9768104718212046,0.9906544237632747,False
+induced references,t2_argmax,-0.5,2700,1969,0.9844444444444445,0.9797109400656512,0.9889683700295533,False
+induced references,t2_argmax,-0.25,4244,2937,0.9830348727615457,0.9787230224982184,0.9868956354879336,False
+induced references,t2_argmax,0.0,16269,4858,0.9929313418157232,0.9915864584606018,0.9942931540639568,False
+induced references,t2_argmax,0.25,2140,1465,1.0,1.0,1.0,False
+induced references,t2_gap,-2.75,0,0,nan,nan,nan,True
+induced references,t2_gap,-2.5,0,0,nan,nan,nan,True
+induced references,t2_gap,-2.25,2,2,1.2619304656982422,nan,nan,True
+induced references,t2_gap,-2.0,8,8,0.8166310787200928,nan,nan,True
+induced references,t2_gap,-1.75,29,27,0.8650490333294046,nan,nan,True
+induced references,t2_gap,-1.5,40,35,0.6667455196380615,nan,nan,False
+induced references,t2_gap,-1.25,204,168,0.5297755400339762,nan,nan,False
+induced references,t2_gap,-1.0,460,366,0.6678399023802384,nan,nan,False
+induced references,t2_gap,-0.75,1052,833,0.7129465817498617,nan,nan,False
+induced references,t2_gap,-0.5,2700,1969,0.7598810665695755,nan,nan,False
+induced references,t2_gap,-0.25,4244,2937,0.7476164930615079,nan,nan,False
+induced references,t2_gap,0.0,16269,4858,0.8730835947731614,nan,nan,False
+induced references,t2_gap,0.25,2140,1465,1.061552425188439,nan,nan,False
+induced references,t2_rho,-2.75,0,0,nan,nan,nan,True
+induced references,t2_rho,-2.5,0,0,nan,nan,nan,True
+induced references,t2_rho,-2.25,2,2,0.0790569415042095,nan,nan,True
+induced references,t2_rho,-2.0,8,8,0.7905694150420948,nan,nan,True
+induced references,t2_rho,-1.75,29,27,0.7469517921432209,nan,nan,True
+induced references,t2_rho,-1.5,40,35,0.7905694150420948,nan,nan,False
+induced references,t2_rho,-1.25,204,168,0.8401737704957162,nan,nan,False
+induced references,t2_rho,-1.0,460,366,0.8438469190992792,nan,nan,False
+induced references,t2_rho,-0.75,1052,833,0.8359595221414697,nan,nan,False
+induced references,t2_rho,-0.5,2700,1969,0.8759509118666411,nan,nan,False
+induced references,t2_rho,-0.25,4244,2937,0.8946622965514073,nan,nan,False
+induced references,t2_rho,0.0,16269,4858,0.9286044190600782,nan,nan,False
+induced references,t2_rho,0.25,2140,1465,0.9364922743606122,nan,nan,False

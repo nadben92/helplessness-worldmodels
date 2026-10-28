@@ -1,0 +1,9 @@
+agent,model,states,actions,Q,I,loc_template,mass_played
+p1-a-d1_e4,exposed,True,True,True,True,True,True
+p1-a-d1_e4,reference,True,True,True,True,True,True
+p1-b-d1_e4,exposed,True,True,True,True,True,True
+p1-b-d1_e4,reference,True,True,True,True,True,True
+p2-a-d1_e4,exposed,True,True,True,True,True,True
+p2-a-d1_e4,reference,True,True,True,True,True,True
+p2-b-d1_e4,exposed,True,True,True,True,True,True
+p2-b-d1_e4,reference,True,True,True,True,True,True

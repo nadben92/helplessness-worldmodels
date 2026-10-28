@@ -1,0 +1,59 @@
+agent: p2-b-d1_e4
+condition: dev_pair2
+configuration: p2-b-d1
+seed: 6
+weights:
+  experimental: scratch\e4x\all\results\E4_generalization_gradient\grid12x12__2zones-p2-b-d1__pair-experimental__worldmodel-agent-e4__seed06__20261018T140930Z\checkpoints\agent_env300000.pt
+  reference: scratch\e4x\all\results\E4_generalization_gradient\grid12x12__2zones-p2-b-d1__pair-control__worldmodel-agent-e4__seed06__20261018T140930Z\checkpoints\agent_env300000.pt
+weights_sha256:
+  experimental: 87d98787620684ff35dabb2c5f9bcacaa73d300106593d70f4f323158ce94c71
+  reference: 22b3d5f83929263b8d9171ab9cebca6ebe439c087f5df1777d477747ae047033
+agents_file: configs\e6\agents_dev_e4.yaml
+config: C:\Users\nadim\Desktop\v1_ucl\configs\e7\e7.yaml
+config_bases:
+- configs/e4/e4.yaml
+- configs/e6/e6.yaml
+e7:
+  seed: 7007
+  lam: 0.01
+  lr: 0.05
+  max_steps: 1000
+  tol: 0.0001
+  patience: 50
+  contexts_per_state: 10
+  n_pre:
+  - 8
+  - 32
+  direction_images:
+  - training
+  restarts:
+    n_situations: 20
+    k: 5
+  alphas:
+  - 0.0
+  - 0.25
+  - 0.5
+  - 0.75
+  - 1.0
+  - 1.5
+  apply_in: zone
+  modes:
+  - direction
+  - random
+  - stepwise
+  stepwise_max_steps: 300
+  reverse: true
+device: cpu
+torch_threads: 1
+seconds: 645.9127315003425
+code:
+  git_commit: 0ebeaac1de484e81ef534972780b55d64cd39408
+  git_dirty: false
+  git_n_changed_paths: 0
+  source_sha256: 1a4dae28e867681018162409e4dcf09632412b3541078aba0765c917ed76c603
+  source_n_files: 371
+  source_scope:
+  - src
+  - experiments
+  - configs
+  - pyproject.toml

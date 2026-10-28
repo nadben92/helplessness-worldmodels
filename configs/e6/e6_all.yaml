@@ -1,0 +1,180 @@
+# E6/E7 on all agents (docs/e6/DECISIONS.md (63)): configs/e6/e6.yaml's e6 block UNCHANGED but `images`, the union of
+# every agent's test images (written by experiments/E6_phenotypes_latent/select_images.py; each agent runs its own
+# subset, configs/e6/images_by_agent_all.yaml). tests/e6/test_e6_all_config.py pins the equality of the rest.
+base: configs/e4/e4.yaml
+e6:
+  seed: 6006
+  images:
+  - name: training
+    axis: training
+    position: ud
+  - name: arc_ctrl_k1_ud
+    axis: arc_ctrl
+    k: 1
+    position: ud
+  - name: arc_ctrl_k6_ud
+    axis: arc_ctrl
+    k: 6
+    position: ud
+  - name: arc_ctrl_k10_neutral
+    axis: arc_ctrl
+    k: 10
+    position: neutral
+  - name: arc_inc_k2_cd
+    axis: arc_inc
+    k: 2
+    position: cd
+  - name: arc_ctrl_k3_ud
+    axis: arc_ctrl
+    k: 3
+    position: ud
+  - name: arc_ctrl_k7_ud
+    axis: arc_ctrl
+    k: 7
+    position: ud
+  - name: arc_ctrl_k9_neutral
+    axis: arc_ctrl
+    k: 9
+    position: neutral
+  - name: arc_inc_k7_neutral
+    axis: arc_inc
+    k: 7
+    position: neutral
+  - name: arc_ctrl_k7_neutral
+    axis: arc_ctrl
+    k: 7
+    position: neutral
+  - name: segment_k6_neutral
+    axis: segment
+    k: 6
+    position: neutral
+  - name: arc_ctrl_k5_ud
+    axis: arc_ctrl
+    k: 5
+    position: ud
+  - name: arc_inc_k10_neutral
+    axis: arc_inc
+    k: 10
+    position: neutral
+  - name: arc_inc_k9_neutral
+    axis: arc_inc
+    k: 9
+    position: neutral
+  - name: arc_inc_k10_cd
+    axis: arc_inc
+    k: 10
+    position: cd
+  - name: arc_ctrl_k8_cd
+    axis: arc_ctrl
+    k: 8
+    position: cd
+  - name: segment_k5_ud
+    axis: segment
+    k: 5
+    position: ud
+  - name: arc_ctrl_k3_neutral
+    axis: arc_ctrl
+    k: 3
+    position: neutral
+  - name: segment_k9_cd
+    axis: segment
+    k: 9
+    position: cd
+  - name: segment_k1_ud
+    axis: segment
+    k: 1
+    position: ud
+  - name: arc_ctrl_k9_ud
+    axis: arc_ctrl
+    k: 9
+    position: ud
+  - name: arc_inc_k4_neutral
+    axis: arc_inc
+    k: 4
+    position: neutral
+  - name: segment_k4_ud
+    axis: segment
+    k: 4
+    position: ud
+  - name: arc_ctrl_k4_ud
+    axis: arc_ctrl
+    k: 4
+    position: ud
+  - name: segment_k0_neutral
+    axis: segment
+    k: 0
+    position: neutral
+  - name: arc_ctrl_k1_neutral
+    axis: arc_ctrl
+    k: 1
+    position: neutral
+  - name: segment_k1_neutral
+    axis: segment
+    k: 1
+    position: neutral
+  - name: arc_ctrl_k4_neutral
+    axis: arc_ctrl
+    k: 4
+    position: neutral
+  - name: segment_k2_neutral
+    axis: segment
+    k: 2
+    position: neutral
+  - name: arc_ctrl_k6_neutral
+    axis: arc_ctrl
+    k: 6
+    position: neutral
+  - name: segment_k3_neutral
+    axis: segment
+    k: 3
+    position: neutral
+  - name: arc_ctrl_k2_ud
+    axis: arc_ctrl
+    k: 2
+    position: ud
+  - name: position_only_k0_ud
+    axis: position_only
+    k: 0
+    position: ud
+  - name: segment_k4_cd
+    axis: segment
+    k: 4
+    position: cd
+  - name: segment_k4_neutral
+    axis: segment
+    k: 4
+    position: neutral
+  - name: arc_inc_k5_cd
+    axis: arc_inc
+    k: 5
+    position: cd
+  n_reps: 20
+  horizon: 36
+  epsilon: null
+  measure: all
+  draws: 16
+  fresh_samples: 8
+  validity:
+    n_walks: 150
+  phenotypes:
+    k_revisit: 4
+    n_min: 20
+    n_boot: 200
+  analysis:
+    phenotypes:
+      primary:
+      - directed_share
+      secondary:
+      - recovery_latency
+      - zone_share
+      - stay_share
+      - revisit_share
+      logged:
+      - exit_median_km
+    include_references: true
+    grid_step: 0.01
+    n_boot: 1000
+    window: 0.25
+    min_delta_share: 0.02
+    localisation_min: 0.9
+    min_points_per_condition: 4

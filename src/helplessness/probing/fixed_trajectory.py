@@ -79,12 +79,13 @@ def fixed_trajectory_context(
 def step_controllability(
     rssm: RSSM, h: torch.Tensor, z: torch.Tensor, templates_t: torch.Tensor, draws: int, margin_threshold: float,
     generator: torch.Generator | None = None, true_successor: np.ndarray | None = None, chunk: int = 512,
-    decode_chunk: int = 1024,
+    decode_chunk: int = 1024, return_kernel: bool = False,
 ) -> dict[str, np.ndarray]:
     """I_s at each context (h (n, h_dim), z (n, n_vars, n_classes)): module docstring, step 2. templates_t:
     (n_states, C, H, W) float, the probed environment's state images. true_successor (n, n_actions) int, optional: the
     environment's successor of each (context's state, action), for the mass on it. Returns I (n,), ghost_fraction
-    (n, n_actions), mass_true (n, n_actions) (NaN without true_successor), n_unique_decodes (int)."""
+    (n, n_actions), mass_true (n, n_actions) (NaN without true_successor), n_unique_decodes (int); with return_kernel
+    (off by default), also p_hat (n, n_actions, n_states), the decoded s-space kernel I is computed from."""
     device = next(rssm.parameters()).device
     from helplessness.pipeline.measure import controllability_of_kernel  # pipeline imports probing, not the reverse
 
@@ -139,7 +140,10 @@ def step_controllability(
     mass = np.full((n, A), np.nan)
     if true_successor is not None:
         mass = np.take_along_axis(p_hat, np.asarray(true_successor)[:, :, None], axis=2)[:, :, 0]
-    return {"I": I, "ghost_fraction": ghost, "mass_true": mass, "n_unique_decodes": n_unique}
+    out = {"I": I, "ghost_fraction": ghost, "mass_true": mass, "n_unique_decodes": n_unique}
+    if return_kernel:
+        out["p_hat"] = p_hat
+    return out
 
 
 def summarize_zone(values: np.ndarray, states: np.ndarray, steps_since_entry: np.ndarray, m: int, n_in: int) -> dict:

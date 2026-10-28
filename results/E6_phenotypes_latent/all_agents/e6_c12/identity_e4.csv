@@ -1,0 +1,5 @@
+agent,part,arrays_identical,arrays,rows_identical
+p1-a_e4,E6 training,35,35,True
+base_A,E6 training,35,35,True
+p2-a_e4,E6 training,35,35,True
+p2-b_e4,E6 training,35,35,True

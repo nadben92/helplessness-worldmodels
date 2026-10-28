@@ -1,0 +1,69 @@
+agent: p2-b-d1_e4
+condition: dev_pair2
+configuration: p2-b-d1
+phase: sampled
+tag: shared
+p_values:
+- 0.0
+- 0.1
+- 0.2
+- 0.3
+- 0.4
+- 0.5
+- 0.6
+- 0.7
+- 0.8
+- 0.9
+- 1.0
+image: training
+slot: nw
+weights:
+  experimental: scratch\e4x\all\results\E4_generalization_gradient\grid12x12__2zones-p2-b-d1__pair-experimental__worldmodel-agent-e4__seed06__20261018T140930Z\checkpoints\agent_env300000.pt
+  reference: scratch\e4x\all\results\E4_generalization_gradient\grid12x12__2zones-p2-b-d1__pair-control__worldmodel-agent-e4__seed06__20261018T140930Z\checkpoints\agent_env300000.pt
+weights_hash_before:
+  experimental: e2f8266fb2b0a639b67e5c4099cfffbe704e022ff011ed4a2d0a0a637dbcbcf8
+  reference: 46d23dd950910af563fcdc4cef5cb276b90d8b6568711337dc166760477e5091
+weights_hash_after:
+  experimental: e2f8266fb2b0a639b67e5c4099cfffbe704e022ff011ed4a2d0a0a637dbcbcf8
+  reference: 46d23dd950910af563fcdc4cef5cb276b90d8b6568711337dc166760477e5091
+agents_file: configs\e6\agents_dev_e4.yaml
+config: C:\Users\nadim\Desktop\v1_ucl\configs\e7\e7.yaml
+config_bases:
+- configs/e4/e4.yaml
+- configs/e6/e6.yaml
+diagnostics:
+  seed: 7107
+  image: training
+  contexts_per_cell: 4
+  k_max: 10
+  k_report:
+  - 1
+  - 2
+  - 3
+  - 5
+  - 10
+  n_particles: 16
+  k_inner: 4
+  n_trace: 1
+  chunk: 20
+  bin_width: 0.25
+  taus: null
+  lookahead_ks:
+  - 1
+  - 5
+  - 10
+device: cpu
+torch_threads: 1
+torch_version: 2.14.0+cpu
+seconds: 1030.2720071000003
+code:
+  git_commit: 6cd6632122e0c70f9e6d56d54ac0947772664dde
+  git_dirty: false
+  git_n_changed_paths: 0
+  source_sha256: 33c5eac3ac97055cf8cb08c56bfffde7a86f989bf1fd1d174731b818893d6cdf
+  source_n_files: 381
+  source_scope:
+  - src
+  - experiments
+  - configs
+  - pyproject.toml

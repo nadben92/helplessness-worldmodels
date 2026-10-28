@@ -1,0 +1,79 @@
+group,steps,rule,b_lo,n_steps,n_episodes,share,lo,hi,masked
+exposed,well-localised,argmax,-2.75,0,0,nan,nan,nan,True
+exposed,well-localised,argmax,-2.5,745,364,0.0,0.0,0.0,False
+exposed,well-localised,argmax,-2.25,2011,640,0.0,0.0,0.0,False
+exposed,well-localised,argmax,-2.0,509,312,0.0019646365422396855,0.0,0.00613559919880072,False
+exposed,well-localised,argmax,-1.75,330,230,0.006060606060606061,0.0,0.015337423312883436,False
+exposed,well-localised,argmax,-1.5,222,162,0.0,0.0,0.0,False
+exposed,well-localised,argmax,-1.25,72,59,0.0,0.0,0.0,False
+exposed,well-localised,argmax,-1.0,53,50,0.0,0.0,0.0,False
+exposed,well-localised,argmax,-0.75,21,20,0.0,nan,nan,True
+exposed,well-localised,argmax,-0.5,4,4,0.0,nan,nan,True
+exposed,well-localised,argmax,-0.25,1,1,0.0,nan,nan,True
+exposed,well-localised,argmax,0.0,0,0,nan,nan,nan,True
+exposed,well-localised,argmax,0.25,0,0,nan,nan,nan,True
+exposed,well-localised,mass>=0.5,-2.75,0,0,nan,nan,nan,True
+exposed,well-localised,mass>=0.5,-2.5,745,364,0.0,0.0,0.0,False
+exposed,well-localised,mass>=0.5,-2.25,2011,640,0.0,0.0,0.0,False
+exposed,well-localised,mass>=0.5,-2.0,509,312,0.0019646365422396855,0.0,0.00639761797999579,False
+exposed,well-localised,mass>=0.5,-1.75,330,230,0.006060606060606061,0.0,0.015874279648164995,False
+exposed,well-localised,mass>=0.5,-1.5,222,162,0.0,0.0,0.0,False
+exposed,well-localised,mass>=0.5,-1.25,72,59,0.0,0.0,0.0,False
+exposed,well-localised,mass>=0.5,-1.0,53,50,0.0,0.0,0.0,False
+exposed,well-localised,mass>=0.5,-0.75,21,20,0.0,nan,nan,True
+exposed,well-localised,mass>=0.5,-0.5,4,4,0.0,nan,nan,True
+exposed,well-localised,mass>=0.5,-0.25,1,1,0.0,nan,nan,True
+exposed,well-localised,mass>=0.5,0.0,0,0,nan,nan,nan,True
+exposed,well-localised,mass>=0.5,0.25,0,0,nan,nan,nan,True
+exposed,exposed: all steps,argmax,-2.75,0,0,nan,nan,nan,True
+exposed,exposed: all steps,argmax,-2.5,761,367,0.0,0.0,0.0,False
+exposed,exposed: all steps,argmax,-2.25,2143,655,0.0,0.0,0.0,False
+exposed,exposed: all steps,argmax,-2.0,663,385,0.0015082956259426848,0.0,0.004807885232744783,False
+exposed,exposed: all steps,argmax,-1.75,519,330,0.0038535645472061657,0.0,0.010040160642570281,False
+exposed,exposed: all steps,argmax,-1.5,397,276,0.005037783375314861,0.0,0.012627061756808592,False
+exposed,exposed: all steps,argmax,-1.25,241,170,0.0,0.0,0.0,False
+exposed,exposed: all steps,argmax,-1.0,146,118,0.0,0.0,0.0,False
+exposed,exposed: all steps,argmax,-0.75,85,77,0.0,0.0,0.0,False
+exposed,exposed: all steps,argmax,-0.5,28,28,0.0,nan,nan,True
+exposed,exposed: all steps,argmax,-0.25,13,12,0.0,nan,nan,True
+exposed,exposed: all steps,argmax,0.0,0,0,nan,nan,nan,True
+exposed,exposed: all steps,argmax,0.25,0,0,nan,nan,nan,True
+exposed,exposed: all steps,mass>=0.5,-2.75,0,0,nan,nan,nan,True
+exposed,exposed: all steps,mass>=0.5,-2.5,761,367,0.0,0.0,0.0,False
+exposed,exposed: all steps,mass>=0.5,-2.25,2143,655,0.0,0.0,0.0,False
+exposed,exposed: all steps,mass>=0.5,-2.0,663,385,0.0015082956259426848,0.0,0.004794475181173535,False
+exposed,exposed: all steps,mass>=0.5,-1.75,519,330,0.0038535645472061657,0.0,0.009788133289845615,False
+exposed,exposed: all steps,mass>=0.5,-1.5,397,276,0.0025188916876574307,0.0,0.007895257603110679,False
+exposed,exposed: all steps,mass>=0.5,-1.25,241,170,0.0,0.0,0.0,False
+exposed,exposed: all steps,mass>=0.5,-1.0,146,118,0.0,0.0,0.0,False
+exposed,exposed: all steps,mass>=0.5,-0.75,85,77,0.0,0.0,0.0,False
+exposed,exposed: all steps,mass>=0.5,-0.5,28,28,0.0,nan,nan,True
+exposed,exposed: all steps,mass>=0.5,-0.25,13,12,0.0,nan,nan,True
+exposed,exposed: all steps,mass>=0.5,0.0,0,0,nan,nan,nan,True
+exposed,exposed: all steps,mass>=0.5,0.25,0,0,nan,nan,nan,True
+induced references,well-localised,argmax,-2.75,0,0,nan,nan,nan,True
+induced references,well-localised,argmax,-2.5,0,0,nan,nan,nan,True
+induced references,well-localised,argmax,-2.25,2,2,0.5,nan,nan,True
+induced references,well-localised,argmax,-2.0,12,12,0.8333333333333334,nan,nan,True
+induced references,well-localised,argmax,-1.75,21,19,0.6666666666666666,nan,nan,True
+induced references,well-localised,argmax,-1.5,48,41,0.4375,0.29159722222222223,0.5957446808510638,False
+induced references,well-localised,argmax,-1.25,204,172,0.6225490196078431,0.5544312687082662,0.6866223728297288,False
+induced references,well-localised,argmax,-1.0,441,356,0.5895691609977324,0.5403497757847534,0.6365792624521073,False
+induced references,well-localised,argmax,-0.75,1074,848,0.8091247672253259,0.7848625768142657,0.8351555859137826,False
+induced references,well-localised,argmax,-0.5,2769,2028,0.9349945828819068,0.9241915875576902,0.9460934493847357,False
+induced references,well-localised,argmax,-0.25,4481,3130,0.9890649408614148,0.9857646367921584,0.9919537337256474,False
+induced references,well-localised,argmax,0.0,19267,5564,0.999584782270203,0.9992685408541792,0.9998442047903303,False
+induced references,well-localised,argmax,0.25,2677,1778,1.0,1.0,1.0,False
+induced references,well-localised,mass>=0.5,-2.75,0,0,nan,nan,nan,True
+induced references,well-localised,mass>=0.5,-2.5,0,0,nan,nan,nan,True
+induced references,well-localised,mass>=0.5,-2.25,2,2,0.5,nan,nan,True
+induced references,well-localised,mass>=0.5,-2.0,12,12,0.8333333333333334,nan,nan,True
+induced references,well-localised,mass>=0.5,-1.75,21,19,0.6190476190476191,nan,nan,True
+induced references,well-localised,mass>=0.5,-1.5,48,41,0.4375,0.2916666666666667,0.6086956521739131,False
+induced references,well-localised,mass>=0.5,-1.25,204,172,0.6127450980392157,0.5414533993166019,0.6834170854271356,False
+induced references,well-localised,mass>=0.5,-1.0,441,356,0.5827664399092971,0.5363620395997445,0.6321864852327199,False
+induced references,well-localised,mass>=0.5,-0.75,1074,848,0.7951582867783985,0.7674989794267845,0.8208565895432559,False
+induced references,well-localised,mass>=0.5,-0.5,2769,2028,0.9295774647887324,0.9186736943459063,0.9403047055517553,False
+induced references,well-localised,mass>=0.5,-0.25,4481,3130,0.9883954474447668,0.9852635621640121,0.9914480353536425,False
+induced references,well-localised,mass>=0.5,0.0,19267,5564,0.9996885867026521,0.9994296920448351,0.9998970775159625,False
+induced references,well-localised,mass>=0.5,0.25,2677,1778,1.0,1.0,1.0,False

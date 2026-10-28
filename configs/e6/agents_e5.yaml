@@ -1,0 +1,60 @@
+# E6/E7's agents: E4's four pairs and E5's agents (docs/e5/DECISIONS.md (32), (36)). Runs root: the cluster's mount
+# (--runs-root /scratch) or a local copy with the same layout (helplessness-worldmodels-e4/results/...,
+# helplessness-worldmodels-e5/results/...); every glob below is relative to it. Adding an agent is one more entry, no code
+# change. `origin` (not read by the run scripts): e4 = E4's run, e5 = trained in E5 -- the figures' marker.
+#
+# E5's baseline A IS E4's p1-b-d1 pair (seed 2, reused by E5, not retrained): it is listed once, as base_A.
+# Shuffle seed A (stopped at 350,000) is not probed and not listed; seed B's f = 1 experimental run (locked in) is replaced
+# by E (402) and F (502), both against seed B's f = 1 reference. E and F are at 475,000, short of E4's criterion
+# (PRELIMINARY, docs/e5/DECISIONS.md (36)); the baselines at 300,000.
+checkpoint: 300000
+agents:
+  - id: p1-a_e4
+    condition: baseline
+    origin: e4
+    configuration: p1-a-d1
+    seed: 1
+    experimental: {run: "helplessness-worldmodels-e4/results/E4_generalization_gradient/grid12x12__2zones-p1-a-d1__pair-experimental__worldmodel-agent-e4__seed01__*"}
+    reference: {run: "helplessness-worldmodels-e4/results/E4_generalization_gradient/grid12x12__2zones-p1-a-d1__pair-control__worldmodel-agent-e4__seed01__*"}
+  - id: base_A        # E4's own pair of p1-b-d1 (= E4's p1-b; E5's baseline seed A)
+    condition: baseline
+    origin: e4
+    configuration: p1-b-d1
+    seed: 2
+    experimental: {run: "helplessness-worldmodels-e4/results/E4_generalization_gradient/grid12x12__2zones-p1-b-d1__pair-experimental__worldmodel-agent-e4__seed02__*"}
+    reference: {run: "helplessness-worldmodels-e4/results/E4_generalization_gradient/grid12x12__2zones-p1-b-d1__pair-control__worldmodel-agent-e4__seed02__*"}
+  - id: p2-a_e4
+    condition: baseline
+    origin: e4
+    configuration: p2-a-d1
+    seed: 5
+    experimental: {run: "helplessness-worldmodels-e4/results/E4_generalization_gradient/grid12x12__2zones-p2-a-d1__pair-experimental__worldmodel-agent-e4__seed05__*"}
+    reference: {run: "helplessness-worldmodels-e4/results/E4_generalization_gradient/grid12x12__2zones-p2-a-d1__pair-control__worldmodel-agent-e4__seed05__*"}
+  - id: p2-b_e4
+    condition: baseline
+    origin: e4
+    configuration: p2-b-d1
+    seed: 6
+    experimental: {run: "helplessness-worldmodels-e4/results/E4_generalization_gradient/grid12x12__2zones-p2-b-d1__pair-experimental__worldmodel-agent-e4__seed06__*"}
+    reference: {run: "helplessness-worldmodels-e4/results/E4_generalization_gradient/grid12x12__2zones-p2-b-d1__pair-control__worldmodel-agent-e4__seed06__*"}
+  - id: base_B        # E5's seed B baseline (wave 2)
+    condition: baseline
+    origin: e5
+    configuration: p1-b-d1
+    seed: 102
+    experimental: {run: "helplessness-worldmodels-e5/results/E5_belief_training/grid12x12__2zones-p1-b-d1-base__pair-experimental__worldmodel-agent-e5__seed102__*"}
+    reference: {run: "helplessness-worldmodels-e5/results/E5_belief_training/grid12x12__2zones-p1-b-d1-base__pair-control__worldmodel-agent-e5__seed102__*"}
+  - id: f1_E          # shuffle f = 1, seed 402, against seed B's f = 1 reference; the probed checkpoint
+    condition: f1
+    origin: e5
+    configuration: p1-b-d1
+    seed: 402
+    experimental: {run: "helplessness-worldmodels-e5/results/E5_belief_training/grid12x12__2zones-p1-b-d1-sh100__pair-experimental__worldmodel-agent-e5__seed402__*", checkpoint: 475000}
+    reference: {run: "helplessness-worldmodels-e5/results/E5_belief_training/grid12x12__2zones-p1-b-d1-sh100__pair-control__worldmodel-agent-e5__seed102__*", checkpoint: 475000}
+  - id: f1_F          # shuffle f = 1, seed 502, the same reference as f1_E
+    condition: f1
+    origin: e5
+    configuration: p1-b-d1
+    seed: 502
+    experimental: {run: "helplessness-worldmodels-e5/results/E5_belief_training/grid12x12__2zones-p1-b-d1-sh100__pair-experimental__worldmodel-agent-e5__seed502__*", checkpoint: 475000}
+    reference: {run: "helplessness-worldmodels-e5/results/E5_belief_training/grid12x12__2zones-p1-b-d1-sh100__pair-control__worldmodel-agent-e5__seed102__*", checkpoint: 475000}

@@ -1,0 +1,15 @@
+agent,phase,equal_D6,equal_E6,setting,recorded,equal_recorded
+p1-a-d1_e4,natural,True,True,,,
+p1-b-d1_e4,natural,True,True,,,
+p2-a-d1_e4,natural,True,True,,,
+p2-b-d1_e4,natural,True,True,,,
+p1-a-d1_e4,corrected,,,lam0.01_mupos10,False,
+p1-a-d1_e4,corrected,,,lam0.01_mupos1,False,
+p1-a-d1_e4,corrected,,,lam0.1_mupos1,True,True
+p1-b-d1_e4,corrected,,,lam0.01_mupos10,False,
+p1-b-d1_e4,corrected,,,lam0.01_mupos1,True,True
+p2-a-d1_e4,corrected,,,lam0.01_mupos10,True,True
+p2-a-d1_e4,corrected,,,lam0.01_mupos1,False,
+p2-b-d1_e4,corrected,,,lam0.01_mupos10,False,
+p2-b-d1_e4,corrected,,,lam0.01_mupos1,False,
+p2-b-d1_e4,corrected,,,lam0.1_mupos1,True,True

@@ -1,0 +1,50 @@
+{
+ "2": {
+  "intermediate_pairs_by_agent": {
+   "p1-a_e4": 0,
+   "base_A": 0,
+   "p2-a_e4": 0,
+   "p2-b_e4": 0,
+   "base_B": 0,
+   "f1_E": 6,
+   "f1_F": 2
+  },
+  "n_intermediate_with_C1": 8,
+  "share_C1_intermediate": 0.0,
+  "rho_b_C1_intermediate": 0.5952380952380953,
+  "verdict": false
+ },
+ "1": {
+  "rows": [
+   {
+    "agent": "p1-a_e4",
+    "part": "E6 training",
+    "arrays_identical": 35,
+    "arrays": 35,
+    "rows_identical": true
+   },
+   {
+    "agent": "base_A",
+    "part": "E6 training",
+    "arrays_identical": 35,
+    "arrays": 35,
+    "rows_identical": true
+   },
+   {
+    "agent": "p2-a_e4",
+    "part": "E6 training",
+    "arrays_identical": 35,
+    "arrays": 35,
+    "rows_identical": true
+   },
+   {
+    "agent": "p2-b_e4",
+    "part": "E6 training",
+    "arrays_identical": 35,
+    "arrays": 35,
+    "rows_identical": true
+   }
+  ],
+  "verdict": true
+ }
+}

@@ -1,0 +1,17 @@
+# E6/E7's development agents: E4's four configurations at 300,000 steps (exposed and reference), on the CPU. Runs root:
+# the extracted E4 exports (results/ of each archive), e.g. --runs-root <extract>/results. The conditions are
+# ARTIFICIAL (dev_pair1 / dev_pair2), only to exercise the per-condition analysis: every E4 run is a baseline.
+checkpoint: 300000
+agents:
+  - {id: p1-a-d1_e4, condition: dev_pair1, configuration: p1-a-d1, seed: 1,
+     experimental: {run: "E4_generalization_gradient/grid12x12__2zones-p1-a-d1__pair-experimental__worldmodel-agent-e4__seed01__*"},
+     reference: {run: "E4_generalization_gradient/grid12x12__2zones-p1-a-d1__pair-control__worldmodel-agent-e4__seed01__*"}}
+  - {id: p1-b-d1_e4, condition: dev_pair1, configuration: p1-b-d1, seed: 2,
+     experimental: {run: "E4_generalization_gradient/grid12x12__2zones-p1-b-d1__pair-experimental__worldmodel-agent-e4__seed02__*"},
+     reference: {run: "E4_generalization_gradient/grid12x12__2zones-p1-b-d1__pair-control__worldmodel-agent-e4__seed02__*"}}
+  - {id: p2-a-d1_e4, condition: dev_pair2, configuration: p2-a-d1, seed: 5,
+     experimental: {run: "E4_generalization_gradient/grid12x12__2zones-p2-a-d1__pair-experimental__worldmodel-agent-e4__seed05__*"},
+     reference: {run: "E4_generalization_gradient/grid12x12__2zones-p2-a-d1__pair-control__worldmodel-agent-e4__seed05__*"}}
+  - {id: p2-b-d1_e4, condition: dev_pair2, configuration: p2-b-d1, seed: 6,
+     experimental: {run: "E4_generalization_gradient/grid12x12__2zones-p2-b-d1__pair-experimental__worldmodel-agent-e4__seed06__*"},
+     reference: {run: "E4_generalization_gradient/grid12x12__2zones-p2-b-d1__pair-control__worldmodel-agent-e4__seed06__*"}}
