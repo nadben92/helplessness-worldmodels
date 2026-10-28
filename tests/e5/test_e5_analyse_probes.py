@@ -88,3 +88,36 @@ def test_two_probe_sets_merge_each_pair_at_its_checkpoint(tmp_path):
     with pytest.raises(SystemExit):
         ap.main(["--root", str(tmp_path), "--out", str(tmp_path / "out2")])
     ap.main(["--root", str(tmp_path), "--out", str(tmp_path / "out3"), "--pair-k", "shuffle_f1:2=550000"])
+
+
+def test_matched_comparisons_and_the_secondary_merge(tmp_path):
+    """docs/e5/DECISIONS.md (36): E and F at 475,000, baseline B at 300,000 and at the checkpoints matched to E's and F's
+    levels, baseline A at 300,000. The secondary merge takes baseline B at 300,000 (--pair-k); --matched gives, per
+    probe, b(shuffle) - b(baseline at the matched checkpoint) where both probes are valid, then over the comparisons."""
+    import pytest
+
+    fake(tmp_path, "baseline", None, 2, 300000, [-0.1, -2.0, -1.0], [True] * 3, "20261029T000000Z")
+    fake(tmp_path, "baseline", None, 102, 300000, [-0.2, -2.1, -1.1], [True] * 3, "20261029T000000Z")
+    fake(tmp_path, "baseline", None, 102, 39811, [-0.3, -1.5, -0.9], [True, True, False], "20261029T000000Z")
+    fake(tmp_path, "baseline", None, 102, 63096, [-0.4, -1.8, -1.0], [True] * 3, "20261029T000000Z")
+    fake(tmp_path, "shuffle", 1.0, 402, 475000, [-1.0, -0.5, -0.5], [True] * 3, "20261028T000000Z")
+    fake(tmp_path, "shuffle", 1.0, 502, 475000, [-1.2, -0.7, -0.6], [True, False, True], "20261028T000000Z")
+    with pytest.raises(SystemExit):  # baseline B at three checkpoints: the secondary merge needs its k
+        ap.main(["--root", str(tmp_path), "--out", str(tmp_path / "x")])
+    out = tmp_path / "out"
+    ap.main(["--root", str(tmp_path), "--out", str(out), "--pair-k", "baseline:102=300000",
+             "--matched", "shuffle_f1:402@475000=baseline:102@39811", "shuffle_f1:502@475000=baseline:102@63096"])
+    summary = json.loads((out / "summary.json").read_text(encoding="utf-8"))
+    assert summary["seeds"] == {"baseline": [[2, 300000], [102, 300000]], "shuffle_f1": [[402, 475000], [502, 475000]]}
+    assert len(summary["matched_measures"]) == 4
+    with open(out / "matched_aggregated.csv", newline="", encoding="utf-8") as f:
+        agg = {(r["axis"], int(r["k"]), r["position"]): r for r in csv.DictReader(f)}
+    theme = agg[("segment", 0, "neutral")]
+    assert int(theme["n_valid"]) == 2 and np.isclose(float(theme["difference_mean"]), np.mean([-1.0 + 0.3, -1.2 + 0.4]))
+    pos = agg[("position_only", 0, "ud")]  # F's probe invalid: E's difference only
+    assert (int(pos["n_comparisons"]), int(pos["n_valid"])) == (2, 1) and np.isclose(float(pos["difference_mean"]), -0.5 + 1.5)
+    seg5 = agg[("segment", 5, "ud")]  # invalid in baseline B at 39,811: F's only
+    assert seg5["comparisons_valid"] == "shuffle_f1:502@475000=baseline:102@63096"
+    with pytest.raises(SystemExit, match="no measurement"):
+        ap.main(["--root", str(tmp_path), "--out", str(tmp_path / "y"), "--pair-k", "baseline:102=300000",
+                 "--matched", "shuffle_f1:402@475000=baseline:102@25119"])

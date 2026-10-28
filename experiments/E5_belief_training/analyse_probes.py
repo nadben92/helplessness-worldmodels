@@ -9,11 +9,18 @@ then their mean, standard deviation and number, and the number of seeds measured
 imputed. The extreme probes are also tabulated: the training image at the canonical UD slot, theme only (T_inc at the
 neutral slot, segment k = 0) and position only (the corridor's colour at the UD slot).
 
+Matched comparisons (docs/e5/DECISIONS.md (36)), --matched <condition>:<seed>@<k>=<condition>:<seed>@<k> ...: a
+measurement against another one named explicitly (a shuffle pair against its baseline at the checkpoint matched to its
+level of learning, matched_checkpoint.py), taken among every measurement found (not only the one per pair kept above).
+Per probe and comparison: both b, their difference (first minus second) when the probe is valid in both, else left out;
+then per probe over the comparisons: the mean, standard deviation and number of differences. Outputs matched_by_probe.csv
+and matched_aggregated.csv; a measurement named and not found is an error.
+
 Inputs: probe directories (probes__<configuration>__<tag>__seed<NN>__k<NNNNNN>__<UTC>), given or found under --root;
 the newest per (condition, seed, k) is kept. Outputs in --out: probes_by_seed.csv (one row per probe and seed),
 probes_aggregated.csv (one row per condition, k and probe), extremes.csv, summary.json (the seeds of every condition).
 
-Usage: python experiments/E5_belief_training/analyse_probes.py --root <results root> [--checkpoint k] --out <dir>
+Usage: python experiments/E5_belief_training/analyse_probes.py --root <results root> [--checkpoint k] [--pair-k ...] [--matched ...] --out <dir>
        python experiments/E5_belief_training/analyse_probes.py <probe dir> ... --out <dir>
 """
 
@@ -119,6 +126,43 @@ def aggregate(measures: list[dict]) -> tuple[list[dict], list[dict], list[dict],
     return by_seed, aggregated, extremes, {k: sorted(v) for k, v in seeds.items()}
 
 
+def parse_measure(text: str) -> tuple[str, int, int]:
+    """<condition>:<seed>@<k> -> (condition, seed, k)."""
+    cond_seed, k = text.split("@")
+    cond, seed = cond_seed.rsplit(":", 1)
+    return cond, int(seed), int(k)
+
+
+def matched(measures: list[dict], comparisons: list[str]) -> tuple[list[dict], list[dict]]:
+    """--matched <a>=<b>: per probe, b(a) - b(b) where the probe is valid in both measurements; then per probe over the
+    comparisons (docs/e5/DECISIONS.md (36))."""
+    index = {(m["condition"], m["seed"], m["k"]): m for m in measures}
+    by_probe, groups = [], {}
+    for item in comparisons:
+        a_key, b_key = (parse_measure(x) for x in item.split("="))
+        for key in (a_key, b_key):
+            if key not in index:
+                raise SystemExit(f"--matched {item}: no measurement {key[0]}:{key[1]}@{key[2]}")
+        a, b = index[a_key], index[b_key]
+        b_of = {(p["axis"], p["k"], p["position"]): p for p in b["probes"]}
+        for p in a["probes"]:
+            probe = (p["axis"], p["k"], p["position"])
+            q = b_of[probe]
+            ok = p["valid"] and q["valid"]
+            diff = p["b_step1"] - q["b_step1"] if ok else float("nan")
+            by_probe.append({"comparison": item, "axis": probe[0], "k": probe[1], "position": probe[2], "b_first": p["b_step1"],
+                             "valid_first": p["valid"], "b_second": q["b_step1"], "valid_second": q["valid"], "difference": diff})
+            groups.setdefault(probe, []).append((item, diff, ok))
+    aggregated = []
+    for (axis, kk, pos), vals in sorted(groups.items()):
+        d = [x for _, x, ok in vals if ok]
+        aggregated.append({"axis": axis, "k": kk, "position": pos, "n_comparisons": len(vals), "n_valid": len(d),
+                           "difference_mean": float(np.mean(d)) if d else float("nan"),
+                           "difference_sd": float(np.std(d, ddof=1)) if len(d) > 1 else float("nan"),
+                           "comparisons_valid": " ".join(c for c, _, ok in vals if ok)})
+    return by_probe, aggregated
+
+
 def write_csv(path: Path, rows: list[dict]) -> None:
     if not rows:
         return
@@ -134,12 +178,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--root", type=Path, default=None, help="a results root: every finished probe measurement under it")
     parser.add_argument("--checkpoint", type=int, default=None, help="keep this k only (one common checkpoint)")
     parser.add_argument("--pair-k", nargs="*", default=[], help="<condition>:<seed>=<k>: the checkpoint of a pair measured at several")
+    parser.add_argument("--matched", nargs="*", default=[],
+                        help="<condition>:<seed>@<k>=<condition>:<seed>@<k>: b of the first minus b of the second, probe by probe")
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args(argv)
     dirs = list(args.dirs) + (find_probe_dirs(args.root) if args.root else [])
     if not dirs:
         parser.error("no probe directory")
     measures = newest_per_seed([load_probe_dir(d) for d in dirs])
+    every = list(measures)  # --matched names its measurements among all of them
     if args.checkpoint is not None:
         measures = [m for m in measures if m["k"] == args.checkpoint]
     pair_k = {}
@@ -153,8 +200,14 @@ def main(argv: list[str] | None = None) -> int:
     write_csv(args.out / "probes_by_seed.csv", by_seed)
     write_csv(args.out / "probes_aggregated.csv", aggregated)
     write_csv(args.out / "extremes.csv", extremes)
-    (args.out / "summary.json").write_text(json.dumps({"seeds": seeds, "measures": [m["dir"].name for m in measures]}, indent=1),
-                                           encoding="utf-8")
+    matched_rows, matched_agg = matched(every, args.matched) if args.matched else ([], [])
+    write_csv(args.out / "matched_by_probe.csv", matched_rows)
+    write_csv(args.out / "matched_aggregated.csv", matched_agg)
+    used = {parse_measure(x): None for item in args.matched for x in item.split("=")}
+    (args.out / "summary.json").write_text(json.dumps({"seeds": seeds, "measures": [m["dir"].name for m in measures],
+                                                       "matched": args.matched,
+                                                       "matched_measures": [m["dir"].name for m in every if (m["condition"], m["seed"], m["k"]) in used]},
+                                                      indent=1), encoding="utf-8")
     for key, s in seeds.items():
         print(f"{key}: {len(s)} pair(s), [seed, checkpoint] {s}", flush=True)
     return 0

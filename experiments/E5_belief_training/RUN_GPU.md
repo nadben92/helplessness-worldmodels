@@ -438,6 +438,38 @@ python experiments/E5_belief_training/analyse_probes.py --root <extracted result
 
 (`e5_probes_all`, one set at one common checkpoint, stays defined but is NOT USED.)
 
+### 7 bis -- the preliminary probes at 475,000 and the baselines at a matched level (docs/e5/DECISIONS.md (36))
+
+`e5_extend_b` was stopped at 475,000 and `e5_probes_b --checkpoint 475000` launched (on dcdd5b9). **Once its pod is
+done** (never update the clone while a pod runs from it), export it, update the clone and read the matched checkpoints:
+
+```bash
+cd /scratch/helplessness-worldmodels-e5
+python experiments/E5_belief_training/export_batch.py create --batch e5_probes_b --configuration p1-b-d1
+git pull --ff-only && git log --oneline -1 && git status --short --untracked-files=no                     # prints nothing
+PYTHONPATH=src python experiments/E5_belief_training/matched_checkpoint.py --batch e5_extend_b --at 475000     --out exports/e5_matched_475000.json
+```
+
+It prints, for E and F against B's reference: each run's masses by quadrant, b at step 1 by slot, the sub-criteria of
+E4's criterion that fail (report them: they go into (36) before any probe is read), the level L, baseline B's
+trajectory up to its matched checkpoint, its weights and its estimator switch, then `MATCHED: ...` and a `SUBMIT:` line.
+Then one pod (the baselines A and B at 300,000, B also at K_E and K_F):
+
+```bash
+K_E=<baseline B's checkpoint matched to E>; K_F=<matched to F>
+python experiments/E5_belief_training/submit_kubeflow.py --batch e5_probes_baselines --phase probes --checkpoint $K_E $K_F     --e4-results /scratch/helplessness-worldmodels-e4/results --repo-dir /scratch/helplessness-worldmodels-e5 --dry-run
+python experiments/E5_belief_training/submit_kubeflow.py --batch e5_probes_baselines --phase probes --checkpoint $K_E $K_F     --e4-results /scratch/helplessness-worldmodels-e4/results --repo-dir /scratch/helplessness-worldmodels-e5
+python experiments/E5_belief_training/export_batch.py create --batch e5_probes_baselines --configuration p1-b-d1
+```
+
+Jobs: `probes_A_base_k300000`, `probes_B_base_k300000`, `probes_B_base_k<K_E>`, `probes_B_base_k<K_F>` (one if K_E = K_F),
+two at a time. Locally, both archives `verify`'d and extracted into one directory, the merge (secondary: baselines at
+300,000) and the matched comparisons (primary):
+
+```bash
+python experiments/E5_belief_training/analyse_probes.py --root <extracted>/results --pair-k baseline:102=300000     --matched shuffle_f1:402@475000=baseline:102@$K_E shuffle_f1:502@475000=baseline:102@$K_F --out <dir>
+```
+
 **Keep every checkpoint until then.** The probes need every run's `checkpoints/agent_env<K>.pt` on the volume, E4's runs of
 p1-b-d1 included (`/scratch/helplessness-worldmodels-e4/results/E4_generalization_gradient/`). Nothing in the code deletes
 or overwrites them: each is written once under its own step's name (an atomic write of that file only); `resume.pt` and

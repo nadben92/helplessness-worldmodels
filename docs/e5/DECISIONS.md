@@ -835,3 +835,65 @@ equal level of learning of (33); it was unreachable only through the measurement
 (`--phase resume`, the fixed code: its new checkpoints right) only a batch whose pairs have not met the criterion at a
 checkpoint already written. A's continuation, stopped on the artefact, resumes from its own resume point if its pair has
 not met it (`--phase resume`, not `--extend auto`, which takes the newest DONE run: the original of 22 October).
+
+## 2026-10-28 (36) -- preliminary probes of E and F at 475,000, short of E4's criterion; the comparison at a matched level of learning (user; implementer for the rule and the code)
+
+**Written before any probe result was read** (the user's statement: none seen when this was written).
+
+**What happened.** `e5_extend_b` (seed B's f = 1 reference, E, F) resumed on 28 October at about 09:00 on dcdd5b9 (the
+fixed code of (35)), about 10,250 steps per hour per run. The user stopped it at **475,000**, the last checkpoint
+common to its three runs, for lack of time, and launched `e5_probes_b --checkpoint 475000` (dcdd5b9; this decision
+changes neither the probe measure nor the library). Seed A's pair stays at 350,000 (stopped in (35)), not probed.
+
+**Level declared at 475,000** (`check_wave.py`, the canonical records recomputed by (35) where needed; smallest
+canonical quadrant mass on the true successor):
+
+| Run | 300,000 | 450,000 | 475,000 |
+|---|---|---|---|
+| f = 1 reference B (102) | 0.890 | 0.932 | 0.939 |
+| f = 1 E (402) | 0.690 | 0.867 | 0.868 |
+| f = 1 F (502) | 0.774 | 0.896 | 0.887 |
+
+b at step 1 in the UD slot at 475,000: E -2.098 (|b + log2 5| = 0.224), F -1.969 (0.353); baseline B -2.318 at 300,000.
+**E4's criterion is not met** by either pair: the mass sub-criterion (all three runs below 0.97) and the b_UD
+sub-criterion (both pairs above 0.15). The other sub-criteria (|b| <= 0.1 at CD, neutral, other) are printed with the
+pairs' level by `matched_checkpoint.py --at 475000`; they are added here, with the matched checkpoints, before any probe
+is read. Whether E and F plateau near 0.87-0.90 or progress slowly is not
+established: the last interval (450,000 -> 475,000) is a single 25,000-step step (E +0.001, F -0.009, B +0.007), of the
+order of a checkpoint's noise; 0.97 before 650,000 is not assured. The probes of E and F at 475,000 are therefore
+**PRELIMINARY**: not (33)'s K, and reported as such, with this level.
+
+**Comparisons, declared now.**
+- **Primary: at a matched level of learning** (the intent of (33), the baseline moved down rather than the shuffle up).
+  For each pair, L = the smallest canonical quadrant mass of its two runs at 475,000 (E: 0.868, F: 0.887 by
+  `check_wave.py`; `matched_checkpoint.py` recomputes them from the records). The baseline of the pair's reference seed
+  (seed B's, for E and F) is probed in addition at its **first checkpoint** (common to its two runs, in increasing steps)
+  where the smallest canonical quadrant mass of its two runs is >= L; a checkpoint with a quadrant not measured does not
+  count; no such checkpoint is an error, never a fallback. Every checkpoint has its weights (`agent_env<N>.pt`). Per
+  probe: b(pair at 475,000) - b(baseline B at its matched checkpoint), where the probe is valid in both (the validity of
+  (22)), then the mean, SD and number over E and F (`analyse_probes.py --matched`). Why: a less trained model has a
+  weaker belief everywhere, which would read as an effect of the shuffle; matching the level removes that confound and
+  the asymmetric validity of (33) (the probes' validity needs the reference's mass >= 0.90 at step 1).
+- **Secondary: the baselines A (E4's pair) and B at 300,000** (converged), as (33): each condition at the end of its
+  training (`analyse_probes.py --pair-k baseline:102=300000`).
+- Both are reported; if they disagree, the disagreement is reported as a dependence on the level of learning, not
+  resolved by keeping one.
+- Limits, recorded: below 100,000 the baseline checkpoints are E4's log grid (10,000, 15,849, 25,119, 39,811, 63,096,
+  100,000), so the match is coarse; "first checkpoint >= L" makes the baseline at least as trained as the pair by this
+  measure. The mass is one measure of learning: the matched baseline's b(UD) in its training world is reported beside
+  it. A matched checkpoint before a baseline run's estimator switch is flagged by the script and reported.
+
+**The final probes are deferred.** Continuing seed B's reference, E and F from 475,000 and seed A's pair from 350,000 to
+650,000, probed with the rule recommended on 28 October (each pair at its K if it is reached, else at 650,000 with its
+level declared), will be decided before it is launched; the preliminary probes do not replace them.
+
+**Code.**
+- `batches.e5_probes_baselines`: baselines A and B at `PROBES_CHECKPOINT` (300,000) and baseline B also at each
+  checkpoint given (`MATCHED_BASELINE_SEEDS`); `batches.probe_specs` lists the jobs (one per pair and checkpoint, no
+  duplicate). `submit_kubeflow.py --phase probes --checkpoint k [k ...]`: several checkpoints in one pod; one value
+  gives the jobs it gave before (tested).
+- `matched_checkpoint.py`: the pairs' declared level at `--at`, the baseline's trajectory and its matched checkpoint
+  (weights present, estimator switch), and the submission line of `e5_probes_baselines`.
+- `analyse_probes.py --matched <condition>:<seed>@<k>=<condition>:<seed>@<k>`: the matched differences, probe by probe
+  (`matched_by_probe.csv`, `matched_aggregated.csv`).
+- Tested (`tests/e5/test_e5_matched.py`, `tests/e5/test_e5_analyse_probes.py`). Commands: RUN_GPU.md, step 7 bis.

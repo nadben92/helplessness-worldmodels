@@ -11,8 +11,9 @@ Phases:
            never relaunched. Before anything is submitted (and in --dry-run), each run's resume point is checked on the
            CPU (helplessness.cluster.resume: latest.json, resume.pt complete and loaded entirely, the same step); on any
            problem nothing is submitted;
-  probes   measure_probes.py at one checkpoint k (--checkpoint; post-switch steps for the immunisation) for every pair
-           of the batch (batches.PROBE_PAIRS), batches.PROBES_MAX_PARALLEL at a time. Never launched automatically;
+  probes   measure_probes.py at checkpoint k (--checkpoint k [k ...]: one job per pair and k, batches.probe_specs;
+           post-switch steps for the immunisation) for every pair of the batch (batches.PROBE_PAIRS),
+           batches.PROBES_MAX_PARALLEL at a time. Never launched automatically;
   recompute  recompute_checkpoints.py on the runs given (--recompute-runs, run directories relative to --repo-dir, each
            optionally <run>@<step>,<step>; else --recompute-steps, else every checkpoint of a continuation), one job per run, on the GPU (the device the runs measured on: the recomputation reproduces
            their draws). --batch only names the pod and sets its CPUs (docs/e5/DECISIONS.md (35)).
@@ -58,7 +59,7 @@ RESULTS_SUBDIR = "results"
 PHASES = ("train", "resume", "probes", "recompute")
 
 
-def commands(phase: str, python: str, batch: str, configuration: str, resume: str = "", checkpoint: int | None = None,
+def commands(phase: str, python: str, batch: str, configuration: str, resume: str = "", checkpoint: int | list[int] | None = None,
              switch_step: int | None = None, post_steps: int | None = None, e4_results: str | None = None,
              device: str = "cuda", n_walks: int | None = None, resume_runs: dict[str, str] | None = None,
              probe_keep: set[str] | None = None, recompute: dict | None = None) -> list[tuple[str, list[str]]]:
@@ -115,7 +116,7 @@ def resume_plan(repo: Path, batch: str, configuration: str, resume: str) -> tupl
 
 
 def _run_e5(repo_dir: str, phase: str, output: str, batch: str, configuration: str = "", resume: str = "", max_parallel: int = 0,
-            checkpoint: int = 0, switch_step: int = 0, post_steps: int = 0, e4_results: str = "", n_walks: int = 0,
+            checkpoint: str = "", switch_step: int = 0, post_steps: int = 0, e4_results: str = "", n_walks: int = 0,
             resume_runs: str = "", recompute: str = "") -> None:
     """Serialized by CustomTrainer: imports and constants must be self-contained (as E4's _run_e4)."""
     import os
@@ -140,10 +141,11 @@ def _run_e5(repo_dir: str, phase: str, output: str, batch: str, configuration: s
                                   "print('GPU:', torch.cuda.get_device_name(0), 'torch:', torch.__version__, flush=True)"], check=True)
     args = [python, "-u", "experiments/E5_belief_training/submit_kubeflow.py", "--worker", "--phase", phase, "--batch", batch,
             "--repo-dir", repo_dir, "--output", output, "--resume", resume, "--configuration", configuration]
-    for flag, value in (("--max-parallel", max_parallel), ("--checkpoint", checkpoint), ("--switch-step", switch_step),
-                        ("--post-steps", post_steps), ("--n-walks", n_walks)):
+    for flag, value in (("--max-parallel", max_parallel), ("--switch-step", switch_step), ("--post-steps", post_steps), ("--n-walks", n_walks)):
         if value:
             args += [flag, str(value)]
+    if checkpoint:  # one k or several, space-separated
+        args += ["--checkpoint", *str(checkpoint).split()]
     if e4_results:
         args += ["--e4-results", e4_results]
     if resume_runs:
@@ -153,12 +155,13 @@ def _run_e5(repo_dir: str, phase: str, output: str, batch: str, configuration: s
     subprocess.run(args, cwd=repo, check=True)
 
 
-def probe_plan(repo: Path, batch: str, configuration: str, checkpoint: int, e4_results: str | None) -> tuple[set[str], dict[str, str]]:
+def probe_plan(repo: Path, batch: str, configuration: str, checkpoint: int | list[int], e4_results: str | None) -> tuple[set[str], dict[str, str]]:
     """The probe jobs of the batch whose pair is healthy (docs/e5/DECISIONS.md (32), (33)) and those left out, with the
     reason: an E5 run failed, never switched or locked in (a run stopped by the user, status "running", is kept) (check_wave.py's checks), or either run without its weights at the
     checkpoint; seed A's baseline (E4's own pair) needs its two runs' weights at the checkpoint."""
     keep, excluded = set(), {}
-    for (name, job_args), (label, training, fraction) in zip(batches.probe_args(batch, configuration, checkpoint, e4_results), batches.PROBE_PAIRS[batch]):
+    for (name, job_args), (label, training, fraction, _) in zip(batches.probe_args(batch, configuration, checkpoint, e4_results),
+                                                                batches.probe_specs(batch, checkpoint)):
         need = f"checkpoints/agent_env{int(job_args[job_args.index('--checkpoint') + 1]):06d}.pt"  # the job's own checkpoint
         if training == "baseline" and label == "A":
             try:
@@ -226,7 +229,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--switch-step", type=int, default=None, help="the immunisation's switch step (deferred to E8)")
     parser.add_argument("--post-steps", type=int, default=None, help="the immunisation's steps after the switch (deferred to E8)")
     parser.add_argument("--e4-results", default=None, help="probes: E4's results root (immunisation A's reference)")
-    parser.add_argument("--checkpoint", type=int, default=None, help="phase probes: k (post-switch steps for the immunisation)")
+    parser.add_argument("--checkpoint", type=int, nargs="+", default=None,
+                        help="phase probes: k, or several (one job per pair and k; post-switch steps for the immunisation)")
     parser.add_argument("--n-walks", type=int, default=None, help="phase probes: the first N walks only (a quick timing)")
     parser.add_argument("--volume", default="scratch-volume")
     parser.add_argument("--mount", default="/scratch")
@@ -320,7 +324,7 @@ def main(argv: list[str] | None = None) -> int:
             func=_run_e5, image=args.image, num_nodes=1,
             func_args={"repo_dir": str(repo), "phase": args.phase, "output": str(output), "batch": args.batch,
                        "configuration": args.configuration, "resume": args.resume, "max_parallel": max_parallel or 0,
-                       "checkpoint": args.checkpoint or 0, "switch_step": args.switch_step or 0, "post_steps": args.post_steps or 0,
+                       "checkpoint": " ".join(map(str, args.checkpoint or [])), "switch_step": args.switch_step or 0, "post_steps": args.post_steps or 0,
                        "e4_results": args.e4_results or "", "n_walks": args.n_walks or 0,
                        "resume_runs": cluster_resume.encode_resume_runs(resume_runs),
                        "recompute": json.dumps(recompute) if recompute else ""},

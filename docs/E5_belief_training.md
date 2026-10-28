@@ -1,6 +1,10 @@
 # E5 — Manipulating the belief through training
 
-**Status (2026-10-28): the continuations measured their canonical assignment against another assignment's dynamics
+**Status (2026-10-28, evening): `e5_extend_b` stopped at 475,000 (time), short of E4's criterion; PRELIMINARY probes of
+E and F at 475,000 (`e5_probes_b`), compared with baseline B at its checkpoints matched to their level of learning
+(primary; `matched_checkpoint.py`, `e5_probes_baselines`) and with the baselines at 300,000 (secondary); the final
+probes (B's reference, E, F and seed A's pair to 650,000) deferred, decided before launch (docs/e5/DECISIONS.md (36)).**
+Earlier status (2026-10-28): the continuations measured their canonical assignment against another assignment's dynamics
 from their restore (experimental runs' quadrant mass near 0.2; training unaffected); fixed, the written records
 recomputed (`recompute_checkpoints.py`), `e5_extend_b` stopped and resumed if its pairs have not converged, A resumed
 likewise (docs/e5/DECISIONS.md (35)).** Earlier status (2026-10-27): waves 1 and 2 done; the shuffle runs continue past 300,000 in two batches (docs/e5/DECISIONS.md
