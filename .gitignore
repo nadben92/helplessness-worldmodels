@@ -101,3 +101,6 @@ exports/
 
 # The agent_mini bench run (E3): the paper reads only its diagnostics, versioned under reports/; the run itself stays local.
 results/E3_worldmodel_4zones/grid12x12__4zones__pair-experimental__worldmodel-agent-agent_mini__seed00__20260930T193212Z/
+
+# Git Bash crash dumps (Windows), never versioned.
+*.stackdump
