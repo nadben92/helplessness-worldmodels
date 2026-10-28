@@ -905,9 +905,21 @@ level declared), will be decided before it is launched; the preliminary probes d
   levels (+0.033 for E, +0.014 for F), as "first checkpoint >= L" does on a coarse grid; the grid point below is far
   under (0.686). Recorded as a limit: the primary comparison sets a baseline at least as trained as the pairs, by this
   measure, never less.
-- **The other sub-criteria at 475,000** (|b| <= 0.1 at CD, neutral, other): NOT YET RECORDED -- the output of
-  `matched_checkpoint.py` was not transmitted with these values; to be added from it (training records only,
-  independent of the probes).
+- **The pairs' level at 475,000 in full** (`matched_checkpoint.py`, training records only, independent of the probes;
+  one reference for both pairs, B's f = 1):
+
+  | | nw (UD) | ne (neutral) | se (CD) | sw (other) |
+  |---|---|---|---|---|
+  | mass, E (402) | 0.952 | 0.939 | 0.868 | 0.954 |
+  | mass, F (502) | 0.917 | 0.887 | 0.908 | 0.930 |
+  | mass, reference B (102) | 0.965 | 0.972 | 0.939 | 0.961 |
+  | b at step 1, E vs B | -2.098 | -0.141 | -0.270 | -0.117 |
+  | b at step 1, F vs B | -1.969 | -0.154 | -0.040 | -0.105 |
+
+  Sub-criteria missed. E: mass experimental 0.868 < 0.97, mass reference 0.939 < 0.97, |b_UD + log2 5| = 0.224 > 0.15,
+  |b_CD| = 0.270, |b_neutral| = 0.141, |b_other| = 0.117 (each > 0.1) -- every sub-criterion. F: mass experimental
+  0.887 < 0.97, mass reference 0.939 < 0.97, |b_UD + log2 5| = 0.353 > 0.15, |b_neutral| = 0.154, |b_other| = 0.105
+  (> 0.1); |b_CD| = 0.040 is met.
 - **Probe validity at 475,000** (`e5_probes_b`, `validity_summary.json`; the user's statement: nothing else looked at):
   **55/100 valid for E, 53/100 for F.** Nothing else of the probes was read when this was written.
 - **What the validity measures.** A probe is valid when the pair's REFERENCE, on that probe image, has a prior mass on
