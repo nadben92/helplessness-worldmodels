@@ -43,6 +43,8 @@ def choose():
         share = ds["n_directed"] / np.maximum(ds["n_zone_steps"], 1)
         i = int(idx[int(np.argmin(np.abs(share - pooled[(agent, role)])))])
         out[role] = S[i, :L[i] + 1]
+        out[f"{role}_length"] = int(L[i])
+        out[f"{role}_index"] = i
     return out
 
 
@@ -65,10 +67,12 @@ def main():
     types = D.two_zone_types(1)
     fig = C.plt.figure(figsize=C.FULL)
     for k, (role, col) in enumerate((("exposed", P.EXPOSED), ("reference", P.REFERENCE))):
-        ax = fig.add_axes([0.04 + 0.5 * k, 0.04, 0.42, 0.92])
+        ax = fig.add_axes([0.04 + 0.5 * k, 0.03, 0.42, 0.84])
         D.draw_cells(ax, types, colors={**P.ZONE_COLORS, "UD": "#FFC2B3", "CD": "#BFDDFF"})
         draw_path(ax, ch[role], col)
-    print(f"E6a v2: agent {ch['agent']}")
+        fig.text(0.04 + 0.5 * k + 0.21, 0.92, f"{ch[role + '_length']} steps", ha="center", fontsize=P.SIZE_LABEL)
+    print(f"E6a v2: agent {ch['agent']}, exposed ep {ch['exposed_index']} {ch['exposed_length']} steps, "
+          f"reference ep {ch['reference_index']} {ch['reference_length']} steps")
     return C.save(fig, FIG_ID, tight=False)
 
 

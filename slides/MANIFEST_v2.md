@@ -31,9 +31,14 @@ orale.
   les actions. »
 
 ### T1b — environnement d'E4
-- **Tracé** : à gauche l'exposé (UD avec flèches du tapis, CD sur la diagonale), à droite la référence (UD rendue
-  contrôlable par `derive_control` : les deux zones CD). Les deux autres quadrants ont la dynamique et la couleur du
-  couloir.
+- **Tracé** : à gauche l'exposé, à droite la référence, avec les vrais thèmes d'entraînement de la configuration
+  p1-a-d1 (la même que E4a). Les deux panneaux ont exactement les mêmes couleurs, quadrant par quadrant ; seule la
+  dynamique diffère : flèches du tapis roulant dans le quadrant nord-ouest de l'exposé, aucune flèche chez la référence
+  (où ce quadrant est rendu contrôlable par `derive_control`).
+- **Couleurs RGB vérifiées** (`two_zones.training_colors` avec T_inc et T_ctrl lus dans `probes_b_step1.csv`, identiques
+  au tableau des configurations de `results/E4_generalization_gradient/final/REPORT.md`) : nord-ouest (ancienne UD)
+  T_inc = (227, 17, 15) ; sud-est (CD) T_ctrl = (22, 0, 244) ; nord-est et sud-ouest = couleur du couloir
+  (128, 128, 128), comme le couloir lui-même.
 - **Oral** : « Même image, même but ; seul le tapis distingue l'exposé de sa référence. »
 
 ### T2 — mesure de b
@@ -149,7 +154,9 @@ orale.
 
 ### E6a — trajectoires
 - **Tracé** : même départ (centre de l'ancien quadrant UD, cercle), monde de test contrôlable, image d'entraînement ;
-  gauche = exposé (vermillon), droite = référence (bleu) ; clair → foncé = temps ; étoile = but.
+  gauche = exposé (vermillon), droite = référence (bleu) ; clair → foncé = temps ; étoile = but. Au-dessus de chaque
+  panneau, le nombre de pas de l'épisode tracé (seul texte de la figure) : « 20 steps » et « 6 steps », vérifiés contre
+  `training__<rôle>__length` dans `episodes.npz` (épisodes 148 et 4 ; tous deux terminés au but, état 0).
 - **Valeurs** : agent p2-b (part dirigée 0,40, la plus proche de la moyenne 0,38 des 4 exposés) ; épisode exposé 148 :
   20 pas, part dirigée 0,36 ; référence épisode 4 : 6 pas, part 1,00 (pool de la référence 0,94 ; épisodes courts à
   parts discrètes). Règle de choix fixée avant de voir les trajectoires.
