@@ -1,0 +1,219 @@
+# Figures v2 des slides — manifeste (seule source pour présenter les figures)
+
+Les figures v2 ne portent aucun texte autre que les noms d'axes, les graduations et les noms de catégories ou de blocs.
+Tout le reste (message, lecture des couleurs, valeurs, sources) est ici.
+
+- **Régénérer** : `.venv/Scripts/python.exe slides/make_all_v2.py` (22 figures). Sorties : `out_v2/png/` (300 dpi,
+  fond transparent), `out_v2/svg/` (transparent), `out_v2/png_white/` (300 dpi, fond blanc). La v1 (`out/`,
+  `figures/`, `style/`, `MANIFEST.md`) n'a pas été modifiée.
+- **Style** : `plt.style.use('default')` (axes en boîte, graduations par défaut, sans grille), DejaVu Sans, noms d'axes
+  18 pt, graduations 15 pt, traits 2,8 pt. Palette : `style_v2/palette.py`.
+- **Ajustement de palette** (contrôle deutéranopie `style_v2/check_palette.py`, Machado 2009, ΔE76, seuil 12) : la
+  correction A `#8E2DE2` se confondait avec la référence `#1F6FEB` (ΔE 3,1) ; assombrie en `#6718AB` (ΔE 19,7), teinte
+  gardée. Après ajustement : 0 paire sous le seuil.
+- **Code couleur commun** : exposé vermillon, référence bleu vif, oracle vert, anti-oracle orange, correction A violet,
+  induction B rose ; théorie en pointillé noir ; hasard en tirets gris. Zones : CD bleu clair, UD rouge-orangé, CN
+  turquoise, UN orange, couloir gris clair, but = étoile jaune.
+- **E6 et E7** : données des 4 agents d'E4 (runs de développement CPU), pas encore des agents d'E5.
+
+## Par figure
+
+Pour chaque figure : ce qui est tracé (lecture des couleurs), le message, les valeurs clés, les sources, la légende
+orale.
+
+### T1 — environnement d'E1–E3
+- **Tracé** : tore 12 × 12, quatre zones 5 × 5 (UD, CN, CD, UN), couloir gris, but (étoile) en (0, 0). Seules les
+  flèches du tapis roulant UD sont dessinées (une par case, lues dans le tenseur de transition de
+  `envs.layouts.four_zones`). Le tapis pousse d'un rang vers le bas, à l'opposé du but.
+- **Message** : quatre zones, quatre degrés de contrôle ; dans UD, toutes les actions mènent à la même case.
+- **À dire** : CN = l'action marche 90 % du temps ; UN = tapis 90 % du temps ; récompense +50 au but, −1 par pas.
+- **Source** : `configs/zones/e1_4zones.yaml`. **Oral** : « Un tore, quatre zones qui ne diffèrent que par ce que font
+  les actions. »
+
+### T1b — environnement d'E4
+- **Tracé** : à gauche l'exposé (UD avec flèches du tapis, CD sur la diagonale), à droite la référence (UD rendue
+  contrôlable par `derive_control` : les deux zones CD). Les deux autres quadrants ont la dynamique et la couleur du
+  couloir.
+- **Oral** : « Même image, même but ; seul le tapis distingue l'exposé de sa référence. »
+
+### T2 — mesure de b
+- **Tracé** : (h, z) → GRU (une fois par action) → prior (16 tirages) → décodeur → case prédite (gabarit le plus
+  proche) → I(a ; s′|s) → b = I − I_ref. En bas : cas contrôlable (5 actions, 5 cases : I = log₂5 = 2,32, b ≈ 0) et cas
+  tapis (5 actions, une case : I = 0, b ≈ −2,32). Valeurs analytiques, pas des données.
+- **Oral** : « b demande au modèle si ses actions mènent à des endroits différents, comparé à la référence. »
+
+### T3 — frise
+- **Tracé** : E1–E8 en quatre parties (Mesurer, Localiser, Croyance → comportement, Corriger). Remplissage bleu = fait ;
+  orange = en cours (E5) ; tirets = à venir (E8). E6 et E7 sont faits sur les agents d'E4, à refaire sur ceux d'E5.
+- **E8** : thérapie (réapprentissage en environnement contrôlable) et rechute. La formulation « immunisation » de
+  `docs/E8_immunisation.md` n'est pas reprise (dépassée, selon ta consigne).
+- **Questions** : E1 la mesure retrouve-t-elle la contrôlabilité vraie ? E2 l'exploration de l'agent biaise-t-elle b ?
+  E3 un world model apprend-il la zone incontrôlable ? E4 la croyance tient-elle à la position ou à la couleur ? E5 un
+  entraînement peut-il déplacer la croyance sur la couleur ? E6 le comportement suit-il la croyance ? E7 croyance ou
+  critic : qui pilote le comportement ? E8 peut-on corriger la croyance, et rechute-t-elle ?
+
+### E1a — b tabulaire contre théorie
+- **Tracé** : barres = moyenne sur 20 graines (n = 1000), barres d'erreur = IC t à 95 % (plus étroits que le trait),
+  points = graines, pointillé = b analytique (I*(exp) − I*(ctrl), mêmes lignes).
+- **Valeurs** : UD −2,32 (théorie −2,32) ; UN −1,65 (théorie −1,65) ; CD 0,00 ; CN 0,00 — conforme au doc E1
+  (−2,32193 ; −1,6518).
+- **Source** : `experiments/E1_offline_4zones/artifacts/measurements.csv`. **Oral** : « En tabulaire, b retrouve la
+  valeur théorique dans les quatre zones. »
+
+### E1b — seuil de détection contre budget
+- **Tracé** : p95 du nul bootstrap (zone CN, où b = 0 est vrai), moyenne sur 20 graines, bande IC t 95 %, points =
+  graines, log-log. Trait noir vertical : n = 100 retenu ; tirets gris : n = 300 (marge 3σ).
+- **Valeurs** : 0,045 bit à n = 100 ; 0,015 à n = 1000 ; pente log-log −0,42 (rapport : 0,04460 ; −0,415).
+- **Source** : `experiments/E1_offline_4zones/artifacts/permutation_null.csv`. **Oral** : « Avec 100 échantillons par
+  couple, b est résolu à quelques centièmes de bit. »
+
+### E2a — l'écart online ne décroît pas
+- **Tracé** : gauche, |écart moyen apparié online − apparié| sur b̂ (vermillon) ; droite, idem sur l'erreur L1 du
+  modèle (bleu) ; 16 checkpoints, 20 graines, bande IC 95 % (coupée au plancher de l'axe là où elle croise 0) ; trait
+  noir = ajustement en loi de puissance sur les checkpoints ≥ 10⁴ (table 3 d'E2).
+- **Valeurs** : exposant b +0,01 [−0,21 ; +0,27] ; exposant L1 −0,42 [−0,78 ; −0,16] (IC bootstrap).
+- **Note** : « L1 » = écart online − apparié de l'erreur L1, pas l'erreur absolue.
+- **Source** : `experiments/E2_online_4zones/artifacts/figures/csv/F2_null_model_paired_diff.csv`,
+  `table3_budget_trend_power_law.csv`. **Oral** : « Plus de données réduit l'écart d'erreur du modèle, pas le biais
+  sur b. »
+
+### E2b — Δ hors des zones
+- **Tracé** : carte de Δ (valeur perdue par la politique greedy), online − apparié, checkpoint final, moyenne de 20
+  graines, repère canonique ; échelle divergente (bleu négatif, rouge positif, blanc = 0). Codes de zone en gris.
+- **Valeurs** : les 43 cases de couloir (hors but) sont à Δ = 0 exactement (vérifié par assertion) ; dans les zones de
+  −0,016 à +0,068 (seule CN s'écarte de 0).
+- **Source** : `…/csv/F4_delta_diff.csv`, `F4_delta_diff_exterior.csv`. **Oral** : « Hors des zones, l'agent online
+  ne perd rien par rapport au contrôle apparié. »
+
+### E3a — architecture
+- **Tracé** : à gauche le RSSM (image → encodeur → posterior ; GRU → prior ; KL en tirets entre prior et posterior ;
+  posterior → décodeur) ; à droite la décision (imagination à partir du prior → tête but et critic → politique).
+- **À dire** : politique = anticipation d'un pas, Q(a) = moyenne sur 16 tirages du prior de r + γ·c·V, ε-greedy
+  ε = 0,1, γ = 0,9 ; critic entraîné uniquement en imagination (λ-returns sur 15 pas) ; h de dimension 64, z = 8 × 8
+  catégories. Source : `IMPLEMENTATION_REPORT.md` d'E6, § 1 et § 16.
+
+### E3b — b du world model pendant l'entraînement
+- **Tracé** : b par zone (couleurs des zones de T1 ; couloir en gris foncé), 4 graines en traits fins, moyenne en trait
+  épais sur les checkpoints communs ; pointillés : −log₂5, −1,65, 0.
+- **Valeurs à 300 000 pas** : UD −2,26 (théorie −2,32) ; UN −1,78 (théorie −1,65) ; CN −0,01 ; CD −0,04 ; couloir
+  −0,05 (conforme : −2,2582 ; −1,7788).
+- **Source** : `results/E3_worldmodel_4zones/campaign/tables/b_alpha_by_checkpoint.csv`. Graines pilotes 0 et 5 :
+  dernier replay à 290 000. **Oral** : « Le world model apprend le tapis ; les zones contrôlables restent à 0. »
+
+### E3c — partition de variance (RSA de h)
+- **Tracé** : part unique de variance expliquée par facteur, exposé (vermillon) contre référence (bleu), 300 000 pas,
+  4 graines.
+- **Valeurs** : position 0,235 / 0,415 ; thème 0,012 / 0,024 ; contrôlabilité 0,001 / absente (constante dans la
+  référence) ; stochasticité 0,008 / 0,008 ; partagée 0,061 / 0,091 ; R² total 0,32 / 0,54.
+- **Note** : dans E3, thème, position et zone sont confondus (E4 les sépare).
+- **Source** : `results/E3_worldmodel_4zones/campaign/analysis.json` (`rsa_over_seeds/300000/h/partition`).
+  **Oral** : « L'état du modèle est organisé par la position, pas par la contrôlabilité. »
+
+### E4a — design d'E4
+- **Tracé** : entraînement de l'exposé et de la référence (couleurs réelles de p1-a : T_inc rouge, T_ctrl bleu), gel,
+  puis sondes : un quadrant recoloré (encadré) à l'ancienne UD, l'ancienne CD, la case neutre, et « position seule »
+  (ancienne UD à la couleur du couloir). Bande : les 11 couleurs du segment T_inc → T_ctrl (deux arcs aussi).
+  Pas de flèches de dynamique.
+- **À dire** : monde de test entièrement contrôlable, poids gelés, zéro donnée ; « thème seul » = case neutre en
+  T_inc ; b lu au premier pas dans le quadrant ; on ne garde que les sondes où la référence prédit encore bien
+  (masse ≥ 0,90 et |I_ref − log₂5| ≤ 0,15). 4 configurations, 100 sondes chacune.
+- **Source** : `results/E4_generalization_gradient/final/tables/probes_b_step1.csv`.
+
+### E4b — la croyance tient à la position
+- **Tracé** : b au pas 1 contre distance de la couleur sondée à la couleur d'entraînement du quadrant (/ D) ; sondes
+  valides seulement (images en double comptées une fois) ; vermillon = ancienne UD, bleu = ancienne CD, gris = neutre ;
+  traits = moyennes par tranches de 0,1 D (≥ 2 sondes), points = sondes ; pointillé = −log₂5.
+- **Valeurs** : ancienne UD à −2,31 à distance 0 ; CD et neutre ≈ 0. Sondes valides : UD 44/124, CD 47/124,
+  neutre 90/124. La neutre commence à 0,38 D (sa couleur d'entraînement est celle du couloir).
+- **Écart à dire** : **la moyenne des sondes UD valides remonte vers −1,8 au-delà de 0,5 D** (arc centré en T_ctrl ;
+  p2-b jusqu'à −0,98 ; rapport E4 § 3 : −2,31 → −1,74). Le contraste avec CD et neutre tient ; un plateau strict à
+  −2,3, non.
+- **Oral** : « Quelle que soit la couleur, b reste très négatif à l'ancienne place du tapis, et ≈ 0 ailleurs. »
+
+### E4c — configurations × conditions
+- **Tracé** : b au pas 1 (rouge = −2,32, blanc = 0) ; lignes = 4 configurations ; colonnes = image d'entraînement lue à
+  l'ancienne UD, position seule, thème seul, image d'entraînement à la case neutre, à l'ancienne CD ; hachures = sonde
+  invalide.
+- **Valeurs** : ancienne UD −2,31 (×4) ; position seule −2,15 / −2,30 / invalide (p2-a, −0,66) / −2,27 ; thème seul
+  −0,29 (p1-a) / −0,02 / invalide (p2-a, −0,18) / −0,03 ; neutre −0,02 / −0,00 / −0,00 / −0,02 ; CD ≈ 0.
+- **Source** : `…/final/tables/validity_image_zone.csv`, `theme_only_position_only.csv`. **Oral** : « Sans la
+  couleur, la croyance reste ; la couleur seule ailleurs ne l'emporte pas. »
+
+### E4d — récupération dans l'épisode
+- **Tracé** : b par pas dans l'ancien quadrant UD (image d'entraînement), 4 configurations (fins) et moyenne (épais) ;
+  pointillé = −log₂5.
+- **Valeurs** : de −2,31 au pas 1 à un plateau vers −1,85 ; écart pas 1 → plateau (pas 6–10) de +0,35 à +0,42 bit selon
+  la configuration (toutes sondes UD valides).
+- **À dire** : variation de b à l'intérieur d'une classe ; le critic ne la lit pas (D7).
+- **Source** : `…/final/tables/recovery_curves_extremes.csv`, `recovery_summary_by_position.csv`.
+
+### E6a — trajectoires
+- **Tracé** : même départ (centre de l'ancien quadrant UD, cercle), monde de test contrôlable, image d'entraînement ;
+  gauche = exposé (vermillon), droite = référence (bleu) ; clair → foncé = temps ; étoile = but.
+- **Valeurs** : agent p2-b (part dirigée 0,40, la plus proche de la moyenne 0,38 des 4 exposés) ; épisode exposé 148 :
+  20 pas, part dirigée 0,36 ; référence épisode 4 : 6 pas, part 1,00 (pool de la référence 0,94 ; épisodes courts à
+  parts discrètes). Règle de choix fixée avant de voir les trajectoires.
+- **Source** : `scratch/e6dev/results/E6_phenotypes_latent/e6__p2-b-d1_e4__20261023T134444Z/episodes.npz` (non
+  versionné), `results/E6_phenotypes_latent/dev_e4_cpu_v2/analysis/points.csv`. **Oral** : « Même départ : l'exposé
+  erre 20 pas, la référence rejoint le but en 6. »
+
+### E6b — part dirigée contre b
+- **Tracé** : un point par couple (agent, image, modèle) valide ; plein vermillon = exposé, creux bleu = référence
+  (b = 0 par construction) ; forme = image (rond : entraînement, carré : position seule, triangle : thème seul,
+  losange : case neutre) ; barres = IC bootstrap 95 % ; tirets = hasard 2/5.
+- **Valeurs** : amas b ≈ −2,08, part 0,32–0,49 (7 couples) ; amas b ≈ 0, part 0,93–0,95 (21 couples) ; rien entre les
+  deux. Invalides exclus : p2-a position seule et thème seul.
+- **Source** : `results/E6_phenotypes_latent/dev_e4_cpu_v2/analysis/points.csv`. **Oral** : « Deux amas : là où b est
+  bas, le comportement tombe au hasard. »
+
+### E7a — le 2 × 2 croyance × critic
+- **Tracé** : part dirigée (blanc = 0, bleu = 1), lignes = croyance (vraie, tapis), colonnes = critic (référence,
+  exposé) ; gauche k = 1, droite k = 5 ; moyenne des 4 agents.
+- **Valeurs** : k = 1 : 0,94 / 0,85 [0,75–0,93] / 0,39 / 0,38 [0,32–0,49] ; k = 5 : 0,95 / 0,95 / 0,39 / 0,39.
+- **À dire** : la ligne « tapis » est le plancher du hasard par construction (toutes les actions prédisent la même case,
+  les Q sont à égalité, 2 actions sur 5 sont dirigées) ; le critic ne pèse que sous la vraie croyance à k = 1 (0,09).
+- **Source** : `results/E7_dissociation/dev_e4_cpu/analysis/table_2x2.csv`. **Oral** : « C'est la croyance de
+  transition qui fait le comportement, pas le critic. »
+
+### E7b — dose-réponse de l'anti-oracle (k = 5)
+- **Tracé** : orange = références dont les particules d'anticipation suivent le tapis avec probabilité p (0 à 1),
+  fins par agent, épais = moyenne ; abscisse = b effectif ; points = agents naturels d'E6 (plein vermillon = exposés,
+  creux bleu = références) ; tirets = hasard.
+- **Valeurs** : p = 0 : 0,94 à b 0,00 ; p = 0,6 : 0,85 à b −1,45 ; p = 1 : 0,39 à b −2,20 (conforme).
+- **Note** : le b effectif est calculé sur le noyau mélangé, pas la même mesure que le b naturel.
+- **Source** : `results/E7_dissociation/dev_e4_cpu/analysis/t1_runs.csv`, `points.csv` d'E6. **Oral** : « Imposer le
+  tapis dans l'anticipation d'une référence fait baisser son comportement graduellement. »
+
+### E7c — part dirigée contre anticipation k
+- **Tracé** : une seule mesure pour les quatre variantes : part statique des choix greedy dirigés sur 100 contextes de
+  la zone (`d4_static.csv`) ; bleu = référence, vert = exposé + oracle (vraies transitions), violet = exposé +
+  correction latente à la racine, vermillon = exposé (son modèle) ; moyenne des 4 agents, bande = étendue ; tirets =
+  hasard. Les épisodes ont été retirés de la figure.
+- **Valeurs (statique)** : référence 0,98 ; oracle 0,78 (k = 1) → 0,91 (k = 5) → 0,99 (k = 10) ; correction 0,70 →
+  0,67 (étendue 0,65–0,71 à k = 10) ; exposé 0,47 → 0,41.
+- **En épisodes** (non tracé) : l'oracle est à 0,75–0,93 à k = 1 et **0,94–0,95 à k = 5** (comme la référence).
+- **Source** : `results/E7_latent_manipulation/dev_e4_cpu_diag/analysis/d4_static.csv` (`d4_episodes.csv` pour les
+  épisodes). **Oral** : « Avec les vraies transitions, l'exposé rejoint la référence en anticipant ; la correction
+  latente plafonne vers 0,7. »
+
+### E7d — « la sonde est trompée »
+- **Tracé** : abscisse Δb, ordonnée ΔC1 (C1 = part d'argmax dirigé de V(h′ₐ, z̄), z̄ tiré du mélange des 5 priors).
+  Violet = correction A, un point par (agent, réglage), 10 points, IC 95 % ; cerclés de noir = p1-b. Rose = induction B,
+  **un point par run** (31 runs : losanges pleins = direction inverse, 8 runs ; creux = direction aléatoire de même
+  norme, 23 runs). Pointillé = pente entre agents naturels (exposés b ≈ −2,02, C1 0,39 ; références b ≈ 0,14, C1 1,00 :
+  0,28 C1 par bit).
+- **Valeurs** : A : Δb +1,25 à +1,86 ; ΔC1 ≈ 0 ou négatif pour p1-a, p2-a, p2-b ; p1-b +0,20 et +0,18 (seul changement
+  réel). B : Δb −0,80 à −0,01 (inverse), ΔC1 −0,02 à +0,00 : la contrôlabilité vue par le critic ne bouge pas non plus.
+- **État** : B par run recalculé en lecture seule depuis les épisodes D7 existants (`scratch/e6dev/results/
+  E7_dissociation/e7d7__*__natural__*`), avec la collecte de D7 elle-même (`analyse_e7_d7.collect_natural`), par
+  `figures_v2/_extract_e7d_induction.py` → `slides/data_v2/e7d_induction_runs.csv`. Rien n'a été relancé. Les 31 runs
+  sont ceux de D6/D7 (localisation tenue). Définition : Δ = moyenne du run − moyenne de la référence sans intervention
+  du même agent, sur les pas de zone bien localisés (A, lui, compare pas à pas avant/après correction).
+- **Oral** : « La correction fait monter b sans changer ce que lit le critic, sauf chez p1-b ; l'induction fait
+  baisser b sans le changer non plus. »
+
+### E7e — trois lecteurs de z′
+- **Tracé** : h′ₐ → z′ prédit → (bleu) décodeur → b ; (vermillon) critic → action ; (violet) KL → correction de h.
+- **À dire** : correction A : monte le lecteur 3 et le lecteur 1 (b +1,2 à +1,9 bit), mais 2 reste au hasard pour 3
+  agents sur 4 (D7) ; références induites : 1 dit que l'action échoue dans environ la moitié des pas (40–56 %, D5),
+  2 dirige quand même (D6). Source : `IMPLEMENTATION_REPORT.md` d'E6, § 17–20.
