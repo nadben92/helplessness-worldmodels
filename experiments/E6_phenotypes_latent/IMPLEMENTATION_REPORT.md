@@ -1262,3 +1262,36 @@ Environ 37 min de temps réel ; l'analyse prend moins de 3 min.
    changé la mesure (b) et le canal z que lit aussi le critic (C3), mais pas la contrôlabilité que le critic lit à z
    commun (C1, C2), qui reste au hasard. Chez p1-b seulement, elle a aussi changé cette contrôlabilité. C'est l'agent où
    A avait le plus remonté le comportement (0,49 → 0,71).
+
+---
+
+# E6 et E7 sur tous les agents (2026-10-28)
+
+## 21. Tous les agents
+
+Décision (63). 7 couples : les 4 d'E4 (p1-b = baseline A d'E5, comptée une fois), la baseline B d'E5, shuffle E et F à
+475 000 (préliminaires). CPU, poids gelés, hash avant / après.
+
+### Formes attendues (écrites et commitées avant tout calcul)
+
+« Couple intermédiaire » : (agent, image) dont le b au pas 1 de l'exposé dans E6 est dans ]−1,5 ; −0,5], image valide et
+bien localisée (loc_template_step1 ≥ 0,9). C1 d'un couple = moyenne de C1 (D7, z̄ principal) sur les pas de zone mesurés
+et bien localisés de l'exposé.
+
+1. **Les agents d'E4 rejouent leurs résultats à l'identique** sur l'image d'entraînement : E6 (états, actions, part
+   dirigée, b au pas 1), oracle (part dirigée à k = 1, 5, 10), 2 × 2 (les 8 cases de la § 17) égaux aux runs de
+   `scratch/e6dev` (écart ≤ 1e-9 sur les valeurs, tableaux identiques).
+2. **Chez les agents shuffle, des couples intermédiaires existent (≥ 3 par agent shuffle), et leur C1 est intermédiaire
+   aussi** : dans ]0,50 ; 0,85[ (entre l'amas exposé ≈ 0,4 et l'amas référence ≥ 0,85) pour au moins la moitié d'entre eux ;
+   et b et C1 concordent hors des deux amas : ρ de Spearman (b au pas 1, C1) ≥ 0,5 sur les couples intermédiaires de tous
+   les agents.
+3. **Les couples intermédiaires ont une part dirigée intermédiaire** (dans ]0,50 ; 0,85[ pour au moins la moitié) et se
+   placent près de la courbe anti-oracle à k = 1 de leur agent : |part dirigée − part anti-oracle interpolée au même b|
+   ≤ 0,10. L'anti-oracle ne mesure pas C1 : la comparaison se fait à b égal (b effectif de l'anti-oracle), et n'a de sens
+   que si la forme 2 tient (b et C1 concordent).
+4. **Le 2 × 2 se reproduit chez B, E et F** : effet de la croyance (écart entre les lignes, moyenne des deux critics,
+   k = 1) ≥ 0,40 ; effet du critic (écart entre les colonnes sous la vraie croyance, k = 1) ≤ 0,20 et ≤ la moitié de
+   l'effet de la croyance.
+5. **La correction contrainte remonte b plus que C1 chez B, E et F** : part de l'écart comblée par b, Δb / (0 − b avant),
+   supérieure à celle comblée par C1, ΔC1 / (C1 de la référence − C1 avant), pour chaque agent ; l'issue de D7 (réelle,
+   mesure trompée, intermédiaire) est rapportée aussi.

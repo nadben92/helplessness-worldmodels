@@ -11,9 +11,14 @@ Phases (--phase), one output directory per agent (and setting), <out-dir>/E7_dis
              act and z_bar generators, and returns the policy's own Q on the corrected h.
 Outputs: episodes.npz, summary.json, meta.yaml, status.json.
 
+Options for E6/E7 on all agents (docs/e6/DECISIONS.md (63); the defaults reproduce D7): --image <name> (natural only) runs
+on that test image of the config's e6.images instead of e7.diagnostics.image (training); --no-overlay leaves plan B out
+(E6's two models only; no --directions needed).
+
 Usage, from the repo root:
   python experiments/E7_latent_manipulation/run_e7_d7.py --phase natural --agents configs/e6/agents_dev_e4.yaml --runs-root <root>
       --directions <e7dir dirs or globs> [--agent-ids ...] [--out-dir results]
+  python experiments/E7_latent_manipulation/run_e7_d7.py --phase natural --no-overlay --image <name> --config configs/e7/e7_all.yaml ...
   python experiments/E7_latent_manipulation/run_e7_d7.py --phase corrected --lam 0.01 --mu-pos 1 --constrained <e7con dirs or globs> ...
 """
 
@@ -65,12 +70,13 @@ def assemble(buffer: list[dict], length: np.ndarray, shape: tuple, prefix: str) 
     return out
 
 
-def natural(st, directions: Path) -> tuple[dict, list[dict]]:
+def natural(st, directions: Path | None) -> tuple[dict, list[dict]]:
+    """directions None: E6's two models only (no plan B overlay)."""
     ref_fresh = fs.reference_fresh(st.models["reference"], st.tw, st.image, st.e6)
     e6 = {**st.e6, "measure": "zone"}
     ref_plain = fs.run_model(st.models["reference"], st.tw, st.image, e6, st.eps["reference"])
     arrays, rows = {"reference_fresh_I": ref_fresh}, []
-    for it in rdiag.induction_items(st, directions):
+    for it in rdiag.induction_items(st, directions, plan_b=directions is not None):
         t0 = time.perf_counter()
         model = st.models[it["role"]]
         hook = None if it["vector"] is None else ra.fixed_hook(it["vector"], it["alpha"], st.e7["apply_in"])
@@ -157,8 +163,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--device", choices=("cpu", "cuda", "auto"), default=None)
     parser.add_argument("--out-dir", type=Path, default=REPO_ROOT / "results")
     parser.add_argument("--n-reps", type=int, default=None)
+    parser.add_argument("--image", default=None, help="natural: a test image of e6.images (default e7.diagnostics.image)")
+    parser.add_argument("--no-overlay", action="store_true", help="natural: E6's two models only, no plan B (no --directions)")
     args = parser.parse_args(argv)
+    if args.phase == "corrected" and (args.image is not None or args.no_overlay):
+        parser.error("--image and --no-overlay are for --phase natural")
     cfg = fs.load_layered_config(args.config, ("e6", "e7"))
+    if args.image is not None:
+        cfg["e7"] = {**cfg["e7"], "diagnostics": {**cfg["e7"]["diagnostics"], "image": args.image}}
     if args.n_reps is not None:
         cfg["e6"] = {**cfg["e6"], "n_reps": args.n_reps}
     if args.device is not None:
@@ -171,7 +183,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.phase == "corrected":
             con = json.loads((ra.find_constrained(args.constrained, agent["id"]) / "settings.json").read_text(encoding="utf-8"))
             setting = next(r for r in con["settings"] if r["image"] == "training" and r["lam"] == args.lam and r["mu_pos"] == args.mu_pos)
-        tag = "natural" if setting is None else setting["setting"]
+        tag = ("natural" if args.image is None else f"natural_{args.image}") if setting is None else setting["setting"]
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         out = args.out_dir / EXPERIMENT_ID / f"e7d7__{agent['id']}__{args.phase}__{tag}__{stamp}"
         out.mkdir(parents=True, exist_ok=False)
@@ -182,7 +194,7 @@ def main(argv: list[str] | None = None) -> int:
             st = rdiag.Setting(cfg, agent, device)
             before = rdiag.weights_hash(st.models)
             if args.phase == "natural":
-                arrays, rows = natural(st, ra.find_directions(args.directions, agent["id"]))
+                arrays, rows = natural(st, None if args.no_overlay else ra.find_directions(args.directions, agent["id"]))
             else:
                 arrays, rows = corrected(st, setting)
             after = rdiag.weights_hash(st.models)

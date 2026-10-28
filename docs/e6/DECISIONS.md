@@ -487,3 +487,33 @@ Task 2 is run, with the policy's 16 draws per action.
 - **Position on the natural curve**: per bin of b (corrected steps, after correction), C1 of the corrected steps minus C1
   of the natural agents (exposed and references pooled) in the same bin, weighted by the corrected steps over the bins
   where both have >= 30 steps.
+
+## 2026-10-28 (63) -- E6 and E7 on all agents (user's plan; implementer for the image rule and the definitions)
+
+**Written before any run of this campaign.**
+
+- **Agents** (`configs/e6/agents_e5.yaml`): E4's four pairs at 300,000 (p1-a, p1-b = E5's baseline A, listed once as
+  `base_A`, p2-a, p2-b), E5's baseline B (102) at 300,000, shuffle f = 1 E (402) and F (502) at 475,000 against seed B's
+  f = 1 reference at 475,000 (PRELIMINARY, docs/e5/DECISIONS.md (36)). Weights read-only from a local copy of the runs
+  with the cluster's layout; every file's SHA-256 equal to the probes' meta.yaml. E4's runs are all redone (form 1 is
+  tested on every agent, not reused).
+- **Test images** (`select_images.py`, before any run): per agent the training image plus VALID probe images of the
+  agent's own probe measurement (E4's table for E4's pairs; E5's analysis tables at the probed checkpoint for B, E, F),
+  each (image, slot) once, the training image out of the pool. Classes of b at step 1: helpless <= -1.5, intermediate
+  (-1.5, -0.5], in control > -0.5. Quotas: shuffle agents every intermediate probe + 2 helpless + 2 in control; the
+  others 2 + 2 + 2; within a class, sorted by b, the ranks round(q (n - 1)) for q evenly spaced (two picks: the class's
+  extremes). Result: 36 distinct images, 64 (agent, image) pairs (`selection_all/selected_images.csv`).
+  `configs/e6/e6_all.yaml` = e6.yaml's block with these images (nothing else changes, tested); `configs/e7/e7_all.yaml`
+  = e7.yaml's block on it (tested).
+- **E6** (protocol unchanged): `run_e6.py`, one job per (agent, image). **C1 / C2** per (agent, image): D7's natural
+  phase on that image without plan B (`run_e7_d7.py --phase natural --no-overlay --image <name>`; the defaults reproduce
+  D7, tested). Per (agent, image, model): C1 / C2 = the mean of D7's per-step C1 / C2 (main z_bar) over the zone steps,
+  measured and well localised (loc_template = 1).
+- **E7** (training image): the oracle = D4's episodes (`run_e7_diagnostics.py --phase lookahead`, k in {1, 5, 10}, both
+  models); the anti-oracle = (55)/(57)'s main variant (`run_e7_dissociation.py --h-mode mean`), references p in
+  {0, 0.1, ..., 1} and exposed p in {0, 1}, k in {1, 5}; the 2 x 2 per agent as section 17's table; the constrained
+  stepwise correction A with C1 before / after = D7's corrected phase at each agent's setting by (48)'s rule (the kept
+  setting of its own `run_e7_constrained.py` sweep with the largest specific gain; the sweep needs `run_e7_directions.py`
+  for its reproduction check), on every agent, E4's included. Plan B (the induction) is not rerun.
+- **Intermediate pair**: an (agent, image) whose exposed model's E6 b at step 1 is in (-1.5, -0.5], the image valid
+  (E6's own validity probe) and well localised (loc_template_step1 >= e6.analysis.localisation_min = 0.9).

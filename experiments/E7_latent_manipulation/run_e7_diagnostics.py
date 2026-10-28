@@ -181,11 +181,14 @@ def episode_row(st: Setting, ep: dict, ref_plain: dict, ref_fresh: np.ndarray, r
             "p_goal_zone": ra.zone_mean(ep, "p_goal", st.image) if np.isfinite(ep["p_goal"]).any() else float("nan")}
 
 
-def induction_items(st: Setting, directions: Path) -> list[dict]:
-    """E6's two models without intervention, then plan B: the reference with the reverse direction or its random control."""
-    dirs = dict(np.load(directions / "directions.npz"))
+def induction_items(st: Setting, directions: Path | None, plan_b: bool = True) -> list[dict]:
+    """E6's two models without intervention, then plan B: the reference with the reverse direction or its random control.
+    plan_b False: the two models only (directions not read; run_e7_d7.py --no-overlay)."""
     items = [{"mode": "none", "alpha": 0.0, "role": "experimental", "vector": None},
              {"mode": "reverse_none", "alpha": 0.0, "role": "reference", "vector": None}]
+    if not plan_b:
+        return items
+    dirs = dict(np.load(directions / "directions.npz"))
     for mode, key in (("reverse", "reverse__v_hat"), ("reverse_random", "reverse__random")):
         items += [{"mode": mode, "alpha": float(a), "role": "reference", "vector": dirs[key]} for a in st.e7["induction"]["alphas"] if float(a) != 0.0]
     return items

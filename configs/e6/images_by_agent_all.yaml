@@ -1,0 +1,72 @@
+# The test images of every agent (select_images.py, docs/e6/DECISIONS.md (63)); names of configs/e6/e6_all.yaml.
+p1-a_e4:
+- training
+- arc_ctrl_k1_ud
+- arc_ctrl_k6_ud
+- arc_ctrl_k10_neutral
+- arc_inc_k2_cd
+base_A:
+- training
+- arc_ctrl_k3_ud
+- arc_ctrl_k7_ud
+- arc_ctrl_k9_neutral
+- arc_inc_k7_neutral
+- arc_ctrl_k7_neutral
+- segment_k6_neutral
+p2-a_e4:
+- training
+- arc_ctrl_k1_ud
+- arc_ctrl_k5_ud
+- arc_inc_k10_neutral
+- arc_inc_k9_neutral
+- arc_inc_k10_cd
+- arc_ctrl_k8_cd
+p2-b_e4:
+- training
+- arc_ctrl_k1_ud
+- segment_k5_ud
+- arc_ctrl_k3_ud
+- arc_ctrl_k5_ud
+- arc_ctrl_k3_neutral
+- segment_k9_cd
+base_B:
+- training
+- segment_k1_ud
+- arc_ctrl_k9_ud
+- arc_ctrl_k10_neutral
+- arc_inc_k4_neutral
+f1_E:
+- training
+- arc_ctrl_k1_ud
+- segment_k4_ud
+- arc_ctrl_k4_ud
+- segment_k0_neutral
+- arc_ctrl_k1_neutral
+- segment_k1_neutral
+- arc_ctrl_k4_neutral
+- arc_ctrl_k5_ud
+- segment_k2_neutral
+- arc_ctrl_k6_neutral
+- arc_ctrl_k7_neutral
+- segment_k3_neutral
+- arc_ctrl_k6_ud
+- arc_ctrl_k7_ud
+- segment_k6_neutral
+f1_F:
+- training
+- segment_k1_ud
+- segment_k4_ud
+- arc_ctrl_k2_ud
+- arc_ctrl_k6_ud
+- arc_ctrl_k4_ud
+- arc_ctrl_k7_ud
+- arc_ctrl_k5_ud
+- arc_ctrl_k3_ud
+- position_only_k0_ud
+- segment_k0_neutral
+- segment_k2_neutral
+- segment_k4_cd
+- arc_ctrl_k1_neutral
+- segment_k3_neutral
+- segment_k4_neutral
+- arc_inc_k5_cd

@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import yaml
 
 from _experiment_loader import load_experiment_module
 from helplessness.config import REPO_ROOT
@@ -16,10 +17,12 @@ submit = load_experiment_module("E6_phenotypes_latent", "submit_kubeflow.py", "e
 
 def test_agent_ids_of_both_files():
     assert batches.agent_ids(REPO_ROOT, "e6_dev_e4") == ["p1-a-d1_e4", "p1-b-d1_e4", "p2-a-d1_e4", "p2-b-d1_e4"]
-    # the two-wave plan: only the trained runs are active, the others commented out with a TODO (the regex reads no comment)
-    assert batches.agent_ids(REPO_ROOT, "e6_e5") == ["base_A"]
-    text = (REPO_ROOT / "configs" / "e6" / "agents_e5.yaml").read_text(encoding="utf-8")
-    assert all(f"#   seed: {s}" in text or f"# - id" in text for s in (102, 402, 502)) and text.count("TODO") >= 3
+    # every agent of E6/E7 on all agents: E4's four pairs (E5's baseline A is E4's p1-b, listed once) and E5's B, E, F
+    assert batches.agent_ids(REPO_ROOT, "e6_e5") == ["p1-a_e4", "base_A", "p2-a_e4", "p2-b_e4", "base_B", "f1_E", "f1_F"]
+    raw = yaml.safe_load((REPO_ROOT / "configs" / "e6" / "agents_e5.yaml").read_text(encoding="utf-8"))
+    by_id = {a["id"]: a for a in raw["agents"]}
+    assert all(by_id[a][r]["checkpoint"] == 475000 for a in ("f1_E", "f1_F") for r in ("experimental", "reference"))
+    assert "seed102" in by_id["f1_E"]["reference"]["run"] and by_id["f1_E"]["reference"] == by_id["f1_F"]["reference"]
 
 
 @pytest.mark.parametrize("phase", list(batches.PHASES))
