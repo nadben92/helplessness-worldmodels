@@ -1295,3 +1295,57 @@ et bien localisés de l'exposé.
 5. **La correction contrainte remonte b plus que C1 chez B, E et F** : part de l'écart comblée par b, Δb / (0 − b avant),
    supérieure à celle comblée par C1, ΔC1 / (C1 de la référence − C1 avant), pour chaque agent ; l'issue de D7 (réelle,
    mesure trompée, intermédiaire) est rapportée aussi.
+
+### Arrêt du 28 octobre (demande de l'utilisateur) : modèles shuffle sous-entraînés
+
+La campagne est **arrêtée proprement** : les modèles shuffle (E, F à 475 000) n'ont pas atteint le critère d'E4
+(docs/e5/DECISIONS.md (36)) ; les sondes d'E5 seront refaites, puis E6/E7, sur les modèles convergés. Tous les processus
+ont été arrêtés (aucun processus Python restant vérifié) ; rien n'a été supprimé. **Aucune analyse ni figure n'est faite
+sur les résultats partiels d'E7.**
+
+**État au moment de l'arrêt** (sorties dans `C:\nrw\wt-e6\scratch\all\<job>\...`, un dossier par job, ignoré par git ;
+journaux par job dans `C:\nrw\wt-e6\logs\all_cpu\<phase>\`, journaux des files `logs\all_cpu\pool_<phase>.txt` ;
+poids lus dans la racine locale `C:\nrw\e6all`, copie avec l'arborescence du cluster, hash égaux aux meta.yaml des
+sondes) :
+
+| Phase (`run_all_cpu.py --phase`) | Terminés | Partiels (interrompus) | Non lancés |
+|---|---|---|---|
+| e6 (`run_e6.py`, un job par couple) | 64/64 | — | — |
+| c12 (`run_e7_d7.py --phase natural --no-overlay --image`) | 64/64 | — | — |
+| directions (`run_e7_directions.py`) | 7/7 | — | — |
+| anti (`run_e7_dissociation.py`, 3 jobs par agent) | 8/21 : p1-a_e4 (3/3), base_A (3/3), p2-a_e4 ref_lo et ref_hi | 13 : p2-a_e4 exp ; p2-b_e4, base_B, f1_E, f1_F (3 chacun) | — |
+| constrained (`run_e7_constrained.py`) | 0/7 | 7 (un par agent) | — |
+| oracle (`run_e7_diagnostics.py --phase lookahead`) | — | — | 7 |
+| corrected (`run_e7_d7.py --phase corrected`) | — | — | 7 |
+
+- Un job interrompu garde son `status.json` à `"running"` (le processus a été tué, rien n'a été réécrit) : ses sorties
+  sont incomplètes et ne doivent pas être lues ; les analyses ne lisent que `"done"`.
+- Sorties légères d'E6 et de C1/C2 déjà versionnées : `results/E6_phenotypes_latent/all_agents/e6_c12/` (09bc277).
+  Lues avec les modèles shuffle à 475 000 : **préliminaires**, à refaire avec les modèles convergés.
+- Forme 1, partie E6 : tenue (4 agents d'E4, 35 tableaux sur 35 identiques aux runs de développement). Formes 2 à 5 :
+  non conclues (E7 inachevé ; forme 2 lue sur des modèles sous-entraînés).
+
+**Relancer à l'identique en changeant seulement les checkpoints** (tout le code et les configs de ce lancement sont
+versionnés : décision (63), § 21 ci-dessus pour les formes attendues) :
+
+1. Modèles convergés : changer `checkpoint` des agents shuffle (et de leur référence) dans `configs/e6/agents_e5.yaml`
+   (aujourd'hui 475 000) ; ajouter seed A s'il est retenu. Les globs des runs ne changent pas.
+2. Sondes d'E5 aux nouveaux checkpoints, puis l'analyse d'E5 (`experiments/E5_belief_training/analysis_450k/analyse_450k.py`
+   sur la branche `e5` : `tables/gradient_probes.csv`, `tables/extremes.csv`), et mettre à jour `E5_LABEL` de
+   `select_images.py` (libellés des mesures avec leur checkpoint).
+3. Images de test : `python experiments/E6_phenotypes_latent/select_images.py --agents configs/e6/agents_e5.yaml
+   --e4-table <probes_b_step1.csv d'E4> --e5-tables <tables d'E5> --out-csv experiments/E6_phenotypes_latent/selection_all/selected_images.csv`
+   (règle de la décision (63), inchangée) : réécrit `configs/e6/e6_all.yaml` et `configs/e6/images_by_agent_all.yaml` ;
+   `tests/e6/test_e6_all_config.py` vérifie que seules les images changent.
+4. Commiter (les runs enregistrent l'état de l'arbre), puis, avec `PYTHONPATH=<checkout>/src` :
+   `python experiments/E6_phenotypes_latent/run_all_cpu.py --phase <p> --runs-root <racine des runs> --workers N --logs logs/all_cpu/<p>`
+   dans l'ordre e6, c12, directions, constrained, oracle, anti, corrected (anti est indépendant des autres phases
+   d'E7 ; corrected lit le balayage de constrained, règle (48) dans `best_setting`). Chaque job écrit dans
+   `scratch/all/<job>/` : vider ou renommer `scratch/all` avant la relance (l'analyse prend le plus récent, mais une
+   relance propre évite le mélange).
+5. Analyse : `python experiments/E6_phenotypes_latent/analyse_all.py --dev <runs de développement d'E6/E7 sur E4> --out <dir>`
+   (couples, C1/C2, identité d'E4, 2 × 2, anti-oracle, correction, formes 1 à 5).
+
+Options ajoutées pour ce lancement (défauts = comportement antérieur, testés) : `run_e7_d7.py --image`, `--no-overlay` ;
+`run_e7_diagnostics.induction_items(plan_b=...)` ; `analyse_e7_d7.py --no-identity` (sans l'option, sorties de D7
+identiques bit pour bit).

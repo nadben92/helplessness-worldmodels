@@ -1,6 +1,6 @@
 # E6 — The behavioural signature of the controllability belief
 
-**Status (2026-10-23): code ready (branch `e6`), developed and tested on E4's weights on the CPU; waiting for E5's
+**Status (2026-10-28): E6/E7 on all agents (docs/e6/DECISIONS.md (63)) STOPPED by the user -- E5's shuffle models under-trained; E5's probes then E6/E7 to be rerun on the converged models, the same scripts with the new checkpoints. Done: E6 and C1/C2 (64 pairs), E7's directions; E7's anti-oracle 8/21, sweep 0/7 (interrupted); no analysis of the partial E7 runs (IMPLEMENTATION_REPORT.md, section 21).** Earlier status (2026-10-23): code ready (branch `e6`), developed and tested on E4's weights on the CPU; waiting for E5's
 agents.** Decisions: `docs/e6/DECISIONS.md` (33)-(43), shared with E7. Implementation report, phase 0 and preliminary
 results: `experiments/E6_phenotypes_latent/IMPLEMENTATION_REPORT.md`. Deterministic dynamics only.
 
