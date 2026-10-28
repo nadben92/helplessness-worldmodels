@@ -116,12 +116,16 @@ def paired_ci(d: np.ndarray, episode: np.ndarray, rng) -> tuple[float, float, fl
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--runs", nargs="+", required=True)
-    parser.add_argument("--d6-runs", nargs="+", required=True)
-    parser.add_argument("--apply-runs", nargs="+", required=True)
-    parser.add_argument("--e6-runs", nargs="+", required=True)
+    parser.add_argument("--d6-runs", nargs="+", default=[])
+    parser.add_argument("--apply-runs", nargs="+", default=[])
+    parser.add_argument("--e6-runs", nargs="+", default=[])
+    parser.add_argument("--no-identity", action="store_true",
+                        help="skip the identity checks (agents without D6 / plan-A runs, docs/e6/DECISIONS.md (63)); then the three above are not needed")
     parser.add_argument("--config", type=Path, default=REPO_ROOT / "configs" / "e7" / "e7.yaml")
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args(argv)
+    if not args.no_identity and not (args.d6_runs and args.apply_runs and args.e6_runs):
+        parser.error("the identity checks need --d6-runs, --apply-runs and --e6-runs (or --no-identity)")
     cfg = fs.load_layered_config(args.config, ("e6", "e7"))
     rng = np.random.default_rng(7120)
     runs = adis.runs_of(args.runs)
@@ -132,29 +136,30 @@ def main(argv: list[str] | None = None) -> int:
     figdir.mkdir(parents=True, exist_ok=True)
 
     # ---------------------------------------------------------------------------------------------------- identity
-    identity = []
-    d6 = {r["meta"]["agent"]: r for r in adis.runs_of(args.d6_runs) if r["meta"]["phase"] == "counterfactual"}
-    for run in nat:
-        agent = run["meta"]["agent"]
-        ep, ref6 = np.load(run["dir"] / "episodes.npz"), np.load(d6[agent]["dir"] / "episodes.npz")
-        tags = [f"{r['mode']}__{r['alpha']:g}" for r in run["summary"]["rows"]]
-        e6 = np.load(Path(sorted(d for p in args.e6_runs for d in glob.glob(p) if Path(d).name.startswith(f"e6__{agent}__"))[-1]) / "episodes.npz")
-        identity.append({"agent": agent, "phase": "natural",
-                         "equal_D6": all(np.array_equal(ep[f"{t}__{f}"], ref6[f"{t}__{f}"], equal_nan=True) for t in tags for f in ("states", "actions", "Q", "V_zbar", "Q_hbar")),
-                         "equal_E6": all(np.array_equal(ep[f"{t}__{f}"], e6[f"training__{role}__{f}"], equal_nan=True)
-                                         for t, role in (("none__0", "exposed"), ("reverse_none__0", "reference")) for f in ("states", "actions", "Q"))})
-    applied = {}
-    for d in sorted({Path(x) for p in args.apply_runs for x in glob.glob(p)}):
-        if (d / "rows.json").is_file():
-            for r in json.loads((d / "rows.json").read_text(encoding="utf-8")):
-                if r["mode"] == "constrained_stepwise" and r["image"] == "training" and r["alpha"] == 1.0:
-                    applied[(r["agent"], r["setting"])] = r
-    for run in cor:
-        r = run["summary"]["rows"][0]
-        rec = applied.get((r["agent"], r["setting"]))
-        identity.append({"agent": r["agent"], "phase": "corrected", "setting": r["setting"], "recorded": rec is not None,
-                         "equal_recorded": None if rec is None else all(r[k] == rec[k] for k in ("directed_share", "b_step1", "loc_template_step1", "loc_template_zone"))})
-    ad.write_csv(args.out / "d7_identity.csv", identity)
+    if not args.no_identity:  # the checks against D6, E6 and the recorded plan-A rows
+        identity = []
+        d6 = {r["meta"]["agent"]: r for r in adis.runs_of(args.d6_runs) if r["meta"]["phase"] == "counterfactual"}
+        for run in nat:
+            agent = run["meta"]["agent"]
+            ep, ref6 = np.load(run["dir"] / "episodes.npz"), np.load(d6[agent]["dir"] / "episodes.npz")
+            tags = [f"{r['mode']}__{r['alpha']:g}" for r in run["summary"]["rows"]]
+            e6 = np.load(Path(sorted(d for p in args.e6_runs for d in glob.glob(p) if Path(d).name.startswith(f"e6__{agent}__"))[-1]) / "episodes.npz")
+            identity.append({"agent": agent, "phase": "natural",
+                             "equal_D6": all(np.array_equal(ep[f"{t}__{f}"], ref6[f"{t}__{f}"], equal_nan=True) for t in tags for f in ("states", "actions", "Q", "V_zbar", "Q_hbar")),
+                             "equal_E6": all(np.array_equal(ep[f"{t}__{f}"], e6[f"training__{role}__{f}"], equal_nan=True)
+                                             for t, role in (("none__0", "exposed"), ("reverse_none__0", "reference")) for f in ("states", "actions", "Q"))})
+        applied = {}
+        for d in sorted({Path(x) for p in args.apply_runs for x in glob.glob(p)}):
+            if (d / "rows.json").is_file():
+                for r in json.loads((d / "rows.json").read_text(encoding="utf-8")):
+                    if r["mode"] == "constrained_stepwise" and r["image"] == "training" and r["alpha"] == 1.0:
+                        applied[(r["agent"], r["setting"])] = r
+        for run in cor:
+            r = run["summary"]["rows"][0]
+            rec = applied.get((r["agent"], r["setting"]))
+            identity.append({"agent": r["agent"], "phase": "corrected", "setting": r["setting"], "recorded": rec is not None,
+                             "equal_recorded": None if rec is None else all(r[k] == rec[k] for k in ("directed_share", "b_step1", "loc_template_step1", "loc_template_zone"))})
+        ad.write_csv(args.out / "d7_identity.csv", identity)
 
     # ------------------------------------------------------------------------------------------------------ task 1
     S = collect_natural(nat, worlds)
