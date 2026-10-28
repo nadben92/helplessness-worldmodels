@@ -346,3 +346,31 @@ orale.
   grand.
 - **Oral** : « Sans contrainte, plus on corrige b, plus l'agent se perd dans l'image ; avec contrainte, b est presque
   corrigé et l'agent reste localisé, mais le comportement reste loin de l'étoile. »
+
+### E7_bars — la correction latente en barres
+- **Tracé** : 3 panneaux (b au pas 1, localisation dans la zone, part dirigée en épisodes à k = 1) × 5 catégories
+  (exposed vermillon, latent fix violet clair, constrained fix violet foncé, oracle vert, reference bleu). Barre =
+  moyenne des 4 agents d'E4 (image d'entraînement) ; points noirs = les 4 agents ; tirets gris = hasard 2/5. Les autres
+  figures ne sont pas modifiées.
+- **Sources et définitions** : celles d'E7h pour exposed, latent fix (pas à pas sans contrainte, α = 1), constrained fix
+  (réglage enregistré de D7 par agent) et reference. Oracle : vraies transitions dans le planificateur, k = 1 (D4) :
+  - **b = 0** : la croyance utilisée est la vraie ; c'est la valeur de la référence, pas une mesure ;
+  - **localisation = celle de l'exposé dans E6** (même modèle, h non modifié). Les runs D4 de l'oracle n'ont mesuré
+    que le pas 1 (`measure = "first"` dans `run_e7_diagnostics.py`) : leur « localisation dans la zone » est en fait celle
+    du pas 1 (0,97 / 0,98 / 0,94 / 1,00) et n'a pas été utilisée ;
+  - **part dirigée** : `dev_e4_cpu_diag/analysis/d4_episodes.csv`, exposé, k = 1.
+- **Valeurs (moyenne ; p1-a / p1-b / p2-a / p2-b)** :
+
+  | Catégorie | b (bits) | localisation | part dirigée |
+  |---|---|---|---|
+  | exposed | −2,13 (−2,12 / −2,17 / −2,06 / −2,17) | 0,79 (0,87 / 0,61 / 0,96 / 0,70) | 0,38 (0,32 / 0,49 / 0,33 / 0,40) |
+  | latent fix | −0,31 (−0,48 / −0,37 / −0,12 / −0,27) | 0,34 (0,16 / 0,53 / 0,26 / 0,41) | 0,58 (0,42 / 0,69 / 0,61 / 0,59) |
+  | constrained fix | −0,38 (−0,72 / −0,37 / −0,15 / −0,28) | 0,79 (0,63 / 0,79 / 0,87 / 0,88) | 0,56 (0,44 / 0,71 / 0,61 / 0,48) |
+  | oracle | 0 (par construction) | 0,79 (= exposé, E6) | 0,85 (0,75 / 0,88 / 0,93 / 0,86) |
+  | reference | 0,00 | 1,00 | 0,94 |
+
+- **Lecture** : constrained fix ramène b presque au niveau de l'oracle et de la référence en gardant la localisation de
+  l'exposé, mais la part dirigée reste à mi-hauteur (0,56), bien sous l'oracle (0,85). Latent fix remonte b autant mais
+  la localisation s'effondre (0,34).
+- **Oral** : « Corriger la croyance dans h donne presque le bon b ; donner la vraie croyance au planificateur donne
+  presque le bon comportement. La correction n'y arrive qu'à moitié. »
