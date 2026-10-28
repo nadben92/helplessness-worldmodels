@@ -328,3 +328,21 @@ orale.
     donc pas interprétable comme un effet de la croyance.
 - **Oral** : « Corriger h ramène b presque au niveau de la référence. Sans contrainte, l'agent n'est plus localisé ;
   avec contrainte, il l'est, mais le critic ne voit pas le changement, et le comportement ne remonte qu'à moitié. »
+
+### E7g_light — E7g allégée
+- **Tracé** : mêmes panneaux, axes, couleurs, étoiles et lignes qu'E7g (localisation à gauche, part dirigée à droite,
+  en fonction de Δb). E7g, E7g_critic et E7h ne sont pas modifiées.
+- **Un point** = un (agent, réglage), image d'entraînement, moyenne sur les épisodes du run :
+  - **violet clair, 20 points** : correction sans contrainte, mode pas à pas seulement, 4 agents × α ∈ {0,25 ; 0,5 ;
+    0,75 ; 1 ; 1,5} (`dev_e4_cpu/analysis/checks.csv`) ;
+  - **violet foncé, 10 points** : correction contrainte pas à pas, α = 1, exactement les 10 runs corrigés de D7
+    d'E7g_critic (p1-a : λ 0,1 μ_pos 1, λ 0,01 μ_pos 1, λ 0,01 μ_pos 10 ; p1-b : λ 0,01 μ_pos 1 et 10 ; p2-a : λ 0,01
+    μ_pos 1 et 10 ; p2-b : λ 0,1 μ_pos 1, λ 0,01 μ_pos 1 et 10 ; `results/E7_dissociation/d7/runs/*corrected*/summary.json`) ;
+  - **vermillon, 1 point** : exposés sans intervention (moyenne des 4) ; **étoile** comme dans E7g.
+  - Retirés par rapport à E7g : le mode « direction » (contraint ou non) et les carrés du balayage statique.
+- **Δb** = b au pas 1 du run − b au pas 1 du même agent sans intervention (mêmes références qu'E7g).
+- **Valeurs** : violet foncé : Δb 1,40–1,98, localisation 0,63–0,88 (niveau sans intervention : 0,79), part dirigée
+  0,39–0,75 (oracle 0,85, référence 0,94) ; violet clair : localisation de 0,97 à 0,07, d'autant plus basse que Δb est
+  grand.
+- **Oral** : « Sans contrainte, plus on corrige b, plus l'agent se perd dans l'image ; avec contrainte, b est presque
+  corrigé et l'agent reste localisé, mais le comportement reste loin de l'étoile. »
