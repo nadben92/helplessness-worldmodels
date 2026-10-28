@@ -897,3 +897,36 @@ level declared), will be decided before it is launched; the preliminary probes d
 - `analyse_probes.py --matched <condition>:<seed>@<k>=<condition>:<seed>@<k>`: the matched differences, probe by probe
   (`matched_by_probe.csv`, `matched_aggregated.csv`).
 - Tested (`tests/e5/test_e5_matched.py`, `tests/e5/test_e5_analyse_probes.py`). Commands: RUN_GPU.md, step 7 bis.
+
+**(36), completed the same day (user; implementer for the reading of the validity).**
+- **Matched checkpoints** (`matched_checkpoint.py --batch e5_extend_b --at 475000`, on c6dfc40): baseline B at
+  **63,096 for both pairs** (E: L = 0.868; F: L = 0.887). Baseline B's level (the smallest canonical quadrant mass of its
+  two runs) is 0.686 at 39,811 and **0.901 at 63,096**: the match puts the baseline **slightly above** both pairs'
+  levels (+0.033 for E, +0.014 for F), as "first checkpoint >= L" does on a coarse grid; the grid point below is far
+  under (0.686). Recorded as a limit: the primary comparison sets a baseline at least as trained as the pairs, by this
+  measure, never less.
+- **The other sub-criteria at 475,000** (|b| <= 0.1 at CD, neutral, other): NOT YET RECORDED -- the output of
+  `matched_checkpoint.py` was not transmitted with these values; to be added from it (training records only,
+  independent of the probes).
+- **Probe validity at 475,000** (`e5_probes_b`, `validity_summary.json`; the user's statement: nothing else looked at):
+  **55/100 valid for E, 53/100 for F.** Nothing else of the probes was read when this was written.
+- **What the validity measures.** A probe is valid when the pair's REFERENCE, on that probe image, has a prior mass on
+  the true successor >= 0.90 and |I_ref - log2 5| <= 0.15 at the first step in the zone (`probe_validity.is_valid`).
+  It depends on the reference's prediction quality on the NEW image, hence on its level of learning (B's f = 1
+  reference: canonical mass 0.939 at 475,000) and on how that quality transfers to unseen appearances (which training
+  on 12 appearances may change either way): it is not a function of the canonical mass alone. E and F share ONE
+  reference model (B's, at 475,000); their counts differ (55 vs 53) because the measurement seeds are the experimental
+  run's (402, 502: E4's rule, the same for both models of a pair), so the reference is measured with other draws: a
+  difference of 2 probes in 100 is of the order of the measurement noise of the validity near its thresholds (to be
+  confirmed on `probes.csv`: the probes valid for one and not the other should have a reference mass or I near the
+  threshold).
+- **How the validity is compared with the baselines** (declared now, before the baselines' probes):
+  1. the share of valid probes of each measurement (`validity_summary.json`: overall and by axis/position): E, F at
+     475,000; baseline B at 63,096 (matched) and at 300,000; baseline A at 300,000. The matched baseline is the
+     comparison at an equal level; the gap to the 300,000 baselines shows how much validity grows with learning;
+  2. in the matched comparisons, a difference is computed only where the probe is valid in BOTH measurements
+     (`analyse_probes.py --matched`); `matched_by_probe.csv` (`valid_first`, `valid_second`) gives the cross-table:
+     valid in both, in the shuffle pair only, in the baseline only, in neither -- reported per comparison and by
+     axis/position, so that a selection by validity that differs between conditions is visible;
+  3. no imputation of invalid probes; a conclusion holds on the probes valid in both, and their number is reported
+     beside every mean (`n_valid`).
