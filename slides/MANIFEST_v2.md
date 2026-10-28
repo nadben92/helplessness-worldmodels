@@ -374,3 +374,21 @@ orale.
   la localisation s'effondre (0,34).
 - **Oral** : « Corriger la croyance dans h donne presque le bon b ; donner la vraie croyance au planificateur donne
   presque le bon comportement. La correction n'y arrive qu'à moitié. »
+
+### E6a_trajectories_loop — trajectoires, l'exposé qui tourne dans la zone (E6a_trajectories inchangée)
+- **Tracé** : comme E6a (agent p2-b, départ au centre de l'ancien quadrant UD, image d'entraînement, monde de test
+  contrôlable ; gauche exposé vermillon, droite référence bleue, clair → foncé = temps, étoile = but ; seul texte : le
+  nombre de pas). Référence inchangée : épisode 4, 6 pas.
+- **Épisode exposé : 121, 19 pas** (15 dans la zone, 7 cases distinctes, 2 boucles, puis 4 pas droit au but par le
+  couloir de gauche) ; trajet 39 → 51 → 51 → 39 → 40 → 52 → 52 → 51 → 50 → 49 → 50 → 38 → 50 → 50 → 49 → 48 → 36 → 24 →
+  12 → 0. Les « stay » (51, 52, 50 répétés) ne se voient pas sur le tracé.
+- **Règle de choix (demande du 28 octobre : montrer la boucle dans la zone, pas l'hésitation dans le couloir de
+  l'épisode 148)** : parmi les épisodes exposés partant de ce départ et finissant au but, ceux dont le trajet après la
+  première sortie de la zone va droit au but en au plus 4 pas ; parmi eux le plus de boucles (retour sur une case
+  quittée ≥ 3 déplacements plus tôt, stays retirés), puis le plus de pas dans la zone, puis la longueur la plus proche de
+  20. **Choisie après avoir regardé les épisodes : c'est une illustration, pas un épisode typique.** Sur les 20 épisodes
+  exposés depuis ce départ : 20 au but, 14 avec une sortie directe, 6 avec une sortie directe en ≤ 4 pas ; médiane de
+  7,5 pas dans la zone (l'épisode tracé : 15). L'épisode typique reste dans E6a_trajectories (épisode 148, 20 pas).
+- **Source** : `scratch/e6dev/results/E6_phenotypes_latent/e6__p2-b-d1_e4__20261023T134444Z/episodes.npz` (non
+  versionné). **Oral** : « Même départ : l'exposé tourne en rond dans la zone où il a appris que ses actions ne
+  servaient à rien, puis sort ; la référence rejoint le but en 6 pas. »
