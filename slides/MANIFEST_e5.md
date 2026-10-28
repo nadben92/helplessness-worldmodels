@@ -101,3 +101,23 @@ Résultat intermédiaire ; les limites ci-dessous ne sont pas sur les figures.
   T_inc (deux quadrants T_inc).
 - Convergence inachevée : 475 000 pas, critère d'E4 non atteint (DECISIONS (36)) ; résultats PRÉLIMINAIRES.
 - Deux graines shuffle (E, F) partageant une référence ; shuffle A non sondé.
+
+### E5e_loc — le thème seul, sondes bien localisées (critère objectif, même pour les deux conditions)
+- **Critère** (`experiments/E5_belief_training/analysis_450k/LOCALISATION_CRITERION.md`, commité avant le calcul) : une
+  sonde est retenue si elle est valide (critère d'E4) **et** si la localisation au pas 1 de l'exposé est ≥ 0,90 (règle
+  directe d'E4 : case où le décodeur dessine l'agent contre vraie case ; mêmes marches que la sonde, 150). Localisation
+  recalculée en lecture seule (`localisation_probes.py`, poids gelés, hash inchangés), tables
+  `tables/localisation_*.csv`, `gradient_binned_loc.csv`, `loc_removed.csv`.
+- **Sondes retirées par la localisation** (toutes positions ; valides → retenues) : baseline A 45 → 33, baseline B 40 → 32,
+  shuffle E 50 → 43, shuffle F 48 → 47. Au quadrant neutre : baseline A, 0,7 / 0,8 / 0,9 D (1 chacune, loc. 0,36 / 0,00 /
+  0,00) et 6 sur 8 à 1,0 D (loc. 0,00–0,82) ; baseline B, 0,6 à 0,9 D (1 chacune, loc. 0,69–0,89) et 1 sur 8 à 1,0 D ;
+  shuffle E, 1 à 0,4, 0,6 et 0,7 D (loc. 0,00–0,23) ; shuffle F, aucune.
+- **Résultat : la descente de la baseline disparaît.** Baseline au quadrant neutre (moyenne des graines) : −0,01 à 0,00
+  de 0 à 0,5 D, −0,02 à 0,6 D (graine A seule), −0,00 à 1,0 D (9 sondes) ; plus aucune sonde retenue entre 0,7 et 0,9 D
+  pour les deux graines, donc le trait épais relie 0,5 et 1,0 D (les traits fins sont les graines). Les sondes qui
+  descendaient (−0,41 à −0,68) étaient celles où l'exposé ne localisait pas l'agent. Shuffle inchangé dans sa forme :
+  −0,91 (0) → −0,58 (0,2) → −0,35 (0,4) → −0,16 à −0,23 (0,6 à 1,0 D).
+- **E5a** : les quatre sondes extrêmes (position seule, thème seul) sont toutes retenues (localisation 0,96–1,00) : pas
+  d'E5a_v3, E5a_v2 reste valable.
+- **Oral** : « On ne garde que les sondes où le modèle sait encore où est l'agent : la baseline est plate partout, seul
+  le shuffle réagit à la couleur du tapis. »

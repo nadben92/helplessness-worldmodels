@@ -140,3 +140,12 @@ neutral slot, and position only stays negative for F.
 - The extreme probes and the near-T_inc gradient probes have one or two T_inc quadrants depending on the slot probed;
   under shuffle this is a confound for "position vs theme".
 - Differences of a few tenths of a bit within a class (e.g. -0.15 against 0 in the "in control" class) are not read.
+
+## 9. Localisation filter for E5e (LOCALISATION_CRITERION.md, committed before computing it)
+
+Kept = valid and the exposed model's localisation at step 1 (E4's direct rule, the probe's 150 walks) >= 0.90, both
+conditions. Valid -> kept: baseline A 45 -> 33, B 40 -> 32, shuffle E 50 -> 43, F 48 -> 47 (`loc_removed.csv`). The
+baseline's dip at the neutral slot beyond 0.5 D **disappears**: every baseline neutral probe between 0.7 and 0.9 D is
+poorly localised (0.00-0.89) and removed; the kept ones are -0.04 to +0.02 from 0 to 0.6 D and -0.00 at 1.0 D (9 probes).
+The shuffle's neutral gradient keeps its shape (-0.91 at 0, -0.35 at 0.4 D, -0.16 to -0.23 beyond 0.6 D). The four
+extreme probes are all kept (0.96-1.00): section 3 is unchanged.
