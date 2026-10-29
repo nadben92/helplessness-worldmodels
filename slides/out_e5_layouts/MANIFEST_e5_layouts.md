@@ -19,7 +19,7 @@ Script: `slides/out_e5_layouts/plot_e5_layouts.py`.
 | 11 | sw | se | nw, ne | (-1, 0) |  |
 
 - Canonical (E4 and probes): index 1 (UD=nw, CD=se).
-- RGB: T_inc / UD = (22, 0, 244), T_ctrl / CD = (227, 17, 15), neutral/corridor = (128, 128, 128).
+- RGB (swapped for the slide, UD red / CD blue; E5's own are the reverse): UD = (227, 17, 15), CD = (22, 0, 244), neutral/corridor = (128, 128, 128).
 - Goal: (row, col) = (0, 0), state 0, drawn as the render does (no agent marker).
 - Arrows: white, one per UD cell, from the cell towards its successor given by `env.transition_tensor().argmax(-1)` (same for every action, asserted), shortest signed step on the torus, drawn at the cell. Drift convention: `away_from_goal`.
 - Gray outlines (0.75, lw 0.5) mark the 4 quadrants (the render does not distinguish the neutral ones from the corridor).

@@ -21,6 +21,8 @@ cfg = setup.load_config(REPO / "configs/e4/e4.yaml")
 conf = setup.configuration(cfg, CONFIG)
 R, C = two_zones.GRID_SHAPE
 k, gl = cfg["render"]["k"], cfg["render"]["grid_lines"]
+# slide convention: colours swapped vs E5 (UD red, CD blue); dynamics untouched
+conf = {**conf, "t_inc": conf["t_ctrl"], "t_ctrl": conf["t_inc"]}
 canon = es.canonical_assignment(conf["diagonal"])
 rows = []
 
@@ -74,7 +76,7 @@ Script: `slides/out_e5_layouts/plot_e5_layouts.py`.
 """ + "\n".join(rows) + f"""
 
 - Canonical (E4 and probes): index {canon} (UD={es.ASSIGNMENTS[canon][0]}, CD={es.ASSIGNMENTS[canon][1]}).
-- RGB: T_inc / UD = {conf['t_inc']}, T_ctrl / CD = {conf['t_ctrl']}, neutral/corridor = {col[[q for q in es.QUADRANT_ORDER if q not in es.ASSIGNMENTS[canon]][0]]}.
+- RGB (swapped for the slide, UD red / CD blue; E5's own are the reverse): UD = {conf['t_inc']}, CD = {conf['t_ctrl']}, neutral/corridor = {col[[q for q in es.QUADRANT_ORDER if q not in es.ASSIGNMENTS[canon]][0]]}.
 - Goal: (row, col) = {two_zones.GOAL_RC}, state {two_zones.GOAL_STATE}, drawn as the render does (no agent marker).
 - Arrows: white, one per UD cell, from the cell towards its successor given by `env.transition_tensor().argmax(-1)` (same for every action, asserted), shortest signed step on the torus, drawn at the cell. Drift convention: `{two_zones.DIRECTION}`.
 - Gray outlines (0.75, lw 0.5) mark the 4 quadrants (the render does not distinguish the neutral ones from the corridor).
