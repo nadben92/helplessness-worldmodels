@@ -942,3 +942,50 @@ level declared), will be decided before it is launched; the preliminary probes d
      axis/position, so that a selection by validity that differs between conditions is visible;
   3. no imputation of invalid probes; a conclusion holds on the probes valid in both, and their number is reported
      beside every mean (`n_valid`).
+
+## 2026-11-01 (37) -- final probes of E5 at 650,000, short of E4's criterion; matched comparison at 100,000 (user; implementer for the checks and the note)
+
+**Decided by the user on 1 November, before the final probes were launched; recorded here after they ran**, before any
+b of them was read (only their status, their numbers of valid probes and the reference's mass and I on the probes, for
+the validity check below, were read when this was written).
+
+**The rule (user).** The three shuffle pairs (A, E, F) are probed at 650,000 steps, the ceiling set on 26 October
+((33)); none has met E4's criterion, and the level reached is declared per pair. The primary comparison is at a matched
+level: each baseline is probed at its first checkpoint whose smallest canonical quadrant mass reaches the pair's level L,
+that is 100,000 for A and for B, at levels 0.963 and 0.975, so above L, which is conservative. The secondary comparison
+is with baselines A and B at 300,000. The share of valid probes is reported per condition, including the low rate of
+pair A (23/100).
+
+**Level declared at 650,000** (`matched_checkpoint.py --at 650000`, on 78eadb5, training records only):
+
+| Pair | min mass experimental / reference | b step 1 UD | CD | neutral | E4's sub-criteria missed | L | matched baseline (level) |
+|---|---|---|---|---|---|---|---|
+| A (2, ref 2) | 0.948 / 0.923 | -2.141 | +0.059 | +0.077 | both masses; \|b_UD + log2 5\| = 0.181 | 0.9226 | A (E4's p1-b-d1) at 100,000 (0.9630; 0.8890 at 63,096) |
+| E (402, ref 102) | 0.935 / 0.962 | -2.125 | -0.136 | -0.101 | both masses; 0.197; \|b_CD\| 0.136; \|b_neutral\| 0.101 | 0.9350 | B at 100,000 (0.9746; 0.9010 at 63,096) |
+| F (502, ref 102) | 0.917 / 0.962 | -2.060 | -0.039 | -0.071 | both masses; 0.262 | 0.9168 | B at 100,000 (0.9746) |
+
+**Checks (implementer).**
+- Baseline A's "before the switch" flag is a format artefact: E4's records carry no switch (`None`), and E4's
+  `console.log` (p1-b-d1, seed 2) gives the switch at gradient step 3,051 (environment step 5,342, experimental) and
+  3,451 (6,008, reference), far before 100,000.
+- The baselines at 300,000 exist in three copies (28 October 12:56, 1 November 18:29 and 18:43, each in up to three
+  archives): `curves.npz` byte-identical (SHA-256), b at step 1 identical (max difference 0), the same validity (49/100
+  for A, 44/100 for B). The analysis uses the 28 October copies (`...k300000__20261028T125628Z`), those of the 475,000
+  analysis.
+- Pair A's 23/100: its reference (the least trained of the three, smallest canonical mass 0.923, at `ne`, the neutral
+  slot) fails the mass threshold: 74 of its 77 invalid probes fail on the mass on the true successor (60 on both the
+  mass and I), 3 on I only; **0/33 neutral-slot probes are valid** (median reference mass 0.838 there, against 0.947 and
+  0.936 for E and F's reference), 17/34 at the old UD slot, 6/33 at the old CD slot; 30 probes have a reference mass
+  between 0.85 and 0.90. Theme only (T_inc at the neutral slot) is therefore invalid for A.
+
+**Note on "conservative" (implementer, the rule left as the user wrote it).** A baseline above L is conservative for a
+claim that the shuffle pair's belief is STRONGER than the baseline's at a given probe (theme only: the baseline is about
+0 at every level). It is not conservative for the claim that the belief LEAVES the old UD position: learning deepens b
+there (baseline B, training image UD: -2.180 at 63,096, -2.306 at 300,000, (36)), so a more trained baseline enlarges
+the shuffle-minus-baseline gap at the old UD slot. Both comparisons are reported; a conclusion on the position is stated
+with this direction of bias.
+
+**Limits, recorded.** The weights of baselines A and B at 100,000 are not on the local machine, and those of F at 650,000
+are missing from the local copy of `e5_extend_b` (the download stopped before them): the localisation criterion
+(analysis_450k/LOCALISATION_CRITERION.md) cannot be computed locally for the matched baselines or for F until they are
+copied; where it is not computed, it is said.
