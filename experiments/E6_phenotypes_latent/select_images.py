@@ -33,7 +33,7 @@ CLASSES = (("helpless", -np.inf, -1.5), ("intermediate", -1.5, -0.5), ("in_contr
 CLASS_QUOTA = {"f1": {"helpless": 2, "intermediate": 99, "in_control": 2},        # shuffle: every intermediate probe
                "baseline": {"helpless": 2, "intermediate": 2, "in_control": 2}}
 AXIS_ORDER = ("segment", "arc_ctrl", "arc_inc", "position_only")
-E5_LABEL = {102: "baseline_B_k300000", 402: "shuffle_E_k475000", 502: "shuffle_F_k475000"}
+E5_LABEL = {2: "shuffle_A_k650000", 102: "baseline_B_k300000", 402: "shuffle_E_k650000", 502: "shuffle_F_k650000"}
 
 
 def read_csv(path: Path) -> list[dict]:
