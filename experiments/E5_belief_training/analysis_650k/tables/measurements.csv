@@ -1,0 +1,10 @@
+label,group,condition,seed,reference_seed,checkpoint_k,n_walks_used,probes,valid,unique_image_slots,unique_valid,dir
+baseline_A_k300000,baseline,baseline,2,2,300000,150,100,49,93,45,probes__p1-b-d1__base__seed02__k300000__20261028T125628Z
+baseline_B_k300000,baseline,baseline,102,102,300000,150,100,44,93,40,probes__p1-b-d1__base__seed102__k300000__20261028T125628Z
+baseline_A_k100000,baseline_matched,baseline,2,2,100000,150,100,40,93,36,probes__p1-b-d1__base__seed02__k100000__20261101T185641Z
+baseline_B_k100000,baseline_matched,baseline,102,102,100000,150,100,39,93,35,probes__p1-b-d1__base__seed102__k100000__20261101T185013Z
+shuffle_A_k650000,shuffle,shuffle_f1,2,2,650000,150,100,23,93,20,probes__p1-b-d1__sh100__seed02__k650000__20261101T183552Z
+shuffle_E_k650000,shuffle,shuffle_f1,402,102,650000,150,100,54,93,50,probes__p1-b-d1__sh100__seed402__k650000__20261101T175710Z
+shuffle_F_k650000,shuffle,shuffle_f1,502,102,650000,150,100,53,93,49,probes__p1-b-d1__sh100__seed502__k650000__20261101T175710Z
+shuffle_E_k475000,shuffle_k475000,shuffle_f1,402,102,475000,150,100,55,93,50,probes__p1-b-d1__sh100__seed402__k475000__20261028T115218Z
+shuffle_F_k475000,shuffle_k475000,shuffle_f1,502,102,475000,150,100,53,93,48,probes__p1-b-d1__sh100__seed502__k475000__20261028T115218Z

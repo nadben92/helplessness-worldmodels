@@ -1,0 +1,201 @@
+condition,axis,k,position,n_seeds,n_valid,b_step1_mean,b_step1_sd,seeds_valid
+baseline,arc_ctrl,0,cd,2,0,nan,nan,
+baseline,arc_ctrl,0,neutral,2,2,-0.012146527130080242,0.011088538246844349,2 102
+baseline,arc_ctrl,0,ud,2,2,-2.309236420746584,0.004351984194017361,2 102
+baseline,arc_ctrl,1,cd,2,0,nan,nan,
+baseline,arc_ctrl,1,neutral,2,2,-0.013531961124220393,0.01227616093016548,2 102
+baseline,arc_ctrl,1,ud,2,2,-2.301137580058931,0.00069018635461074,2 102
+baseline,arc_ctrl,2,cd,2,0,nan,nan,
+baseline,arc_ctrl,2,neutral,2,2,0.003586416630760203,0.004548314911003068,2 102
+baseline,arc_ctrl,2,ud,2,2,-2.313488636451461,0.0004380852331536347,2 102
+baseline,arc_ctrl,3,cd,2,0,nan,nan,
+baseline,arc_ctrl,3,neutral,2,2,0.00590298401155076,0.007019112046046773,2 102
+baseline,arc_ctrl,3,ud,2,2,-2.305357702336644,0.0008491819740902117,2 102
+baseline,arc_ctrl,4,cd,2,0,nan,nan,
+baseline,arc_ctrl,4,neutral,2,2,-0.008763663487876494,0.04807766267595577,2 102
+baseline,arc_ctrl,4,ud,2,2,-2.3074866453580443,0.004890195826166767,2 102
+baseline,arc_ctrl,5,cd,2,0,nan,nan,
+baseline,arc_ctrl,5,neutral,2,2,-0.0459686751999,0.08933883399353619,2 102
+baseline,arc_ctrl,5,ud,2,2,-2.270391016932951,0.0005836211630413584,2 102
+baseline,arc_ctrl,6,cd,2,0,nan,nan,
+baseline,arc_ctrl,6,neutral,2,2,-0.14077618936239022,0.042822940866175295,2 102
+baseline,arc_ctrl,6,ud,2,2,-2.1950649411250636,0.02960151138693389,2 102
+baseline,arc_ctrl,7,cd,2,0,nan,nan,
+baseline,arc_ctrl,7,neutral,2,2,-0.29538012643188827,0.16863299298690151,2 102
+baseline,arc_ctrl,7,ud,2,2,-1.804044654086682,0.4107615266377936,2 102
+baseline,arc_ctrl,8,cd,2,0,nan,nan,
+baseline,arc_ctrl,8,neutral,2,2,-0.43332674285141337,0.3113313756611919,2 102
+baseline,arc_ctrl,8,ud,2,2,-2.0541075399266275,0.1521766813511551,2 102
+baseline,arc_ctrl,9,cd,2,0,nan,nan,
+baseline,arc_ctrl,9,neutral,2,2,-0.45422406919096825,0.3129742231672535,2 102
+baseline,arc_ctrl,9,ud,2,2,-1.9353205711829804,0.2114818796383382,2 102
+baseline,arc_ctrl,10,cd,2,0,nan,nan,
+baseline,arc_ctrl,10,neutral,2,2,-0.4589172597768951,0.2867591055747789,2 102
+baseline,arc_ctrl,10,ud,2,0,nan,nan,
+baseline,arc_inc,0,cd,2,2,0.0031413174123329224,0.007570508308925781,2 102
+baseline,arc_inc,0,neutral,2,0,nan,nan,
+baseline,arc_inc,0,ud,2,0,nan,nan,
+baseline,arc_inc,1,cd,2,2,0.00446986100370661,0.010067538616268391,2 102
+baseline,arc_inc,1,neutral,2,0,nan,nan,
+baseline,arc_inc,1,ud,2,0,nan,nan,
+baseline,arc_inc,2,cd,2,1,0.007393413163081952,nan,2
+baseline,arc_inc,2,neutral,2,0,nan,nan,
+baseline,arc_inc,2,ud,2,0,nan,nan,
+baseline,arc_inc,3,cd,2,0,nan,nan,
+baseline,arc_inc,3,neutral,2,0,nan,nan,
+baseline,arc_inc,3,ud,2,0,nan,nan,
+baseline,arc_inc,4,cd,2,0,nan,nan,
+baseline,arc_inc,4,neutral,2,2,0.023650253562775392,0.027268161878093986,2 102
+baseline,arc_inc,4,ud,2,0,nan,nan,
+baseline,arc_inc,5,cd,2,0,nan,nan,
+baseline,arc_inc,5,neutral,2,2,-0.013373662885566961,0.018278957283609464,2 102
+baseline,arc_inc,5,ud,2,0,nan,nan,
+baseline,arc_inc,6,cd,2,0,nan,nan,
+baseline,arc_inc,6,neutral,2,2,-0.11779011683740559,0.16394091319614504,2 102
+baseline,arc_inc,6,ud,2,0,nan,nan,
+baseline,arc_inc,7,cd,2,0,nan,nan,
+baseline,arc_inc,7,neutral,2,2,-0.24023659328592284,0.3389064047640559,2 102
+baseline,arc_inc,7,ud,2,0,nan,nan,
+baseline,arc_inc,8,cd,2,0,nan,nan,
+baseline,arc_inc,8,neutral,2,2,-0.2752010105820981,0.393063835010692,2 102
+baseline,arc_inc,8,ud,2,0,nan,nan,
+baseline,arc_inc,9,cd,2,0,nan,nan,
+baseline,arc_inc,9,neutral,2,2,-0.2798905905368958,0.38822575897356065,2 102
+baseline,arc_inc,9,ud,2,0,nan,nan,
+baseline,arc_inc,10,cd,2,0,nan,nan,
+baseline,arc_inc,10,neutral,2,2,-0.27903924452465123,0.3400863430928277,2 102
+baseline,arc_inc,10,ud,2,0,nan,nan,
+baseline,position_only,0,ud,2,2,-2.287415931384432,0.018571025821611496,2 102
+baseline,segment,0,cd,2,0,nan,nan,
+baseline,segment,0,neutral,2,2,-0.012146527130080242,0.011088538246844349,2 102
+baseline,segment,0,ud,2,2,-2.309236420746584,0.004351984194017361,2 102
+baseline,segment,1,cd,2,0,nan,nan,
+baseline,segment,1,neutral,2,2,-0.001921228592532298,0.002402153090886246,2 102
+baseline,segment,1,ud,2,2,-2.311765050699056,0.011075515848326565,2 102
+baseline,segment,2,cd,2,0,nan,nan,
+baseline,segment,2,neutral,2,2,-0.00027508538816345407,0.003939079689200069,2 102
+baseline,segment,2,ud,2,2,-2.3083598497584163,0.008278175309780022,2 102
+baseline,segment,3,cd,2,0,nan,nan,
+baseline,segment,3,neutral,2,2,0.00116006709342531,0.008464019547877183,2 102
+baseline,segment,3,ud,2,2,-2.3069257794671394,0.004500553817155737,2 102
+baseline,segment,4,cd,2,0,nan,nan,
+baseline,segment,4,neutral,2,2,0.0034093683692200116,0.005816584072058035,2 102
+baseline,segment,4,ud,2,2,-2.3104290046309943,0.004286948377466397,2 102
+baseline,segment,5,cd,2,0,nan,nan,
+baseline,segment,5,neutral,2,2,0.019110067834034572,0.023656724658527774,2 102
+baseline,segment,5,ud,2,2,-2.2844879833940643,0.017550700261712734,2 102
+baseline,segment,6,cd,2,0,nan,nan,
+baseline,segment,6,neutral,2,1,0.07585270524714538,nan,2
+baseline,segment,6,ud,2,0,nan,nan,
+baseline,segment,7,cd,2,1,0.020428007048660213,nan,2
+baseline,segment,7,neutral,2,0,nan,nan,
+baseline,segment,7,ud,2,0,nan,nan,
+baseline,segment,8,cd,2,1,0.0023224694076939834,nan,2
+baseline,segment,8,neutral,2,0,nan,nan,
+baseline,segment,8,ud,2,0,nan,nan,
+baseline,segment,9,cd,2,1,-0.0011303105427149518,nan,2
+baseline,segment,9,neutral,2,0,nan,nan,
+baseline,segment,9,ud,2,0,nan,nan,
+baseline,segment,10,cd,2,2,0.0031413174123329224,0.007570508308925781,2 102
+baseline,segment,10,neutral,2,0,nan,nan,
+baseline,segment,10,ud,2,0,nan,nan,
+shuffle_f1,arc_ctrl,0,cd,3,0,nan,nan,
+shuffle_f1,arc_ctrl,0,neutral,3,0,nan,nan,
+shuffle_f1,arc_ctrl,0,ud,3,3,-2.104608784006821,0.06797327274231514,2 402 502
+shuffle_f1,arc_ctrl,1,cd,3,0,nan,nan,
+shuffle_f1,arc_ctrl,1,neutral,3,0,nan,nan,
+shuffle_f1,arc_ctrl,1,ud,3,3,-2.059669884684602,0.0724728245244656,2 402 502
+shuffle_f1,arc_ctrl,2,cd,3,0,nan,nan,
+shuffle_f1,arc_ctrl,2,neutral,3,0,nan,nan,
+shuffle_f1,arc_ctrl,2,ud,3,3,-1.8829594677128367,0.21874653748455772,2 402 502
+shuffle_f1,arc_ctrl,3,cd,3,0,nan,nan,
+shuffle_f1,arc_ctrl,3,neutral,3,0,nan,nan,
+shuffle_f1,arc_ctrl,3,ud,3,3,-1.3163425868762413,0.6618555700249487,2 402 502
+shuffle_f1,arc_ctrl,4,cd,3,1,-0.2514630205740702,nan,2
+shuffle_f1,arc_ctrl,4,neutral,3,1,-0.356459922101094,nan,402
+shuffle_f1,arc_ctrl,4,ud,3,3,-1.0412704482019841,0.4857693072348733,2 402 502
+shuffle_f1,arc_ctrl,5,cd,3,1,-0.21709956847503653,nan,2
+shuffle_f1,arc_ctrl,5,neutral,3,2,-0.35863114786300476,0.39897723150037706,402 502
+shuffle_f1,arc_ctrl,5,ud,3,3,-0.7192191803225931,0.14139661950879132,2 402 502
+shuffle_f1,arc_ctrl,6,cd,3,1,-0.5972813362220233,nan,402
+shuffle_f1,arc_ctrl,6,neutral,3,2,-0.42700713009355096,0.43478340642867763,402 502
+shuffle_f1,arc_ctrl,6,ud,3,3,-0.6685718891592819,0.22183917813381596,2 402 502
+shuffle_f1,arc_ctrl,7,cd,3,0,nan,nan,
+shuffle_f1,arc_ctrl,7,neutral,3,2,-0.4757847665018513,0.5008169904191526,402 502
+shuffle_f1,arc_ctrl,7,ud,3,3,-0.6983845329166801,0.2370619514006721,2 402 502
+shuffle_f1,arc_ctrl,8,cd,3,0,nan,nan,
+shuffle_f1,arc_ctrl,8,neutral,3,2,-0.3633378447933907,0.40860808789319303,402 502
+shuffle_f1,arc_ctrl,8,ud,3,1,-1.0597813146936659,nan,2
+shuffle_f1,arc_ctrl,9,cd,3,0,nan,nan,
+shuffle_f1,arc_ctrl,9,neutral,3,0,nan,nan,
+shuffle_f1,arc_ctrl,9,ud,3,0,nan,nan,
+shuffle_f1,arc_ctrl,10,cd,3,0,nan,nan,
+shuffle_f1,arc_ctrl,10,neutral,3,0,nan,nan,
+shuffle_f1,arc_ctrl,10,ud,3,0,nan,nan,
+shuffle_f1,arc_inc,0,cd,3,3,-0.030545311029192373,0.07006807019105177,2 402 502
+shuffle_f1,arc_inc,0,neutral,3,2,-0.12862872414247906,0.03882182163637289,402 502
+shuffle_f1,arc_inc,0,ud,3,0,nan,nan,
+shuffle_f1,arc_inc,1,cd,3,3,-0.05233656572664458,0.08597656192626829,2 402 502
+shuffle_f1,arc_inc,1,neutral,3,2,-0.12173276083287554,0.073249853929195,402 502
+shuffle_f1,arc_inc,1,ud,3,0,nan,nan,
+shuffle_f1,arc_inc,2,cd,3,2,-0.0844264960790202,0.04034283138124002,402 502
+shuffle_f1,arc_inc,2,neutral,3,2,-0.1438678392344821,0.08952122011152372,402 502
+shuffle_f1,arc_inc,2,ud,3,0,nan,nan,
+shuffle_f1,arc_inc,3,cd,3,2,-0.10468733382117112,0.05937529347876267,402 502
+shuffle_f1,arc_inc,3,neutral,3,2,-0.1340078301721115,0.06798828355709305,402 502
+shuffle_f1,arc_inc,3,ud,3,0,nan,nan,
+shuffle_f1,arc_inc,4,cd,3,2,-0.10755955743434709,0.12366672438687563,402 502
+shuffle_f1,arc_inc,4,neutral,3,2,-0.13000243889379837,0.07068121275268839,402 502
+shuffle_f1,arc_inc,4,ud,3,0,nan,nan,
+shuffle_f1,arc_inc,5,cd,3,2,-0.07971786304661377,0.09588277168743992,402 502
+shuffle_f1,arc_inc,5,neutral,3,2,-0.10948351858471428,0.0047867899359041715,402 502
+shuffle_f1,arc_inc,5,ud,3,0,nan,nan,
+shuffle_f1,arc_inc,6,cd,3,2,-0.04750550741963577,0.05913247212140655,402 502
+shuffle_f1,arc_inc,6,neutral,3,2,-0.10857146746938495,0.016290871994416235,402 502
+shuffle_f1,arc_inc,6,ud,3,1,-0.4195586571716796,nan,2
+shuffle_f1,arc_inc,7,cd,3,0,nan,nan,
+shuffle_f1,arc_inc,7,neutral,3,2,-0.0975077247868037,0.014387875278577461,402 502
+shuffle_f1,arc_inc,7,ud,3,0,nan,nan,
+shuffle_f1,arc_inc,8,cd,3,0,nan,nan,
+shuffle_f1,arc_inc,8,neutral,3,2,-0.10227433047556023,0.012655656007314931,402 502
+shuffle_f1,arc_inc,8,ud,3,0,nan,nan,
+shuffle_f1,arc_inc,9,cd,3,0,nan,nan,
+shuffle_f1,arc_inc,9,neutral,3,2,-0.11061851146905743,0.022748640218997956,402 502
+shuffle_f1,arc_inc,9,ud,3,0,nan,nan,
+shuffle_f1,arc_inc,10,cd,3,0,nan,nan,
+shuffle_f1,arc_inc,10,neutral,3,2,-0.10525860717129665,0.005050671154989256,402 502
+shuffle_f1,arc_inc,10,ud,3,0,nan,nan,
+shuffle_f1,position_only,0,ud,3,3,-0.6109283575917805,0.24390213162266647,2 402 502
+shuffle_f1,segment,0,cd,3,0,nan,nan,
+shuffle_f1,segment,0,neutral,3,0,nan,nan,
+shuffle_f1,segment,0,ud,3,3,-2.104608784006821,0.06797327274231514,2 402 502
+shuffle_f1,segment,1,cd,3,0,nan,nan,
+shuffle_f1,segment,1,neutral,3,0,nan,nan,
+shuffle_f1,segment,1,ud,3,3,-2.1107878892112004,0.036532172375980804,2 402 502
+shuffle_f1,segment,2,cd,3,0,nan,nan,
+shuffle_f1,segment,2,neutral,3,0,nan,nan,
+shuffle_f1,segment,2,ud,3,3,-2.1356978519933563,0.06338778765708436,2 402 502
+shuffle_f1,segment,3,cd,3,1,-1.5497345118976065,nan,502
+shuffle_f1,segment,3,neutral,3,2,-0.5638913988296136,0.022828217261422236,402 502
+shuffle_f1,segment,3,ud,3,3,-2.0781449627118933,0.03904528277437074,2 402 502
+shuffle_f1,segment,4,cd,3,2,-0.7852208984330539,0.8599973586258837,402 502
+shuffle_f1,segment,4,neutral,3,2,-0.31079558699157617,0.19671876481647307,402 502
+shuffle_f1,segment,4,ud,3,3,-1.8929021815267777,0.1450209297083478,2 402 502
+shuffle_f1,segment,5,cd,3,2,-0.4679243324748701,0.48725000154931813,402 502
+shuffle_f1,segment,5,neutral,3,2,-0.19304045650400137,0.1602841706478812,402 502
+shuffle_f1,segment,5,ud,3,3,-1.3492045001337054,0.514582510331784,2 402 502
+shuffle_f1,segment,6,cd,3,2,-0.16977359966804095,0.0520428996167628,402 502
+shuffle_f1,segment,6,neutral,3,2,-0.1655641724518806,0.11239917197283175,402 502
+shuffle_f1,segment,6,ud,3,0,nan,nan,
+shuffle_f1,segment,7,cd,3,2,-0.08059316297628061,0.04851767046180258,402 502
+shuffle_f1,segment,7,neutral,3,2,-0.1570590212134133,0.10660542321874066,402 502
+shuffle_f1,segment,7,ud,3,0,nan,nan,
+shuffle_f1,segment,8,cd,3,2,-0.08500089817873757,0.05198501044565928,402 502
+shuffle_f1,segment,8,neutral,3,2,-0.17678002725908304,0.11364547722090979,402 502
+shuffle_f1,segment,8,ud,3,0,nan,nan,
+shuffle_f1,segment,9,cd,3,3,-0.027751374624156888,0.1102872099168994,2 402 502
+shuffle_f1,segment,9,neutral,3,2,-0.14304640241538813,0.09346816677450767,402 502
+shuffle_f1,segment,9,ud,3,0,nan,nan,
+shuffle_f1,segment,10,cd,3,3,-0.030545311029192373,0.07006807019105177,2 402 502
+shuffle_f1,segment,10,neutral,3,2,-0.12862872414247906,0.03882182163637289,402 502
+shuffle_f1,segment,10,ud,3,0,nan,nan,
