@@ -4,7 +4,7 @@ Scripts: `make_trajectory.py` (GIF + JSON), `make_pseudocode.py` (PNG + SVG). Co
 
 ## Environment (12x12 torus, goal (0,0), `envs/layouts/two_zones.py`, diagonal 1)
 - Corridor: rows 0 and 6, columns 0 and 6 (neutral, controllable-deterministic). Goal: (0,0) (yellow, terminal).
-- UD (blue (22,0,244), slot nw): rows 1-5, cols 1-5; conveyor drift (+1,0) = down (away from the goal), whatever the action.
+- UD (blue (22,0,244) in the environment config, swapped on the slide: UD drawn red, CD drawn blue, slot nw): rows 1-5, cols 1-5; conveyor drift (+1,0) = down (away from the goal), whatever the action.
 - CD (red (227,17,15), slot se): rows 7-11, cols 7-11; controllable-deterministic.
 - ne and sw: corridor-like grey (128,128,128), controllable-deterministic, not visited. Agent: brown (100,45,0).
 - Dynamics and images come from `e4_setup.world(cfg, conf, "experimental")` (env.step, `templates_np`); nothing re-implemented.

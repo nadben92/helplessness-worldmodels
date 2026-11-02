@@ -25,7 +25,9 @@ ACTIONS = ([LEFT] * 1 + [DOWN]            # corridor (6,11) -> (6,10) -> CD (7,1
 
 cfg = e4_setup.load_config()
 conf = e4_setup.configuration(cfg, "p1-b-d1")
-w = e4_setup.world(cfg, conf, "experimental")
+colors = dict(conf["training_colors"])
+colors["nw"], colors["se"] = colors["se"], colors["nw"]  # swapped for the slide: UD red, CD blue
+w = e4_setup.world(cfg, conf, "experimental", slot_colors=colors)
 env, layout = w.env, w.layout
 obs, info = env.reset(start_state=6 * 12 + 11)
 states, rewards, regions = [info["state"]], [], [two_zones.region_of_state(layout, info["state"])]
@@ -63,8 +65,6 @@ for t, s in enumerate(states):
     for p, q in zip(pts, pts[1:]):
         if abs(p[0] - q[0]) < 100 and abs(p[1] - q[1]) < 100:  # skip torus wraps
             d.line([p, q], fill=(255, 255, 255), width=3)
-    if t < len(used):
-        arrow(d, s, used[t])
     frames.append(img)
 dur = [250] * len(frames); dur[-1] = 1000
 frames[0].save(HERE / "E4_trajectory.gif", save_all=True, append_images=frames[1:], duration=dur, loop=0, disposal=2)
