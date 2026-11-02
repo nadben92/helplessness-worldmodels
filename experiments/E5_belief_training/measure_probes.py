@@ -27,6 +27,15 @@ shuffle a slot is not tied to one colour).
 Outputs, as E4's (images.csv, probes.csv, curves.npz, steps.npz, meta.yaml, status.json) plus reconstruction.csv and
 validity_summary.json, in a new directory <out-dir>/E5_belief_training/probes__<configuration>__<tag>__seed<NN>__k<NNNNNN>__<UTC>/.
 
+--probe-set swap (docs/e5/DECISIONS.md (38); default e4: everything above, unchanged): the theme-swap images
+(helplessness.probing.swap_probes: T_inc moved to each other slot, E4's three axes in that slot), every slot of every image
+measured, with the same measure, validity and diagnostic. Instead of probes.csv: swap_probes.csv, one row per (probe,
+zone) -- swap, axis, k, t, near_duplicate, the zone's role in the image's assignment and whether it is the old UD slot,
+b at step 1 (curves.npz, step 1: exposed - reference), the validity, the exposed and reference models' localisation at
+step 1 (the diagnostic's agent_cell_accuracy, part zone_step1; NaN without a diagnostic) and `kept` (valid and the
+exposed model's localisation >= LOCALISATION_MIN, analysis_450k/LOCALISATION_CRITERION.md). validity_summary.json counts
+valid and kept rows by swap, axis and zone role. Directory probes-swap__<...> (no existing analysis globs it).
+
 Usage, from the repo root:
   python experiments/E5_belief_training/measure_probes.py --checkpoint <k> --experimental-run <dir> --reference-run <dir>
       [--images all | training | extreme | 0 5 17] [--n-walks N] [--device cuda] [--out-dir results] [--save-steps]
@@ -53,9 +62,12 @@ import e5_setup
 from helplessness.envs.appearance.theme_sampling import CORRIDOR_COLOR
 from helplessness.pipeline import two_zones_setup
 from helplessness.pipeline.runtime import configure_runtime
-from helplessness.probing import probe_validity
+from helplessness.probing import probe_validity, swap_probes
 from helplessness.probing.theme_probe_measure import is_extreme, load_rssm, measure, probe_rows, sha256, write_csv
 from helplessness.probing.theme_probes import probe_images
+
+PROBE_SETS = ("e4", "swap")
+LOCALISATION_MIN = 0.90  # analysis_450k/LOCALISATION_CRITERION.md: the exposed model's localisation at step 1 (direct rule)
 
 
 def run_info(run_dir: Path) -> dict:
@@ -157,6 +169,48 @@ def validity_summary(probes: list[dict]) -> dict:
     return out
 
 
+def swap_rows(conf: dict, images: list[dict], rows: list[dict], curve_exp: np.ndarray, curve_ref: np.ndarray,
+              diagnostics: list[dict]) -> list[dict]:
+    """swap_probes.csv: one row per (probe, zone) of the swap images (docs/e5/DECISIONS.md (38)). rows, curve_exp,
+    curve_ref: measure()'s, aligned; diagnostics: the reconstruction diagnostic's rows (may be empty)."""
+    by_index = {im["index"]: im for im in images}
+    loc = {(d["image"], d["zone"], d["model"]): d["agent_cell_accuracy"] for d in diagnostics if d["part"] == "zone_step1"}
+    out = []
+    for i, r in enumerate(rows):
+        image = by_index[r["image"]]
+        m = image["swap"]
+        color = image["slot_colors"][m]
+        loc_exp = loc.get((r["image"], r["zone"], "experimental"), float("nan"))
+        loc_ref = loc.get((r["image"], r["zone"], "reference"), float("nan"))
+        for p in image["probes"]:
+            out.append({"image": r["image"], "swap": m, "ud_slot": image["ud_slot"], "cd_slot": image["cd_slot"], "axis": p["axis"],
+                        "k": p["k"], "t": p["t"], "near_duplicate": p["near_duplicate"], "color_m": "-".join(map(str, color)),
+                        "dist_to_inc": float(swap_probes.rgb_distance(color, conf["t_inc"])),
+                        "dist_to_ctrl": float(swap_probes.rgb_distance(color, conf["t_ctrl"])),
+                        "zone": r["zone"], "zone_role": swap_probes.zone_role(image, r["zone"]),
+                        "is_old_ud": r["zone"] == image["old_ud_slot"], "zone_color": r[f"color_{r['zone']}"],
+                        "b_step1": float(curve_exp[i, 0] - curve_ref[i, 0]), "I_exp_step1_curve": float(curve_exp[i, 0]),
+                        "I_ref_step1_curve": float(curve_ref[i, 0]), "b_entry": r["b_entry"],
+                        "mass_ref_step1": r["mass_ref_step1"], "I_ref_step1": r["I_ref_step1"], "valid": r["valid"],
+                        "loc_exp_step1": loc_exp, "loc_ref_step1": loc_ref,
+                        "kept": bool(r["valid"] and loc_exp >= LOCALISATION_MIN)})
+    return out
+
+
+def swap_summary(rows: list[dict], diagnose_walks: int) -> dict:
+    """The valid and kept (probe, zone) rows, overall and by swap / axis / zone role."""
+    out = {"criterion": {"mass_ref_step1_min": probe_validity.MASS_MIN, "abs_I_ref_step1_minus_log2_5_max": probe_validity.I_TOL,
+                         "localisation_exp_step1_min": LOCALISATION_MIN, "diagnose_walks": diagnose_walks},
+           "rows": len(rows), "valid": sum(bool(r["valid"]) for r in rows), "kept": sum(bool(r["kept"]) for r in rows),
+           "by_swap_axis_role": {}}
+    for r in rows:
+        cell = out["by_swap_axis_role"].setdefault(f"{r['swap']}/{r['axis']}/{r['zone_role']}", {"rows": 0, "valid": 0, "kept": 0})
+        cell["rows"] += 1
+        cell["valid"] += bool(r["valid"])
+        cell["kept"] += bool(r["kept"])
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--checkpoint", type=int, required=True, help="k: environment steps (after the switch for the immunisation)")
@@ -172,7 +226,10 @@ def main(argv: list[str] | None = None) -> int:
                         help="--find-runs: the reference of ANOTHER seed (batches.REFERENCE_SEED_OF: seed B's locked-in experimental run "
                              "replaced by E and F against B's reference, docs/e5/DECISIONS.md (32)); with explicit runs: allow it")
     parser.add_argument("--e4-results", type=Path, default=None, help="E4's results root (the reference of immunisation A)")
-    parser.add_argument("--images", nargs="+", default=["all"], help="all, training, extreme, or image indices")
+    parser.add_argument("--probe-set", choices=PROBE_SETS, default="e4",
+                        help="e4: E4's probe set (default, unchanged); swap: the theme-swap set (docs/e5/DECISIONS.md (38))")
+    parser.add_argument("--images", nargs="+", default=["all"],
+                        help="all, training, extreme, or image indices (--probe-set swap: all, or positions in the swap set)")
     parser.add_argument("--n-walks", type=int, default=None, help="default: e5.probes.n_walks of --config (150)")
     parser.add_argument("--diagnose-walks", type=int, default=50, help="walks of the reconstruction diagnostic (0: none)")
     parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default=None)
@@ -194,7 +251,13 @@ def main(argv: list[str] | None = None) -> int:
         cfg["runtime"]["device"] = args.device
     device = configure_runtime(cfg)
     conf = {**two_zones_setup.configuration(cfg, exp["configuration"]), "seed": exp["seed"]}  # the run's seed (A or B)
-    all_images = probe_images(conf["diagonal"], conf["t_inc"], conf["t_ctrl"], conf["axes"])
+    swap = args.probe_set == "swap"
+    if swap:
+        if args.images[0] in ("training", "extreme"):
+            parser.error("--probe-set swap: --images all or positions in the swap set")
+        all_images = swap_probes.swap_probe_images(conf["diagonal"], conf["t_inc"], conf["t_ctrl"], conf["axes"])
+    else:
+        all_images = probe_images(conf["diagonal"], conf["t_inc"], conf["t_ctrl"], conf["axes"])
     if args.images == ["all"]:
         images = all_images
     elif args.images == ["training"]:
@@ -205,7 +268,7 @@ def main(argv: list[str] | None = None) -> int:
         images = [all_images[int(i)] for i in args.images]
     tag = e5_setup.training_tag(exp["training"], exp["fraction"])
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    out = args.out_dir / e5_setup.EXPERIMENT_ID / f"probes__{exp['configuration']}__{tag}__seed{exp['seed']:02d}__k{args.checkpoint:06d}__{stamp}"
+    out = args.out_dir / e5_setup.EXPERIMENT_ID / f"{'probes-swap' if swap else 'probes'}__{exp['configuration']}__{tag}__seed{exp['seed']:02d}__k{args.checkpoint:06d}__{stamp}"
     out.mkdir(parents=True, exist_ok=False)
     status = out / "status.json"
     status.write_text(json.dumps({"status": "running", "started_at": stamp}), encoding="utf-8")
@@ -225,13 +288,18 @@ def main(argv: list[str] | None = None) -> int:
                                       "traceback": traceback.format_exc()[-4000:]}, indent=1), encoding="utf-8")
         raise
     write_csv(out / "images.csv", result["rows"])
-    by_pair = {(r["image"], r["zone"]): r for r in result["rows"]}
-    probes = [{**p, **{key: by_pair[(p["image"], p["slot"])][key] for key in ("mass_ref_step1", "ghost_ref_step1", "I_ref_step1", "valid")}}
-              for p in probe_rows(conf, images, result["rows"])]
-    write_csv(out / "probes.csv", probes)
+    if swap:
+        probes = swap_rows(conf, images, result["rows"], result["curve_exp"], result["curve_ref"], diagnostics)
+        write_csv(out / "swap_probes.csv", probes)
+        summary = swap_summary(probes, args.diagnose_walks)
+    else:
+        by_pair = {(r["image"], r["zone"]): r for r in result["rows"]}
+        probes = [{**p, **{key: by_pair[(p["image"], p["slot"])][key] for key in ("mass_ref_step1", "ghost_ref_step1", "I_ref_step1", "valid")}}
+                  for p in probe_rows(conf, images, result["rows"])]
+        write_csv(out / "probes.csv", probes)
+        summary = validity_summary(probes)
     if diagnostics:
         write_csv(out / "reconstruction.csv", diagnostics)
-    summary = validity_summary(probes)
     (out / "validity_summary.json").write_text(json.dumps(summary, indent=1), encoding="utf-8")
     np.savez_compressed(out / "curves.npz", curve_exp=result["curve_exp"], curve_ref=result["curve_ref"], n_states=result["n_states_curve"])
     if args.save_steps:
@@ -243,13 +311,21 @@ def main(argv: list[str] | None = None) -> int:
             "runs": {"experimental": str(args.experimental_run), "reference": str(args.reference_run)}, "device": str(device),
             "torch_threads": torch.get_num_threads(), "n_images": len(images), "n_image_zones": len(result["rows"]), "seconds": seconds,
             "walks": {**cfg["e4"]["walks"], "n_walks_used": args.n_walks}, "probe": cfg["e4"]["probe"], "diagnose_walks": args.diagnose_walks,
-            "validity": {"valid": summary["valid"], "probes": summary["probes"]},
+            "validity": ({"valid": summary["valid"], "kept": summary["kept"], "rows": summary["rows"]} if swap
+                         else {"valid": summary["valid"], "probes": summary["probes"]}),
             "t_inc": list(conf["t_inc"]), "t_ctrl": list(conf["t_ctrl"]),
-            "positions": "the configuration's canonical layout"}
+            "positions": ("theme swaps: T_inc moved to each other slot of the canonical layout (docs/e5/DECISIONS.md (38))" if swap
+                          else "the configuration's canonical layout")}
+    if swap:
+        meta["probe_set"] = "swap"
     (out / "meta.yaml").write_text(yaml.safe_dump(meta, sort_keys=False), encoding="utf-8")
     status.write_text(json.dumps({"status": "done", "seconds": seconds, "n_image_zones": len(result["rows"])}), encoding="utf-8")
-    print(f"[E5 measure_probes] {len(result['rows'])} (image, zone) measured in {seconds:.0f} s; {summary['valid']}/{summary['probes']} "
-          f"probes valid -> {out}", flush=True)
+    if swap:
+        print(f"[E5 measure_probes] swap set: {len(result['rows'])} (image, zone) measured in {seconds:.0f} s; {summary['valid']}/"
+              f"{summary['rows']} (probe, zone) valid, {summary['kept']} kept -> {out}", flush=True)
+    else:
+        print(f"[E5 measure_probes] {len(result['rows'])} (image, zone) measured in {seconds:.0f} s; {summary['valid']}/{summary['probes']} "
+              f"probes valid -> {out}", flush=True)
     return 0
 
 

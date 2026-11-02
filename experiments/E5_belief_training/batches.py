@@ -13,6 +13,9 @@ C = 202 and D = 302 are defined but unused since the plan of 2026-10-23).
   e5_probes_baselines  no training (docs/e5/DECISIONS.md (36)): the baselines A (E4's own pair) and B at 300,000
             (PROBES_CHECKPOINT), and baseline B again at each checkpoint given (--checkpoint k ...: its checkpoints matched
             to the shuffle pairs' level of learning, matched_checkpoint.py)
+  e5_probes_swap  no training (docs/e5/DECISIONS.md (38)): the theme-swap probe set (measure_probes.py --probe-set swap,
+            --diagnose-walks 150) of the shuffle pairs A, E, F at --checkpoint (650,000; E and F against B's reference) and
+            of the baselines A (E4's own pair) and B at FIXED_BASELINE_CHECKPOINTS (100,000 and 300,000)
 
 Two waves only (2026-10-23): no wave 3. DEFERRED (defined, never submitted): shuffle f = 0.5 (abandoned for E5, (31))
 and the immunisation (moved to E8). Every run trains E4's full planned budget (300,000 steps) with E5's procedure
@@ -39,6 +42,7 @@ WAVES: dict[str, dict[str, tuple]] = {
     "e5_probes_a": {},
     "e5_probes_b": {},
     "e5_probes_baselines": {},  # docs/e5/DECISIONS.md (36)
+    "e5_probes_swap": {},  # docs/e5/DECISIONS.md (38)
     # docs/e5/DECISIONS.md (33): the healthy shuffle runs continued from their resume point to EXTEND_TO steps, in two
     # batches (one pod at a time): seed A's pair first, then seed B's reference with the replacements E and F
     "e5_extend_a": {"A_sh100_experimental": ("A", "shuffle", 1.0, "experimental"), "A_sh100_reference": ("A", "shuffle", 1.0, "reference")},
@@ -79,7 +83,14 @@ PROBE_PAIRS: dict[str, list[tuple]] = {
     # docs/e5/DECISIONS.md (36): the baselines at PROBES_CHECKPOINT (the secondary comparison) and baseline B at its
     # checkpoints matched to the level of the preliminary shuffle pairs E and F (the primary comparison)
     "e5_probes_baselines": [("A", "baseline", None), ("B", "baseline", None)],
+    # docs/e5/DECISIONS.md (38): the theme-swap set, the shuffle pairs at --checkpoint, the baselines at their fixed checkpoints
+    "e5_probes_swap": [("A", "shuffle", 1.0), ("E", "shuffle", 1.0), ("F", "shuffle", 1.0), ("A", "baseline", None), ("B", "baseline", None)],
 }
+# batches whose baselines are probed at these checkpoints, whatever --checkpoint is (docs/e5/DECISIONS.md (38): the matched
+# 100,000 of (37) and the converged 300,000)
+FIXED_BASELINE_CHECKPOINTS: dict[str, tuple[int, ...]] = {"e5_probes_swap": (100000, PROBES_CHECKPOINT)}
+# a batch's probe set and its extra measure_probes.py arguments (absent: E4's probe set, measure_probes.py's defaults)
+PROBE_SET_ARGS: dict[str, list[str]] = {"e5_probes_swap": ["--probe-set", "swap", "--diagnose-walks", "150"]}
 # the baselines probed at PROBES_CHECKPOINT whatever --checkpoint is; in e5_probes_baselines the seeds whose baseline is
 # ALSO probed at every --checkpoint (the level-matched checkpoints, docs/e5/DECISIONS.md (36))
 BASELINES_AT_PROBES_CHECKPOINT = ("e5_probes_all", "e5_probes_a", "e5_probes_baselines")
@@ -122,11 +133,14 @@ def train_args(batch: str, job: str, configuration: str, switch_step: int | None
 def probe_specs(batch: str, checkpoints) -> list[tuple]:
     """(seed label, training, fraction, k) of every probe job of the batch: each pair at each checkpoint given (one int or
     several), except the baselines of BASELINES_AT_PROBES_CHECKPOINT, at PROBES_CHECKPOINT -- and, in
-    MATCHED_BASELINE_SEEDS' batches, ALSO at each checkpoint given (docs/e5/DECISIONS.md (33), (36)). No duplicate."""
+    MATCHED_BASELINE_SEEDS' batches, ALSO at each checkpoint given (docs/e5/DECISIONS.md (33), (36)); the baselines of
+    FIXED_BASELINE_CHECKPOINTS' batches at those checkpoints only ((38)). No duplicate."""
     ks = [int(checkpoints)] if isinstance(checkpoints, int) else [int(k) for k in checkpoints]
     out = []
     for seed_label, training, fraction in PROBE_PAIRS[batch]:
-        if batch in BASELINES_AT_PROBES_CHECKPOINT and training == "baseline":
+        if batch in FIXED_BASELINE_CHECKPOINTS and training == "baseline":
+            own = list(FIXED_BASELINE_CHECKPOINTS[batch])
+        elif batch in BASELINES_AT_PROBES_CHECKPOINT and training == "baseline":
             own = [PROBES_CHECKPOINT] + (ks if seed_label in MATCHED_BASELINE_SEEDS.get(batch, ()) else [])
         else:
             own = ks
@@ -152,6 +166,7 @@ def probe_args(batch: str, configuration: str, checkpoint, e4_results: str | Non
             if not e4_results:
                 raise ValueError(f"the {training} of seed A is (or is measured against) E4's own runs: --e4-results <E4 results root>")
             args += ["--e4-results", e4_results]
+        args += PROBE_SET_ARGS.get(batch, [])
         tag = {"baseline": "base", "immunisation": "imm"}.get(training) or f"sh{int(round(fraction * 100)):03d}"
-        out.append((f"probes_{seed_label}_{tag}_k{k:06d}", args))
+        out.append((f"{'swap' if batch in PROBE_SET_ARGS else 'probes'}_{seed_label}_{tag}_k{k:06d}", args))
     return out

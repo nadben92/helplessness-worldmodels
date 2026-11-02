@@ -8,7 +8,9 @@ export_batch.py, with E5's runs). Standard library only.
               (the compact replay: with the weights, the RSA and every measure can be recomputed off the cluster;
               --no-replay leaves it out);
             - the weights of each run's FINAL checkpoint, and those of the steps given with --weights-checkpoints;
-            - every probe measurement of the batch's pairs (results/E5_belief_training/probes__<configuration>__<tag>__seed<NN>__*);
+            - every probe measurement of the batch's pairs (results/E5_belief_training/probes__<configuration>__<tag>__seed<NN>__*;
+              a batch of the theme-swap set, batches.PROBE_SET_ARGS: probes-swap__<...>, with SWAP_PROBE_FILES,
+              docs/e5/DECISIONS.md (38));
             - the supervisor directories of the batch (logs/kubeflow/e5-<phase>-<batch>-*) and their submission records;
             - MANIFEST.json: every file's path, size and SHA-256, and each run's status.
           Never resume.pt, the resumable states, nor the other checkpoints' weights.
@@ -36,6 +38,8 @@ import e5_names
 
 RUN_FILES = ("config.yaml", "meta.yaml", "results.json", "metrics.csv", "checkpoints.jsonl", "console.log", "assignments.npz")
 PROBE_FILES = ("images.csv", "probes.csv", "curves.npz", "steps.npz", "meta.yaml", "status.json")
+SWAP_PROBE_FILES = ("images.csv", "swap_probes.csv", "curves.npz", "steps.npz", "meta.yaml", "status.json", "validity_summary.json",
+                    "reconstruction.csv")
 SUPERVISOR_FILES = ("status.json", "supervisor.json")
 
 
@@ -94,8 +98,9 @@ def collect(repo: Path, batch: str, configuration: str, weight_steps: list[int],
                      "weights_missing": [w.name for w in weights if not w.is_file()]}
     for label, training, fraction in batches.PROBE_PAIRS.get(batch, []):  # a training-only batch has no probe pair
         tag = e5_names.training_tag(training, fraction)
-        for probes in sorted(root.glob(f"probes__{configuration}__{tag}__seed{seed_of[label]:02d}__*")):
-            files += [probes / name for name in PROBE_FILES if (probes / name).is_file()]
+        prefix, names = ("probes-swap", SWAP_PROBE_FILES) if batch in batches.PROBE_SET_ARGS else ("probes", PROBE_FILES)
+        for probes in sorted(root.glob(f"{prefix}__{configuration}__{tag}__seed{seed_of[label]:02d}__*")):
+            files += [probes / name for name in names if (probes / name).is_file()]
     for sup in sorted((repo / "logs" / "kubeflow").glob(f"e5-*-{batch}-*")):
         if sup.is_dir():
             files += [sup / name for name in SUPERVISOR_FILES if (sup / name).is_file()] + sorted(sup.glob("*.log"))
