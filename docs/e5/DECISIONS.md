@@ -993,8 +993,10 @@ copied; where it is not computed, it is said.
 ## 2026-11-02 (38) -- theme-swap probes along E4's colour axes (user's design; implementer's checks and amendments, validated by the user)
 
 **Status: validated by the user on 2 November**, with the three amendments below, the four quadrants measured, the
-localisation computed in the job, pair A kept, and a minimal count of kept probes added to the reading rule. Written
-before any probe of this set was launched. The values quoted below come from the training records at 650,000
+localisation computed in the job, pair A kept, and a minimal count of kept probes added to the reading rule. **Revised
+the same day by the user, before launch**: the hypothesis that the position is a fallback is withdrawn; the hypothesis is
+now inference by the arrangement, read on the plateau of the gradient, with nw as a witness and a reserve on unseen
+colours. Written before any probe of this set was launched. The values quoted below come from the training records at 650,000
 (`checkpoints.jsonl`, `e5.by_assignment`, already read by `check_wave.py`), not from probes.
 
 **Why.** "Theme only" (T_inc at the neutral slot `ne`) is invalid for the three shuffle pairs at 650,000 (reference mass
@@ -1013,14 +1015,16 @@ as every E4/E5 probe.
   the very function the shuffle's episodes use, and a test checks the equality with the swap.
 - **Gradient.** In the slot `m` only, the colour is replaced by each point of E4's three axes, unchanged
   (`two_zones_setup.configuration(...)["axes"]`, `theme_axes.axes_for_orientation`). The three other quadrants keep the
-  base image's colours. The axes give 11 + 10 + 10 = 31 distinct colours, so there are 3 x 31 = **93 images** per agent,
-  none shared with E4's probe set.
+  base image's colours. The axes give 11 + 10 + 10 = 31 distinct colours, so there are 3 x 31 = **93 images** per agent.
+  One of them is also an E4 probe image: the swap to se at T_ctrl (segment t = 1, arc_inc t = 0) puts T_ctrl at nw and
+  se, which is E4's "T_ctrl at the old UD slot". It is measured here with its own seed (found by the tests; the draft
+  said "none shared").
 - **Amendment 1: arc_inc does not start at T_inc.** `arc_inc` is centred on T_inc, starts at **T_ctrl**, and every point
   is at distance D from T_inc (checked: distance / D = 1.00 at the 11 points). Its point 0 is T_ctrl, not T_inc, so it is
   not a distance-to-T_inc axis. On this axis no quadrant carries T_inc, and its first points duplicate T_ctrl. Only the
   segment and arc_ctrl start at T_inc. On those two, the distance to T_inc goes from 0 to D in steps of 0.1 D, and
   point 0 is the base image, in the training distribution. Each axis is therefore plotted against its own t = k / 10 (the
-  distance to the axis' start / D), as in E4. arc_inc is read as a control axis (below).
+  distance to the axis' start / D), as in E4. arc_inc gives the plateau of the gradient directly (below).
 - **Amendment 2: duplicated colours affect all three swaps.** T_ctrl is always in another quadrant (se for the swaps to
   ne and sw, nw for the swap to se). So the segment's end (t = 1, which is T_ctrl) and arc_inc's start (t = 0, also
   T_ctrl) duplicate T_ctrl in every swap, not only in the swap with CD.
@@ -1055,65 +1059,78 @@ as every E4/E5 probe.
 
 **Contrasts.**
 - **Primary, within each shuffle agent (A, E, F at 650,000), each against its own pair's reference:**
-  - Delta(t) = b(slot m, t) - b(neutral slots of the same image, t), on the segment and on arc_ctrl. The neutral slots
-    are those of the assignment, without the old UD slot: sw for the swap to ne, ne for the swap to sw, ne and sw for
-    the swap to se.
+  - Delta(t) = b(slot m, t) - b(neutral slots of the same image, t), on the three axes. The neutral slots are those of
+    the assignment, without the old UD slot: sw for the swap to ne, ne for the swap to sw, ne and sw for the swap to se.
   - Delta is computed only where slot m and at least one neutral slot are kept.
   - It is reported per agent, swap and axis, then the swaps are pooled per agent and axis.
-- **Witnesses in the same image:** b at the old UD slot (nw) and at the CD slot.
-- **arc_inc (control axis):** b(slot m) along a colour at distance D from T_inc, starting from T_ctrl.
+- **Witnesses in the same image:** b at the old UD slot (nw, in all three swaps) and in the neutral slots.
 - **Baselines** (A and B, at 100,000 and at 300,000): a qualitative point of comparison only. For them, every swap image
   changes two quadrants of their only training image, so it is out of distribution. They are reported on kept zones
   only, with their validity rate, and never pooled with the shuffle.
 
+**Hypothesis: inference by the arrangement (user, 2 November, before launch).** It replaces an earlier hypothesis that
+the position is a fallback, withdrawn because nothing under shuffle ties the belief to nw: each slot is UD in 3 of the 12
+assignments, so a belief at nw would have no mechanism.
+- In a training assignment, the three other quadrants designate the UD slot by elimination: one grey, one T_ctrl and
+  one grey leave only the fourth slot to be UD.
+- On a swap image at t = 0, the colour (T_inc) and the arrangement both designate the slot m.
+- Along the gradient, the three other quadrants are fixed, so the arrangement keeps designating m, while the colour of
+  m leaves T_inc. The gradient separates the two cues.
+
 **Reading rule.** The thresholds are E5c's classes: about -2 is b <= -1.5, intermediate is -1.5 < b <= -0.5, and about
 0 is b > -0.5.
-- At t = 0, the agent can locate UD either by the quadrant's own colour or by the arrangement of the four colours: both
-  suffice in a training assignment. Along the gradient, the three other quadrants are fixed (in training, their
-  arrangement implies that `m` is the UD slot) and only the colour of `m` changes.
-- If Delta(t) rises from about -2 at t = 0 into the class "about 0" on the segment and arc_ctrl, among the kept
-  points, in at least 2 of the 3 shuffle agents, the belief depends on the quadrant's own colour.
-- If Delta stays about -2 along the kept points, the arrangement carries it.
-- Anything in between is reported as a mixed dependence, with the t at which Delta leaves the class "about -2".
+- **The plateau.** Delta rises from about -2 at t = 0 towards a plateau as the colour of m leaves T_inc. Its level is
+  the reading:
+  - about 0: the belief reads only the colour;
+  - about -2: it reads only the arrangement;
+  - intermediate: it reads both.
+  - arc_inc gives the plateau directly: its colour is at D from T_inc at every t, with the same arrangement.
 - **Minimal count (user's request; value proposed by the implementer).** An agent counts at a point (axis, t) only if
   Delta is computed in **at least 2 of its 3 swaps**. That means slot m is kept and at least one neutral slot of the
   same image is kept. Delta at that point is the mean over those swaps.
-  - An agent counts for an axis only if it counts at t = 0 and at **at least 3 points with t >= 0.5**.
-  - On that axis, its verdict is:
-    - "colour" if Delta(0) <= -1.5 and Delta > -0.5 at its furthest counted point;
-    - "arrangement" if Delta <= -1.5 at every counted point;
-    - "mixed" otherwise.
-  - The conclusion needs at least 2 counted agents with the same verdict. With fewer than 2 counted agents on an axis,
-    the axis is reported as **not readable**, never filled in.
   - Why 2 of 3: a single swap gives one image per point, and one image may fail for a reason of its own (a weak slot of
     the reference, a near-duplicate colour). Two swaps out of three keep the point from resting on one image.
+- **An agent's plateau on an axis** is the mean of its **3 furthest counted Delta points**, all at t >= 0.5. A mean over
+  every point from 0.5 on would understate a plateau still being reached at 0.5.
+  - The agent counts for the axis only if it has **at least 3 counted points with t >= 0.5**.
+- **Primary axes: arc_ctrl and arc_inc. The segment is secondary (user, 2 November, before launch).**
+  - Towards T_ctrl, the moved slot makes two CD-coloured quadrants appear (T_ctrl is already in another slot in every
+    swap). No training assignment matches such an image, so the arrangement cue breaks too: elimination no longer
+    designates one slot. This is more than a loss of localisation.
+  - On the segment, the 3 furthest points (t >= 0.8) are exactly these near-duplicates. The segment is reported both
+    with its plateau over every counted point and with the plateau without t >= 0.8 (the 3 furthest counted points that
+    are not near-duplicates). Neither enters the main conclusion.
+  - arc_ctrl ends at D from both T_inc and T_ctrl, and arc_inc stays at D from T_inc. Their far points duplicate no
+    colour of the image.
+  - On the segment and arc_ctrl, it must also count at t = 0, and its Delta(0) must be about -2; otherwise this is
+    reported and the agent is not counted. arc_inc has no t = 0 anchor (its t = 0 is T_ctrl).
+  - The verdict is "colour" if the plateau is > -0.5, "arrangement" if it is <= -1.5, and "both" otherwise.
+  - The verdict uses the plateau over every counted point (near-duplicates included), as validated.
+- **Conclusion per axis:** at least 2 counted agents with the same verdict. With fewer than 2 counted agents, the axis
+  is reported as **not readable**, never filled in.
+  - The main conclusion is read on arc_ctrl and arc_inc. If they disagree, both are reported, never reconciled.
+  - The segment's two conclusions (with and without t >= 0.8) are secondary.
+- **Witnesses.** nw and the neutral slots are counted like Delta (kept in at least 2 of the 3 swaps at a point).
+  - Per agent and axis, a witness is "about 0" if b > -0.5 at every counted point. Otherwise it "departs", and the t at
+    which it does is listed.
+  - A witness that departs at the far points qualifies the plateau there: it marks an effect of the image, not of the
+    slot m.
 
 **Expected shape (written before any probe of this set exists).** The values at t = 0 are known from the records (the
 base images ARE assignments 4, 11, 6). The prediction is about the gradient.
-- **Shuffle, slot m, segment and arc_ctrl:**
+- **Shuffle, slot m:**
   - b(0) is about -2. Records at 650,000, for the swaps to ne / sw / se: A -2.09 / -1.90 / -1.99, E -2.03 / -2.01 /
     -1.89, F -2.10 / -1.99 / -2.24.
-  - b rises monotonically with t and is in the class "about 0" at t = 1. At t = 1 the segment is T_ctrl, and arc_ctrl
-    is at D from both T_inc and T_ctrl.
-- **Shuffle, slot m, arc_inc:** about 0 at every t, since the colour is always at D from T_inc.
+  - b rises, on the segment and arc_ctrl, towards a plateau as the colour of m leaves T_inc. arc_inc sits at that
+    plateau at every t.
+  - The level of the plateau is what the set measures; it is not predicted. About 0 means colour only, about -2 means
+    arrangement only, and intermediate means both.
+- **Shuffle, old UD slot nw: about 0 along the whole gradient, on every axis and every swap (a witness).**
+  - At t = 0 it is a NEUTRAL slot (swaps to ne and sw) or the CD slot (swap to se) of a training assignment. Its b in
+    the records is -0.18 to +0.09 (A +0.07 / +0.01 / +0.09, E -0.00 / -0.01 / -0.05, F -0.18 / -0.12 / -0.11).
+  - It is not the "position only" value (-0.46 / -0.48 / -0.89). That image has no T_inc, and the arrangement
+    designates nw by elimination (below).
 - **Shuffle, neutral slots:** about 0 at every point of every axis. In the records at t = 0, |b| <= 0.18 (A, E, F).
-- **Shuffle, old UD slot nw: amendment 3 to the user's draft.** At t = 0 it is a NEUTRAL slot (swaps to ne and sw) or
-  the CD slot (swap to se) of a training assignment. Its b in the records is -0.18 to +0.09 (A +0.07 / +0.01 / +0.09,
-  E -0.00 / -0.01 / -0.05, F -0.18 / -0.12 / -0.11). It is NOT the "position only" value (-0.46 / -0.48 / -0.89).
-  - Expected: about 0 at t = 0.
-  - **Hypothesis: the position is a fallback when no visual cue is left (user, 2 November).** The shuffle agent
-    locates UD by a colour near T_inc when one is present. When none is, it falls back on the position it learnt
-    before or beside the shuffle (nw, UD in the canonical layout, which the shuffle still draws as one of its 12
-    assignments). This is what "position only" (-0.46 / -0.48 / -0.89) showed: grey at nw and no T_inc anywhere.
-  - **Prediction for the swaps to ne and sw** (nw grey, as in "position only"): b at nw becomes negative again as the
-    colour of m leaves T_inc. It reaches the class "intermediate" (<= -0.5) at t >= 0.7 on the segment and on
-    arc_ctrl, and on the whole of arc_inc (no quadrant near T_inc there).
-  - Minimal count for this reading: at a point, nw must be kept in both swaps (ne and sw). An agent counts for an axis
-    if it counts at t = 0 and at no fewer than 3 points with t >= 0.5.
-  - The fallback is supported if b at nw <= -0.5 at those points in at least 2 counted agents. It is refuted if b at nw
-    stays > -0.5 there.
-  - **The swap to se** puts T_ctrl at nw, the colour of the CD zone in every training assignment, which is itself a
-    cue (controllable). No fallback is predicted there; it is reported apart, never pooled with ne and sw.
 - **Shuffle, CD slot:** about 0. Near-duplicate points are flagged.
 - **Baselines:**
   - old UD slot nw: about -2.3 whatever colour it holds there (grey or T_ctrl), as their b is tied to the position (E4;
@@ -1122,14 +1139,28 @@ base images ARE assignments 4, 11, 6). The prediction is about the gradient.
   - neutral slots: about 0;
   - many invalid zones (E4: 203/400 invalid on single-quadrant changes; here two quadrants change).
 
+**Reproducibility control (user, 2 November).** One swap image is also an E4 probe image (the swap to se at T_ctrl:
+T_ctrl at nw and se, E4's "T_ctrl at the old UD slot", image 30 of E4's set).
+- b at step 1 at nw on that image in baseline A's swap measurement (k = 100,000 and 300,000) is compared with the same
+  model's E4-set measurement at the same checkpoint (`e5_probes_baselines`, `e5_probes_baseline_A`).
+- Both use the same model, the same walks (the first 150 of E4's fixed walks, n_in_grid) and the same reference. Only the
+  measurement draws differ (another image index, so another seed). The gap is therefore the draws' noise, and it is
+  reported with each measurement (`analyse_swap.py --compare-probes`, `shared_image.csv`). The other measurements that
+  have an E4-set counterpart are compared the same way.
+
 **Limits, recorded.**
+- **Reserve: colours never seen in training (user, 2 November).** Along the gradient (t > 0), the slot m carries colours
+  the shuffle never saw. This can shift b through an out-of-distribution effect, independently of the arrangement. A
+  plateau between about -2 and about 0 can therefore come from that effect as well as from a belief that reads both
+  cues. The witnesses (nw and the neutral slots of the same image) and the localisation filter the global forms of such
+  an effect, not its local form in the slot m.
+  - This is not the case of "position only". There, the corridor's theme is the neutral theme, seen in every quadrant
+    in training: the image is out of distribution only as an assignment (it has no UD zone).
+  - Its intermediate value (-0.46 / -0.48 / -0.89) is read as a conflict between two cues. The arrangement designates
+    nw by elimination (grey, T_ctrl and grey elsewhere). The colour of nw is the neutral one.
 - **Validity falls with the distance** (E4, E5). The far points of the gradient are a selection: the kept points are
   reported per t, beside every mean.
-- **The far points are out of distribution for the exposed model too.** A rise of b(m) could reflect an unfamiliar
-  image rather than a colour-specific belief. The neutral and old UD slots of the same image are the witness: a global
-  disorientation would move them too, and localisation filters its gross form.
-- **The gradient shows that the belief depends on the quadrant's colour GIVEN the arrangement.** It does not show that
-  the arrangement plays no role. Arrangement and colour agree at t = 0 by construction.
+- **Arrangement and colour agree at t = 0 by construction.** Only the gradient separates them, under the reserve above.
 - **Pair A will probably give few valid zones at ne and se.** In the records, its reference's mean mass on the walks is
   0.886-0.909 at ne and 0.896-0.932 at se across these assignments; B's reference is 0.964-0.981 everywhere. Pair A's
   share of valid probes was already 23/100 at 650,000 ((37)). This is predicted now and reported as such.
@@ -1152,3 +1183,35 @@ base images ARE assignments 4, 11, 6). The prediction is about the gradient.
   - at t = 0, b per quadrant on the local weights (A and E at 650,000) reproduces the record of the same assignment
     within sampling error. With the record's own walks and seed (100 walks, image index 1000 + k, purpose
     `checkpoint`, n_in 25), the agreement is up to the device only.
+
+**(38), implementation and checks before launch (implementer, 2 November).** No probe of this set was run on the cluster.
+- **Near-duplicate rule.** The axis points are rounded to integer RGB, so the points meant to lie at 0.2 D from T_ctrl
+  sit at 0.2004 D (segment) and 0.2005 D (arc_inc). The rule therefore allows the rounding of one point,
+  `swap_probes.ROUNDING` = sqrt(3) / 2 RGB units. It flags exactly segment t >= 0.8 and arc_inc t <= 0.2 in the three
+  swaps (tested).
+- **Existing probes unchanged.** `measure_probes.py` was run with the default set (`e4`) on the local weights of E
+  (402 / reference 102, 650,000; CPU; images 0, 5, 40, 92; 6 walks; a 3-walk diagnostic; `--save-steps`), before and after
+  the change. The two outputs are identical bit for bit, the volatile `seconds` aside: `images.csv`, `probes.csv`,
+  `reconstruction.csv`, `curves.npz`, `steps.npz`, `validity_summary.json`, and the keys and values of `meta.yaml`.
+- **t = 0 against the training records** (`analysis_swap/check_point0.py`, local weights of A and E at 650,000, CPU,
+  12 (swap, slot) each).
+  - The swap protocol (150 walks, its own seeds) against the record's b at the same assignment and slot: |difference|
+    mean 0.022 (E) and 0.018 (A), maximum 0.064 (E) and 0.092 (A, the swap to sw at slot sw: -1.990 against -1.898).
+    Every slot stays in its class: m about -2 (-1.83 to -2.08), the others about 0 (-0.10 to +0.12).
+  - The replay with the record's own seed, walks and n_in: I differs from the record by at most 0.075 (exposed) and
+    0.035 (reference). This is NOT agreement up to rounding. torch's CPU and CUDA generators give different draws for
+    the same seed, so the replay on the CPU is another draw of the same measurement, not a reproduction of the record.
+    The draft's "agreement up to the device only" is corrected to: agreement within the noise of the draws.
+- **Reproducibility control, previewed locally.** Baseline A at 300,000 (E4's pair), the shared image measured in the
+  swap set on the CPU, against `e5_probes_baselines`' E4-set measurement (GPU, 28 October): b at nw -1.015 against
+  -0.981, a difference of -0.034. The probe is **invalid in both** (reference mass at step 1 at nw about 0.01 on that
+  image): the number reproduces, but it is not interpretable. On the cluster the batch gives it GPU against GPU, at
+  100,000 and 300,000.
+- **Export.** `export_batch.py` collected `probes__` directories only; it would not have brought this set back. For
+  `e5_probes_swap` (and only it) it now takes the `probes-swap__` directories with `swap_probes.csv`,
+  `validity_summary.json` and `reconstruction.csv` (tested).
+- **Duration.** One (image, zone) of this set takes about 130 s on the CPU with the 150-walk diagnostic. On the GPU,
+  the 650,000 probes took 350-520 s for 96 (image, zone) with a 50-walk diagnostic. Expect about 25-45 min per job for
+  372, so about 2-3 h for the seven jobs two at a time. This is an estimate, not a measurement.
+- Tests: `tests/e5/test_e5_swap_probes.py` (11). The existing E5 tests pass on the final code; the full suite ran in
+  40 min.
