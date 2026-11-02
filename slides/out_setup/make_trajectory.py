@@ -60,11 +60,6 @@ def arrow(d, s, a):
 frames = []
 for t, s in enumerate(states):
     img = Image.fromarray(w.templates_np[s]).resize((72 * SCALE,) * 2, Image.NEAREST).convert("RGB")
-    d = ImageDraw.Draw(img)
-    pts = [center(q) for q in states[max(0, t - TRAIL):t + 1]]
-    for p, q in zip(pts, pts[1:]):
-        if abs(p[0] - q[0]) < 100 and abs(p[1] - q[1]) < 100:  # skip torus wraps
-            d.line([p, q], fill=(255, 255, 255), width=3)
     frames.append(img)
 dur = [250] * len(frames); dur[-1] = 1000
 frames[0].save(HERE / "E4_trajectory.gif", save_all=True, append_images=frames[1:], duration=dur, loop=0, disposal=2)
