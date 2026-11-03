@@ -13,7 +13,7 @@ Predictions and thresholds: PREDICTIONS.md (committed before the mechanistic mea
 | mechanism.py | steps 2-4: a1 / a2 / b localisation, posterior statistics, sensitivity, per walk |
 | analyse.py | tables and verdicts from mechanism.py's outputs |
 | training_history.py | step 5 (H4): the runs' records only |
-| fig_*.py | the figures |
+| figures.py | the figures (figures/R1-R4) |
 
 Raw per-walk outputs (`mechanism.py --out-dir`) stay outside the repo; `tables/` holds what the report reads.
 Local roots used (Windows): runs `C:\nrw\e5_extends\extracted\e5_extend_{a,b}__*\results`,
