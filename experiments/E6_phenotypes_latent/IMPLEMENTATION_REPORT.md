@@ -1349,3 +1349,26 @@ versionnés : décision (63), § 21 ci-dessus pour les formes attendues) :
 Options ajoutées pour ce lancement (défauts = comportement antérieur, testés) : `run_e7_d7.py --image`, `--no-overlay` ;
 `run_e7_diagnostics.induction_items(plan_b=...)` ; `analyse_e7_d7.py --no-identity` (sans l'option, sorties de D7
 identiques bit pour bit).
+
+### Relance du 3 novembre : agents shuffle à 650 000
+
+Agents de `configs/e6/agents_e5.yaml` (0e8606c) : les 4 couples d'E4 et la baseline B à 300 000 (les poids à 100 000 ne
+sont pas locaux ; choix inchangé), shuffle A (graine 2, sa référence), E (402) et F (502) contre la référence de la
+graine B, à 650 000. Racine des runs `C:\nrw\e7_650k_root` : l'arborescence du cluster, une jonction de répertoire par
+dossier de run (baselines vers `C:\nrw\e6all`, shuffle vers `C:\nrw\e5_extends\extracted\e5_extend_{a,b}__*`), rien
+copié. Les 16 fichiers de poids résolus par `frozen_setup.load_agents` ont le SHA-256 de
+`experiments/E5_belief_training/analysis_robustness/tables/inventory.csv` (branche `e5-robust`, égal aux sondes du
+cluster) pour les 10 modèles qu'elle liste, et celui des runs du 28 octobre pour les 6 autres (p1-a, p2-a, p2-b d'E4).
+
+Images : `select_images.py` relancé sur les tables `analysis_650k` (inchangées depuis b5494ee) : sélection identique à
+celle commitée (37 images, 70 couples). p1-a_e4 et base_B n'ont aucune sonde valide intermédiaire (quota 2) : 2 + 2
+images et l'image d'entraînement.
+
+Phases, dans l'ordre : e6, c12, directions, constrained, corrected, oracle, anti, free (`chain_all_cpu.py`, 12
+processus ; c12 et anti ajoutés à la demande de l'utilisateur, nécessaires aux formes 2 à 4). Test à blanc avant le
+lancement (`--smoke f1_F segment_k1_ud`, n_reps = 1) : les 9 jobs terminés, sorties supprimées. Sorties de 475 000
+renommées en `scratch/all_475k/` ; nouvelles sorties dans `scratch/all/<job>/`, journaux dans `logs/all_cpu_650k/`
+(`STATUS.txt`, `pool_<phase>.txt`, `<phase>/<job>.log`). Durée estimée : 8 à 9 h.
+
+À faire après le run : `analyse_all.py --dev <runs de développement> --out <dir>`, comparaison aux formes 1 à 5
+ci-dessus, figure `E7_bars_650k`.
