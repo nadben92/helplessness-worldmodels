@@ -1215,3 +1215,49 @@ T_ctrl at nw and se, E4's "T_ctrl at the old UD slot", image 30 of E4's set).
   372, so about 2-3 h for the seven jobs two at a time. This is an estimate, not a measurement.
 - Tests: `tests/e5/test_e5_swap_probes.py` (11). The existing E5 tests pass on the final code; the full suite ran in
   40 min.
+
+## 2026-11-03 (39) -- pair A's swap probes measured against seed B's reference (user; implementer for the count)
+
+**Status: decided by the user on 3 November, before any probe of this measurement was run.** The results of (38) are in
+`analysis_swap/REPORT.md` (commit `cb80ae9`).
+
+**Decision (user's text).** On the swap probes, pair A is measured again against reference B (seed 102, 650,000), like
+E and F, because its own reference is invalid at `ne` (mass < 0.90 from t = 0 in the swaps to ne and sw). Nothing else
+changes: the same images, the same validity and localisation criteria, and the same reading rule as (38). The verdict is
+reported whatever it is, including "arrangement" or "not counted". The measurement of A against its own reference stays
+reported beside it.
+
+Risk known before launch: A's localisation falls at t >= 0.7, so A may have fewer than 3 kept points at t >= 0.5 and stay
+not counted.
+
+**How (38)'s "3 furthest counted points" are counted (checked in `analyse_swap.py`, implementer).**
+- `curves()` pools the swaps per (agent, axis, t). A point counts when Delta exists in at least 2 of the 3 swaps.
+- `verdict()` then takes the counted points by t. The 3 furthest points are therefore **3 distinct values of t**, all at
+  t >= 0.5, not 3 probes. The swaps of one t make a single point.
+
+**A's best case (implementer, from the data of (38), before launch).**
+- The localisation is the exposed model's. A's measurement against B keeps A's seed, walks and diagnostic generator, so
+  its localisation is expected to be the one already measured (minimum over the zones):
+  - arc_ctrl: >= 0.94 up to t = 0.6, then 0.01 from t = 0.7;
+  - segment: >= 0.91 everywhere except one zone at t = 0.6 (0.85);
+  - arc_inc: >= 0.89 everywhere.
+- **If A stays localised up to t = 0.6, it has at most 2 counted points at t >= 0.5 (t = 0.5 and 0.6) on arc_ctrl.** That
+  is fewer than the 3 required, so A is not counted on arc_ctrl.
+- On the other axes the limit is reference B's validity. Against B, validity is close to a property of the reference: E
+  and F agree on 379 of 396 rows.
+- With B's validity as observed for E (or for F) and A's measured localisation, A would count at:
+  - segment: t = 0.5 (with F's validity: 0.5 and 0.7);
+  - arc_ctrl: t = 0.5 and 0.6;
+  - arc_inc: no t >= 0.5.
+- So **A is expected to stay not counted on every axis**. This is a projection, not a measurement. The batch is run to
+  measure it, and its verdict is reported whatever it is, as decided above.
+
+**Implementation.**
+- Batch `e5_probes_swap_A_refB`: one job, `swap_A_sh100_k650000`, with `--reference-seed-label B` (a reference of the
+  batch only, `batches.BATCH_REFERENCE_SEED_OF`; `REFERENCE_SEED_OF` is unchanged).
+- `measure_probes.py --name-reference` (off by default) names the output `probes-swap__...__seed02__refB__k650000__<UTC>`
+  and writes `reference_seed_label` in `meta.yaml`. Without it, the names and the meta are unchanged, E's and F's
+  included.
+- The export takes `...__refB__` directories for this batch only. The other batches leave them out.
+- `analyse_swap.py`: A against B is A's measurement in the sense of (39) (label `shuffle_A-refB_k650000`). When it is
+  given, A against its own reference (`shuffle_A_k650000`) is reported but leaves the conclusion.
