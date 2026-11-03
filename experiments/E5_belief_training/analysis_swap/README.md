@@ -18,7 +18,17 @@ Written before any probe of this set was launched. The data come from `e5_probes
   tables/point0_records.csv`: the batch's t = 0 (GPU) against the training records, no weights (after the batch).
 - `posthoc_swap.py --tables tables`: POST HOC variants of the rule (1 swap enough; b(moved) instead of Delta; class
   levels at t >= 0.5), `posthoc.json`. Written after the data were seen; not part of (38).
-- `REPORT.md`: the results of `e5_probes_swap`.
+- `REPORT.md`: the results of `e5_probes_swap`; section 10, EXPLORATORY: the start of the gradient.
+- `gradient_start.py <probes-swap dirs> --out tables`: EXPLORATORY (REPORT.md section 10, rule written first). b(m),
+  b(m) - neutral and the witnesses from t = 0 to the last kept t, paired bootstrap over the walks (from steps.npz);
+  `gradient_points.csv`, `gradient_start.json`. `fig_color_gradient.py --tables tables --out-dir <e6 worktree>/slides/
+  out_e5/png_white`: `E5g_color_gradient.png` (one column per axis, one row per shuffle agent with its localisation
+  below; hollow = not kept, shaded = slot m's localisation below 0.90, light grey = baselines).
+- `assignments_records.py --pair <label> <exp run> <ref run> ... --checkpoint 650000 --out tables/assignments_records.csv`:
+  b per slot in the 12 training assignments from the checkpoint records (THEME_EVIDENCE.md, item 1).
+- `THEME_EVIDENCE.md`: the evidence on the theme, item by item (status, numbers, what it separates, limits).
+- (39): A against B's reference is labelled `shuffle_A-refB_k650000`; given with A against its own reference, it replaces
+  it in the conclusions and in E5f (the other is still read and listed as `superseded`).
 - `fig_swap_gradient.py --tables tables --out-dir <e6 worktree>/slides/out_e5/png_white`: `E5f_swap_gradient.png`, on a
   white background.
 
