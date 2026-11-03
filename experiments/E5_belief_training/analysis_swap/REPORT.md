@@ -202,3 +202,84 @@ What the data show instead, post hoc and on few points:
 This is neither "colour only" nor "arrangement". The belief becomes diffuse over the image once T_inc is gone, with a
 residue at nw for F. The reserve on colours never seen in training applies here in full: a diffuse image-wide effect is
 what an out-of-distribution colour could produce.
+
+## 10. Exploratory analysis, not planned by (38): the start of the gradient
+
+**Status: exploratory** (user's request, 3 November, after (38)'s results). The reading below was written before the
+bootstrap and the differences were computed. The pooled curves of sections 1-3 had already been seen; what is new here
+is the test and its rule.
+
+**Question.** On the part of the gradient where the agents stay well localised, does b(m) change when only the colour of m
+changes, the arrangement staying fixed?
+
+**Portion read (fixed before the numbers).** For each agent and axis, the kept points only (valid AND localised >= 0.90;
+no criterion relaxed):
+- t_last is the largest t such that, at every t' <= t, slot m is kept in the same set of swaps;
+- that set holds at least 2 swaps where the agent has 2 at t = 0, else 1 (reported);
+- the difference is taken between t = 0 and t_last on those same swaps (paired).
+- For b(m) - neutral, a swap also needs at least one neutral slot kept at both ends.
+
+**Interval.** Bootstrap over the walks (2,000 resamples). The walks of a slot are the same on every image, so the
+resample is shared across t, which makes it paired. Each resample recomputes the measure's own estimator: the mean
+over states of each state's mean at step 1 (`fixed_trajectory.summarize_zone`), exposed and reference separately.
+Interval: 95 % percentile of the difference. Standard errors per point: the bootstrap SD.
+
+**Reading (written before the numbers).**
+- **b(m) rises significantly** (the 95 % interval of Delta b(m) above 0) on a portion where slot m stays localised
+  >= 0.90 and the arrangement is fixed:
+  - the agent reads the colour of m, at least in part;
+  - this holds as a slot-specific reading only if b(m) - neutral also rises (interval above 0). If b(m) rises and
+    b(m) - neutral does not, the change is an image-wide shift, not a reading of slot m.
+- **b(m) stays at about -2** (interval containing 0, or a rise < 0.2 bit): **not conclusive**. The agent may generalise
+  the colour T_inc to the nearby colours, or read the arrangement; the start of the gradient does not separate them.
+- In both cases the witnesses (nw, neutral slots) and the localisation at each t are reported beside.
+
+### Results (`gradient_start.py`, `tables/gradient_start.json`, `tables/gradient_points.csv`; figure `E5g_color_gradient.png`)
+
+Interval: 95 % bootstrap over the walks (paired). For each agent and axis with a portion beyond t = 0:
+
+| agent | axis | portion (swaps) | loc of m < 0.90 from t (portion's swaps / all three) | Delta b(m) | Delta (b(m) - neutral) | Delta neutral / Delta nw | reading (rule above) |
+|---|---|---|---|---|---|---|---|
+| A (own ref) | arc_ctrl | 0 -> 0.6 (sw, se; Delta: se only) | 0.7 / 0.7 | **+1.35** [+1.29, +1.41] (-1.97 -> -0.62) | **+1.16** [+1.05, +1.28] | -0.21 / -0.54 | rises, slot-specific |
+| A (own ref) | segment | 0 -> 0.4 (sw, se; Delta: se) | 0.6 / 0.6 | +0.06 [+0.01, +0.12] | +0.04 [-0.02, +0.11] | +0.00 / -0.00 | stays: not conclusive |
+| E | arc_ctrl | 0 -> 0.4 (ne, sw) | 0.5 / 0.4 | **+0.49** [+0.43, +0.55] (-2.04 -> -1.55) | **+0.66** [+0.59, +0.73] | -0.17 / -0.16 | rises, slot-specific |
+| E | segment | 0 -> 0.6 (ne, se) | none / 0.6 | **+1.55** [+1.49, +1.60] (-1.97 -> -0.43) | **+1.97** [+1.90, +2.03] | -0.42 / -- | rises, slot-specific |
+| F | arc_ctrl | 0 -> 0.8 (ne, se) | 1.0 / 1.0 | **+1.89** [+1.84, +1.93] (-2.18 -> -0.29) | **+2.24** [+2.19, +2.31] | -0.36 / -0.67 | rises, slot-specific |
+| F | segment | 0 -> 0.7 (ne, se) | 0.8 / 0.7 | **+1.24** [+1.19, +1.30] (-2.18 -> -0.94) | **+1.84** [+1.77, +1.91] | -0.60 / -- | rises, slot-specific |
+| F | arc_inc | 0 -> 0.7 (sw only) | none / 0.0 | +0.24 [+0.15, +0.33] (-0.50 -> -0.26) | -0.02 [-0.15, +0.11] | -- | rises, not slot-specific |
+
+Other notes on the table:
+- The baselines (qualitative, kept zones only, over their valid portions to t = 0.3-0.6):
+  - Delta b(m) lies between -0.16 and +0.03, with b(m) at about 0 throughout;
+  - b(nw) stays at -2.0 to -2.3 (Delta -0.03 to +0.17).
+- **The start is flat**: b(m) stays within 0.1 of its t = 0 value up to t = 0.1 on arc_ctrl (A, F), 0.3 (E), and on the
+  segment up to t = 0.2 (E), 0.3 (F) and 0.4 (A, the end of its portion). The rise starts at:
+  - arc_ctrl: t = 0.2 (A -1.72, F -1.77), t = 0.4 (E -1.55);
+  - segment: t = 0.4 (E -1.54), t = 0.5 (F -1.56).
+- A's segment portion stops at t = 0.4, before that onset: its "not conclusive" is consistent with E and F at the same t.
+- "--" in the witness column: nw is not kept at both ends of the portion (or the portion uses only the swap to se, where
+  nw is the CD slot).
+- arc_inc has a portion for F only (1 swap). No agent has one for A against its own reference or for E.
+
+**Reading, by the rule written above:**
+- On arc_ctrl (A, E, F) and on the segment (E, F), b(m) rises from about -2 by 0.5 to 1.9 bits. The rise happens where
+  slot m is still kept, so it is valid and localised >= 0.90 at every t of the portion, while the three other quadrants,
+  hence the arrangement, are fixed.
+- b(m) - neutral rises too, by more: the neutral slots fall a little while b(m) rises. The change is slot-specific.
+- Under the rule, **each of the three shuffle agents reads the colour of m, at least in part**, on the start of the
+  gradient. That is: with the arrangement fixed, the belief at m depends on the colour of m.
+
+**Limits (to state with the result):**
+- **Exploratory.** (38)'s plateau rule, the planned reading, stays "not readable".
+- **The interval is the walks' sampling only.** It excludes the measurement draws (about 0.05 bit, `shared_image.csv`),
+  the choice of t_last, and the seed. The effects (0.5-1.9 bit) are far above the first two. Across seeds, the three
+  agents agree in sign on arc_ctrl, E and F agree on the segment, and A's segment portion is too short.
+- **Colours never seen in training** ((38)'s reserve). From t > 0 slot m carries a new colour.
+  - The data show that the belief at m does not survive a change of the colour of m alone. They do not show which
+    feature of the colour is read, nor how wide the generalisation around T_inc is (flat up to 0.1-0.3 D, depending on the axis and the agent).
+  - An out-of-distribution effect specific to slot m is not excluded by the witnesses, which only filter image-wide
+    effects.
+- **The portion is selected by the data** (kept points). Where the localisation fails (E on arc_ctrl from 0.4-0.5, A from
+  0.7), nothing is read, and the hollow points of E5g are not interpreted.
+- **A against its own reference**: its Delta rests on the swap to se alone (`ne` invalid). A against B's reference ((39))
+  will be added here when its data arrive.
