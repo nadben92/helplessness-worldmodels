@@ -247,6 +247,17 @@ Interval: 95 % bootstrap over the walks (paired). For each agent and axis with a
 | F | arc_ctrl | 0 -> 0.8 (ne, se) | 1.0 / 1.0 | **+1.89** [+1.84, +1.93] (-2.18 -> -0.29) | **+2.24** [+2.19, +2.31] | -0.36 / -0.67 | rises, slot-specific |
 | F | segment | 0 -> 0.7 (ne, se) | 0.8 / 0.7 | **+1.24** [+1.19, +1.30] (-2.18 -> -0.94) | **+1.84** [+1.77, +1.91] | -0.60 / -- | rises, slot-specific |
 | F | arc_inc | 0 -> 0.7 (sw only) | none / 0.0 | +0.24 [+0.15, +0.33] (-0.50 -> -0.26) | -0.02 [-0.15, +0.11] | -- | rises, not slot-specific |
+| **A (ref B, (39))** | arc_ctrl | 0 -> 0.6 (ne, sw, se) | 0.7 / 0.7 | **+1.20** [+1.15, +1.25] (-2.06 -> -0.86) | **+1.77** [+1.70, +1.85] | -0.58 / -0.52 | rises, slot-specific |
+| **A (ref B)** | segment | 0 -> 0.5 (ne, sw, se) | 0.6 / 0.6 | +0.17 [+0.13, +0.22] (-2.06 -> -1.89) | +0.18 [+0.13, +0.23] | -0.01 / +0.04 | stays: not conclusive (rise < 0.2 bit) |
+| A (ref B) | arc_inc | 0 -> 0.8 (sw only; Delta: 0 -> 0.5) | none / 0.2 | +0.26 [+0.17, +0.34] (-0.51 -> -0.25) | +0.18 [+0.01, +0.35] | -- | rule: rises, slot-specific (not interpreted, below) |
+
+A against B's reference was added on 3 November (section 11). The other agents' rows are unchanged: the bootstrap
+streams are drawn in the order of the measurements, and A against B comes last.
+
+**arc_inc does not answer this section's question.** Its t = 0 is T_ctrl, not T_inc ((38), amendment 1): every point
+is at D from T_inc, and t is the distance from T_ctrl. A difference from t = 0 on arc_inc is therefore not the start of
+a gradient away from T_inc. Its rows (F, A against B) are given because the rule was applied to every axis, and they are
+not read.
 
 Other notes on the table:
 - The baselines (qualitative, kept zones only, over their valid portions to t = 0.3-0.6):
@@ -281,5 +292,56 @@ Other notes on the table:
     effects.
 - **The portion is selected by the data** (kept points). Where the localisation fails (E on arc_ctrl from 0.4-0.5, A from
   0.7), nothing is read, and the hollow points of E5g are not interpreted.
-- **A against its own reference**: its Delta rests on the swap to se alone (`ne` invalid). A against B's reference ((39))
-  will be added here when its data arrive.
+- **A against its own reference**: its Delta rests on the swap to se alone (`ne` invalid). Against B's reference
+  ((39), section 11) A has all three swaps on arc_ctrl:
+  - Delta b(m) = +1.20 [+1.15, +1.25] and Delta (b(m) - neutral) = +1.77 [+1.70, +1.85], from t = 0 to 0.6, the last t
+    before its delocalisation at 0.7;
+  - the same direction as against its own reference (+1.35 / +1.16 on 1-2 swaps).
+  - On the segment its portion ends at t = 0.5, before the rise (+0.17, below the 0.2-bit threshold): not conclusive,
+    as against its own reference.
+
+## 11. A against seed B's reference ((39), batch `e5_probes_swap_A_refB`)
+
+Archive `e5_probes_swap_A_refB__20261103T104752Z` (1 job, exit 0; manifest SHA-256 checked on the 12 files):
+- Weights: exposed = A's (SHA-256 identical to the own-reference measurement), reference = B's (identical to E's and
+  F's).
+- Rows: 252/396 valid, 217 kept, against 142 / 127 for A against its own reference.
+- `shuffle_A-refB_k650000` is A's measurement in the sense of (39). In `reading.json`, A against its own reference is
+  listed as `superseded` and leaves the conclusions. E5f now draws A against B.
+
+**(38)'s rule with A against B:**
+
+| axis | A against B: counted points at t >= 0.5 | plateau | verdict | (39)'s projection | conclusion of the axis |
+|---|---|---|---|---|---|
+| arc_ctrl (primary) | 2 (0.5, 0.6); delocalised from 0.7 | (-0.29) | **not counted** | at most 2 (0.5, 0.6): not counted, **as projected** | **not readable** (F only, colour) |
+| arc_inc (primary) | 0 | -- | **not counted** | 0, **as projected** | **not readable** |
+| segment (secondary), all t | 3 (0.5, 0.7, 0.9) | **-0.43** (-1.83, -0.05, +0.60) | **colour** | 1-2 (0.5; or 0.5, 0.7): **the projection was wrong** | no majority (A colour, F both) |
+| segment, without t >= 0.8 | 2 (0.5, 0.7) | (-0.94) | not counted | -- | not readable |
+
+- **The primary conclusion does not change: not readable** on arc_ctrl and arc_inc.
+- On arc_ctrl, A against B is lost exactly where the projection said, at the delocalisation from t = 0.7.
+  - Its 2 far points would read "colour" (-0.35, -0.23). With 2 points, the rule does not count them.
+- **Segment: the projection counted too few points.**
+  - The projection took B's validity as observed for E and for F, separately. With E's validity it gave 1 swap at
+    t = 0.7 and 0.9; with F's it gave 2 at 0.7 but 1 at 0.9. For A, B's reference is valid (and A localised) in 2 swaps
+    at both 0.7 and 0.9.
+  - The measurement draws are seeded by the exposed run's seed, so the validity against the same reference differs
+    slightly between agents. That difference was within the 17/396 disagreement between E and F, and the projection
+    did not allow for it.
+- **The segment's "colour" verdict is fragile and secondary:**
+  - Its 3 points are t = 0.5 (Delta -1.83, still at the start of the rise), 0.7 (-0.05) and 0.9 (+0.60).
+  - t = 0.9 is a flagged near-duplicate (two T_ctrl-like quadrants). There Delta = +0.60 comes from b(m) = -0.43 with the
+    neutral slots at -1.02.
+  - The neutral witness departs at t = 0.6-1.0.
+  - Without the near-duplicate points, A is not counted. The rule's verdict is reported as it stands, with these points.
+- **Witnesses** (A against B):
+  - nw is "about 0" on arc_ctrl and the segment. On arc_ctrl it is still -0.27 to -0.34 from t = 0.3, above the
+    threshold.
+  - The neutral slots depart on arc_ctrl (t = 0.3-0.6, -0.52 to -0.63), on the segment (t = 0.6-1.0) and on arc_inc
+    (t = 0-0.2).
+  - The shape is the same as E's and F's: the rest of the image falls as m leaves T_inc.
+- **Point 0** (base images, segment and arc_ctrl): Delta(0) = -2.01, and every zone is kept, `ne` included. Over the
+  whole set, `ne` is valid in 71 of its 99 rows, against 0 in the swaps to ne and sw with A's own reference.
+- **Start of the gradient** (section 10): on arc_ctrl, +1.20 [+1.15, +1.25] (b(m)) and +1.77 [+1.70, +1.85]
+  (b(m) - neutral) on three swaps up to t = 0.6. This is the rise that against its own reference rested on one or two
+  swaps.

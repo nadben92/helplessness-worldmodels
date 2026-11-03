@@ -18,6 +18,34 @@
   "segment": {
    "role": "secondary",
    "agents": {
+    "shuffle_A-refB_k650000": {
+     "points": {
+      "0.0": -2.0085,
+      "0.1": -2.0207,
+      "0.2": -2.0197,
+      "0.3": -2.0154,
+      "0.4": -1.9481,
+      "0.5": -1.8279,
+      "0.7": -0.0542,
+      "0.9": 0.5965
+     },
+     "n_far_points": 3,
+     "plateau": -0.4285486368357248,
+     "plateau_t": [
+      0.5,
+      0.7,
+      0.9
+     ],
+     "plateau_without_near_duplicates": -0.9410713799710437,
+     "plateau_without_near_duplicates_t": [
+      0.5,
+      0.7
+     ],
+     "delta_0": -2.00846998922836,
+     "counted": true,
+     "verdict": "colour",
+     "verdict_without_near_duplicates": "not counted"
+    },
     "shuffle_A_k650000": {
      "points": {},
      "n_far_points": 0,
@@ -84,12 +112,37 @@
      "verdict_without_near_duplicates": "both"
     }
    },
-   "conclusion": "not readable",
+   "conclusion": "no majority",
    "conclusion_without_near_duplicates": "not readable"
   },
   "arc_ctrl": {
    "role": "primary",
    "agents": {
+    "shuffle_A-refB_k650000": {
+     "points": {
+      "0.0": -2.0085,
+      "0.1": -2.0076,
+      "0.2": -1.7291,
+      "0.3": -0.536,
+      "0.4": -0.4136,
+      "0.5": -0.345,
+      "0.6": -0.2335
+     },
+     "n_far_points": 2,
+     "plateau": -0.28925753383373787,
+     "plateau_t": [
+      0.5,
+      0.6
+     ],
+     "plateau_without_near_duplicates": -0.28925753383373787,
+     "plateau_without_near_duplicates_t": [
+      0.5,
+      0.6
+     ],
+     "delta_0": -2.00846998922836,
+     "counted": false,
+     "verdict": "not counted"
+    },
     "shuffle_A_k650000": {
      "points": {},
      "n_far_points": 0,
@@ -154,6 +207,19 @@
   "arc_inc": {
    "role": "primary",
    "agents": {
+    "shuffle_A-refB_k650000": {
+     "points": {
+      "0.2": 0.5496
+     },
+     "n_far_points": 0,
+     "plateau": null,
+     "plateau_t": [],
+     "plateau_without_near_duplicates": null,
+     "plateau_without_near_duplicates_t": [],
+     "delta_0": null,
+     "counted": false,
+     "verdict": "not counted"
+    },
     "shuffle_A_k650000": {
      "points": {},
      "n_far_points": 0,
@@ -195,6 +261,44 @@
  },
  "witnesses": {
   "segment": {
+   "shuffle_A-refB_k650000": {
+    "old_ud": {
+     "points": {
+      "0.0": 0.0164,
+      "0.1": 0.0171,
+      "0.2": 0.0063,
+      "0.3": 0.0077,
+      "0.4": 0.0317,
+      "0.5": 0.0394,
+      "0.6": -0.3691
+     },
+     "reading": "about 0",
+     "departs_at": []
+    },
+    "neutral": {
+     "points": {
+      "0.0": -0.0528,
+      "0.1": -0.0374,
+      "0.2": -0.0461,
+      "0.3": -0.0402,
+      "0.4": -0.0424,
+      "0.5": -0.0596,
+      "0.6": -0.5322,
+      "0.7": -0.778,
+      "0.8": -0.8322,
+      "0.9": -1.0241,
+      "1.0": -0.8808
+     },
+     "reading": "departs",
+     "departs_at": [
+      0.6,
+      0.7,
+      0.8,
+      0.9,
+      1.0
+     ]
+    }
+   },
    "shuffle_A_k650000": {
     "old_ud": {
      "points": {
@@ -297,6 +401,39 @@
    }
   },
   "arc_ctrl": {
+   "shuffle_A-refB_k650000": {
+    "old_ud": {
+     "points": {
+      "0.0": 0.0164,
+      "0.1": 0.0063,
+      "0.2": -0.0198,
+      "0.3": -0.2683,
+      "0.4": -0.3181,
+      "0.5": -0.341,
+      "0.6": -0.3435
+     },
+     "reading": "about 0",
+     "departs_at": []
+    },
+    "neutral": {
+     "points": {
+      "0.0": -0.0528,
+      "0.1": -0.0436,
+      "0.2": -0.1268,
+      "0.3": -0.5153,
+      "0.4": -0.5669,
+      "0.5": -0.5863,
+      "0.6": -0.6294
+     },
+     "reading": "departs",
+     "departs_at": [
+      0.3,
+      0.4,
+      0.5,
+      0.6
+     ]
+    }
+   },
    "shuffle_A_k650000": {
     "old_ud": {
      "points": {
@@ -395,6 +532,26 @@
    }
   },
   "arc_inc": {
+   "shuffle_A-refB_k650000": {
+    "old_ud": {
+     "points": {},
+     "reading": "no counted point",
+     "departs_at": []
+    },
+    "neutral": {
+     "points": {
+      "0.0": -0.8808,
+      "0.1": -1.0345,
+      "0.2": -0.9691
+     },
+     "reading": "departs",
+     "departs_at": [
+      0.0,
+      0.1,
+      0.2
+     ]
+    }
+   },
    "shuffle_A_k650000": {
     "old_ud": {
      "points": {},
@@ -450,5 +607,8 @@
     }
    }
   }
- }
+ },
+ "superseded": [
+  "shuffle_A_k650000"
+ ]
 }

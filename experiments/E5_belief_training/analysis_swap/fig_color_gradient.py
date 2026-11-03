@@ -40,7 +40,7 @@ LOC_MIN = 0.90
 AXES = ("arc_ctrl", "segment", "arc_inc")
 AGENTS = ("shuffle_A_k650000", "shuffle_A-refB_k650000", "shuffle_E_k650000", "shuffle_F_k650000")
 ROW_NAME = {"shuffle_A_k650000": "A (own ref)", "shuffle_A-refB_k650000": "A (ref B)", "shuffle_E_k650000": "E", "shuffle_F_k650000": "F"}
-YLIM, LOC_YLIM = (-2.6, 0.6), (0.0, 1.05)
+YLIM, LOC_YLIM = (-2.6, 1.0), (0.0, 1.05)  # b(m) - neutral reaches +0.83 (A against B, arc_inc)
 
 
 def number(v: str) -> float | None:

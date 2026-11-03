@@ -14,7 +14,8 @@ localisation at step 1 >= 0.90.
 Agents:
 - shuffle A (seed 2, own reference);
 - E (402) and F (502), against reference B (seed 102);
-- A against reference B ((39), pending).
+- A against reference B ((39), measured on 3 November). It is A's measurement under (38) from then on, with A
+  against its own reference reported beside it.
 
 Baselines A and B are qualitative only.
 
@@ -68,16 +69,32 @@ Baselines A and B are qualitative only.
     image lowered. It does not reflect a return of the image to 0. (38) itself says that a witness that departs
     qualifies the plateau.
 
-## 3. A against reference B ((39)): pending
+## 3. A against reference B ((39)): not counted on the primary axes, "colour" on the secondary segment
 
-- **Status**: planned ((39), committed before launch). Batch `e5_probes_swap_A_refB`.
-- **Numbers**: to be filled when the data arrive.
-- **Expected count (projection in (39), not a result)**:
-  - arc_ctrl: at most 2 counted points at t >= 0.5 (t = 0.5, 0.6), since A is delocalised from t = 0.7;
-  - segment: 1-2 points, given B's validity;
-  - arc_inc: 0 points.
-  - So A is expected to stay not counted under (38). Its verdict is reported whatever it is.
-- **What it can add**: A's start of the gradient against a reference valid at `ne` (item 4), on 2-3 swaps instead of 1.
+- **Status**: planned ((39), its decision and projection committed before launch). Batch `e5_probes_swap_A_refB`
+  (REPORT.md section 11).
+- **Numbers**:
+  - 252/396 rows valid and 217 kept, against 142 / 127 with A's own reference.
+  - Point 0: Delta(0) = -2.01, every zone kept.
+  - arc_ctrl: 2 counted points at t >= 0.5 (0.5, 0.6; -0.35, -0.23), then delocalised from 0.7. **Not counted**, as
+    projected.
+  - arc_inc: 0 points. **Not counted**, as projected.
+  - Segment (secondary): 3 points (0.5, 0.7, 0.9), plateau **-0.43 -> "colour"**. The projection said 1-2 points; it
+    was wrong on this axis.
+    - Without the near-duplicate point t = 0.9 (two T_ctrl-like quadrants; there Delta = +0.60 comes from b(m) = -0.43
+      with the neutral slots at -1.02), A is not counted.
+  - The conclusions:
+    - arc_ctrl and arc_inc: still **not readable** (F alone counted, "colour");
+    - segment: "no majority" (A colour, F both);
+    - segment without t >= 0.8: not readable.
+- **What it separates**: the same as item 2 where it counts. On the segment the far points mix the rise (t = 0.5),
+  t = 0.7, and a near-duplicate image.
+- **What it does not separate**: on its only counted axis, the effect of the colour from the near-duplicate
+  arrangement and from the fall of the neutral slots (the witness departs at t = 0.6-1.0).
+- **Limits**:
+  - The segment is secondary, so its verdict does not enter (38)'s main conclusion.
+  - The verdict rests on a near-duplicate point and does not survive without it.
+- **What it adds to item 4**: A's start of the gradient on all three swaps (below).
 
 ## 4. The start of the gradient: b(m) rises with the colour alone, arrangement fixed
 
@@ -89,11 +106,15 @@ Baselines A and B are qualitative only.
   | agent | axis | t_last | Delta b(m) | Delta (b(m) - neutral) | witnesses on the portion (Delta neutral / Delta nw) |
   |---|---|---|---|---|---|
   | A (own ref) | arc_ctrl | 0.6 | +1.35 [+1.29, +1.41] | +1.16 [+1.05, +1.28] (swap to se only) | -0.21 / -0.54 |
+  | **A (ref B)** | arc_ctrl | 0.6 | **+1.20** [+1.15, +1.25] (3 swaps) | **+1.77** [+1.70, +1.85] (3 swaps) | -0.58 / -0.52 |
   | E | arc_ctrl | 0.4 | +0.49 [+0.43, +0.55] | +0.66 [+0.59, +0.73] | -0.17 / -0.16 |
   | E | segment | 0.6 | +1.55 [+1.49, +1.60] | +1.97 [+1.90, +2.03] | -0.42 / -- |
   | F | arc_ctrl | 0.8 | +1.89 [+1.84, +1.93] | +2.24 [+2.19, +2.31] | -0.36 / -0.67 |
   | F | segment | 0.7 | +1.24 [+1.19, +1.30] | +1.84 [+1.77, +1.91] | -0.60 / -- |
   | A (own ref) | segment | 0.4 | +0.06 [+0.01, +0.12] | +0.04 [-0.02, +0.11] | 0.00 / 0.00 (portion ends before the rise) |
+  | A (ref B) | segment | 0.5 | +0.17 [+0.13, +0.22] | +0.18 [+0.13, +0.23] | -0.01 / +0.04 (portion ends at the start of the rise; below 0.2 bit: not conclusive) |
+
+  - arc_inc is not read here: its t = 0 is T_ctrl, not T_inc (REPORT.md section 10).
 
   - The rise starts at t = 0.2 (A, F) to 0.4 (E) on arc_ctrl, and at 0.4-0.5 on the segment.
   - On the same portions the baselines' b(m) stays at about 0 (Delta -0.16 to +0.03) and their b(nw) at -2.0 to -2.3.
@@ -112,7 +133,7 @@ Baselines A and B are qualitative only.
   - The interval covers the walks' sampling only: neither the measurement draws (about 0.05 bit) nor the seed are in
     it.
   - The portion is selected by the kept points.
-  - A's Delta rests on one swap.
+  - Against its own reference, A's Delta rests on one swap. Against B's reference it rests on three, and it agrees.
 
 ## 5. "Theme only" at 475,000, valid, and invalid at 650,000
 
@@ -152,10 +173,14 @@ Baselines A and B are qualitative only.
 - **Supported:**
   - Under shuffle the belief is not tied to a fixed position (item 1, in distribution, 3 agents, 12/12).
   - With the arrangement fixed, it depends on the colour of the T_inc quadrant on the start of the gradient (item 4:
-    exploratory, 3 agents, effects far above the walks' and draws' noise).
+    exploratory, 3 agents, effects far above the walks' and draws' noise; for A, on 1-2 swaps against its own reference
+    and on 3 against B's).
 - **Not established:**
-  - **Colour against arrangement under (38)'s planned rule** (not readable; one counted agent, F, reads "colour").
+  - **Colour against arrangement under (38)'s planned rule**: not readable on the primary axes, where only F is
+    counted ("colour"). A against B is counted only on the secondary segment ("colour", resting on a near-duplicate
+    point), and the segment has no majority.
   - The far-gradient level of the belief, where the localisation, the validity and the witnesses all limit the reading.
   - That the colour is the ONLY cue: a residue at nw remains when T_inc is absent ("position only", and nw on the far
     swap images).
-- **Pending:** A against reference B ((39)), expected not counted under (38) and usable for item 4.
+- **A against reference B ((39))** did not change (38)'s conclusion, as projected for the primary axes. It confirms
+  item 4 on three swaps.
