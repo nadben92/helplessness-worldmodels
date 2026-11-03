@@ -14,6 +14,11 @@ Written before any probe of this set was launched. The data come from `e5_probes
   - the main conclusion is read on arc_ctrl and arc_inc; the segment is secondary, with and without t >= 0.8;
   - `--compare-probes <probes__ dirs>`: `shared_image.csv`, the reproducibility control on the one image shared with
     E4's set (T_ctrl at nw and se), against the E4-set measurement of the same model and checkpoint.
+- `point0_records.py --rows tables/rows.csv --pair <label> <experimental run> <reference run> ... --out
+  tables/point0_records.csv`: the batch's t = 0 (GPU) against the training records, no weights (after the batch).
+- `posthoc_swap.py --tables tables`: POST HOC variants of the rule (1 swap enough; b(moved) instead of Delta; class
+  levels at t >= 0.5), `posthoc.json`. Written after the data were seen; not part of (38).
+- `REPORT.md`: the results of `e5_probes_swap`.
 - `fig_swap_gradient.py --tables tables --out-dir <e6 worktree>/slides/out_e5/png_white`: `E5f_swap_gradient.png`, on a
   white background.
 
@@ -29,7 +34,7 @@ Written before any probe of this set was launched. The data come from `e5_probes
   - the old UD slot nw: the UD zone colour, dash-dot line, over the three swaps (a witness).
 - **Markers**: one per agent (A circle, E square, F triangle; baseline B square). A filled marker counts for the reading
   rule, a hollow one does not.
-- **Bottom crosses**: no kept moved slot at that t (invalid or badly localised).
+- **Bottom crosses**: no agent of the row has a kept moved slot at that t (invalid or badly localised).
 - **Shaded areas**: the near-duplicate points (segment t >= 0.8, arc_inc t <= 0.2).
 - **Dashed lines**: 0 (grey) and -log2 5 (black).
 

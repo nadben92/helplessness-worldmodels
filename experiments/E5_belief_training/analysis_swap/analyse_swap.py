@@ -118,7 +118,7 @@ def deltas(pts: list[dict]) -> list[dict]:
     return out
 
 
-def curves(pts: list[dict], dls: list[dict]) -> list[dict]:
+def curves(pts: list[dict], dls: list[dict], min_swaps: int = MIN_SWAPS) -> list[dict]:
     cells, near = defaultdict(dict), defaultdict(bool)
     for p in pts:
         cells[(p["label"], p["axis"], p["t"], p["class"])][p["swap"]] = p["b"]
@@ -127,7 +127,7 @@ def curves(pts: list[dict], dls: list[dict]) -> list[dict]:
         cells[(d["label"], d["axis"], d["t"], "delta")][d["swap"]] = d["delta"]
         near[(d["label"], d["axis"], d["t"], "delta")] |= d["near_duplicate"]
     return [{"label": key[0], "axis": key[1], "t": key[2], "class": key[3], "mean": float(np.mean(list(v.values()))), "n_swaps": len(v),
-             "swaps": " ".join(sorted(v)), "counts": len(v) >= MIN_SWAPS, "near_duplicate": near[key]}
+             "swaps": " ".join(sorted(v)), "counts": len(v) >= min_swaps, "near_duplicate": near[key]}
             for key, v in sorted(cells.items())]
 
 

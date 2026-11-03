@@ -11,7 +11,7 @@ zones (the classes of analyse_swap.py):
   old UD (nw)   the UD zone colour, dash-dot line (a witness, (38))
 Markers: the agent (A circle, E square, F triangle; baselines A circle, B square). A filled marker counts for the reading
 rule (kept in at least 2 of the 3 swaps), a hollow one does not; a cross on the bottom edge marks
-a t where the agent has NO kept moved slot (invalid or badly localised). Shaded: the near-duplicate points (segment t >=
+a t where NO agent of the row has a kept moved slot (invalid or badly localised). Shaded: the near-duplicate points (segment t >=
 0.8, arc_inc t <= 0.2). Dashed: 0 (grey) and -log2 5 (black).
 
 Usage: python experiments/E5_belief_training/analysis_swap/fig_swap_gradient.py --tables <analyse_swap tables>
@@ -67,7 +67,12 @@ def draw(ax, crv: list[dict], pts: list[dict], label: str, axis: str, colour: st
         ax.plot([s[0] for s in sel], [s[1] for s in sel], ls, color=col, lw=LW * 0.7, alpha=0.9, zorder=2)
         for t, b, counts in sel:
             ax.plot(t, b, mk, color=col, mfc=col if counts else "white", mec=col, mew=1.8, ms=MS, zorder=3)
-    have = {round(float(p["t"]), 2) for p in pts if p["label"] == label and p["axis"] == axis and p["class"] == "moved"}
+
+
+def draw_missing(ax, pts: list[dict], labels: list[str], axis: str, colour: str) -> None:
+    """A cross on the bottom edge where NO agent of the row has a kept moved slot (one row-level mark: per-agent crosses at
+    the same height hid the agents that do have one)."""
+    have = {round(float(p["t"]), 2) for p in pts if p["label"] in labels and p["axis"] == axis and p["class"] == "moved"}
     missing = [k / 10 for k in range(11) if round(k / 10, 2) not in have]
     if missing:  # an empty unclipped line would sit at the figure's origin and break the layout
         ax.plot(missing, [YLIM[0] + 0.08] * len(missing), "x", color=colour, mew=2.2, ms=MS, zorder=3, clip_on=False)
@@ -99,6 +104,7 @@ def main(argv: list[str] | None = None) -> int:
             ax.axhline(-LOG2_5, color=THEORY, ls="--", lw=2.2, zorder=1)
             for label in group:
                 draw(ax, crv, pts, label, axis, colour)
+            draw_missing(ax, pts, group, axis, colour)
             ax.set_xlim(-0.05, 1.05)
             ax.set_ylim(*YLIM)
             if row == 1:
