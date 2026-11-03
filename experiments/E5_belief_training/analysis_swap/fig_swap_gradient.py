@@ -3,7 +3,7 @@ analyse_swap.py's tables (curves.csv, points.csv), read-only. The style of the E
 on branch e6: the v2 chart, axis names 18 pt, ticks 15 pt, no title, legend or annotation, reference lines dashed without
 text), its constants copied here: E5 imports no other branch.
 
-Layout: one column per axis, the primary ones first (arc_ctrl, arc_inc, then the secondary segment, (38)), x = t = k / 10. Top row: the shuffle agents (A, E, F); bottom
+Layout: one column per axis, the primary ones first (arc_ctrl, arc_inc, then the secondary segment, (38)), x = t = k / 10. Top row: the shuffle agents (A, E, F; A against B's reference when given, (39)); bottom
 row: the baselines A and B at --baseline-k (qualitative, (38)). Per agent and class, the mean over the swaps of its kept
 zones (the classes of analyse_swap.py):
   moved slot    the condition's colour (shuffle violet, baseline vermilion), solid line
@@ -26,6 +26,8 @@ import sys
 from pathlib import Path
 
 import matplotlib
+
+from analyse_swap import superseded
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
@@ -56,7 +58,7 @@ def table(tables: Path, name: str) -> list[dict]:
 
 
 def draw(ax, crv: list[dict], pts: list[dict], label: str, axis: str, colour: str) -> None:
-    seed = label.split("_")[1]
+    seed = label.split("_")[1].split("-")[0]  # A-refB: seed A's marker
     mk = MARKERS[seed]
     for cls, col, ls, value, flag in (("moved", colour, "-", "mean", "counts"), ("neutral", ZONE_LINE["corridor"], "-", "mean", "counts"),
                                       ("old_ud", ZONE_LINE["UD"], "-.", "mean", "counts")):
@@ -88,6 +90,7 @@ def main(argv: list[str] | None = None) -> int:
     crv, pts = table(args.tables, "curves.csv"), table(args.tables, "points.csv")
     labels = sorted({r["label"] for r in crv})
     shuffle = [x for x in labels if x.startswith("shuffle_")]
+    shuffle = [x for x in shuffle if x not in superseded(shuffle)]  # (39): A against B replaces A against its own reference
     baseline = [x for x in labels if x.startswith("baseline_") and x.endswith(f"_k{args.baseline_k:06d}")]
     if not shuffle:
         raise SystemExit("no shuffle measurement in the tables")

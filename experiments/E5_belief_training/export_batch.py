@@ -10,7 +10,8 @@ export_batch.py, with E5's runs). Standard library only.
             - the weights of each run's FINAL checkpoint, and those of the steps given with --weights-checkpoints;
             - every probe measurement of the batch's pairs (results/E5_belief_training/probes__<configuration>__<tag>__seed<NN>__*;
               a batch of the theme-swap set, batches.PROBE_SET_ARGS: probes-swap__<...>, with SWAP_PROBE_FILES,
-              docs/e5/DECISIONS.md (38));
+              docs/e5/DECISIONS.md (38)); a pair named after its reference (batches.output_reference_label,
+              <...>__seed<NN>__ref<L>__<...>, (39)) in its own batch only, the other batches leaving those out;
             - the supervisor directories of the batch (logs/kubeflow/e5-<phase>-<batch>-*) and their submission records;
             - MANIFEST.json: every file's path, size and SHA-256, and each run's status.
           Never resume.pt, the resumable states, nor the other checkpoints' weights.
@@ -99,7 +100,10 @@ def collect(repo: Path, batch: str, configuration: str, weight_steps: list[int],
     for label, training, fraction in batches.PROBE_PAIRS.get(batch, []):  # a training-only batch has no probe pair
         tag = e5_names.training_tag(training, fraction)
         prefix, names = ("probes-swap", SWAP_PROBE_FILES) if batch in batches.PROBE_SET_ARGS else ("probes", PROBE_FILES)
-        for probes in sorted(root.glob(f"{prefix}__{configuration}__{tag}__seed{seed_of[label]:02d}__*")):
+        ref = batches.output_reference_label(batch, label, training)
+        for probes in sorted(root.glob(f"{prefix}__{configuration}__{tag}__seed{seed_of[label]:02d}__{f'ref{ref}__' if ref else ''}*")):
+            if ref is None and probes.name.split("__")[4].startswith("ref"):  # another batch's pair named after its reference
+                continue
             files += [probes / name for name in names if (probes / name).is_file()]
     for sup in sorted((repo / "logs" / "kubeflow").glob(f"e5-*-{batch}-*")):
         if sup.is_dir():

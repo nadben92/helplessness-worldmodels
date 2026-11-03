@@ -17,7 +17,10 @@ Tables (--out):
                   "both"; also without the near-duplicate points); the witnesses (nw and the neutral slots: "about 0" or
                   "departs", with the t); the conclusion per axis (at least 2 counted agents with the same verdict, else
                   "not readable"). PRIMARY: arc_ctrl and arc_inc; the segment is SECONDARY, with and without its
-                  near-duplicate points (t >= 0.8: two CD-coloured slots, no assignment matches, (38))
+                  near-duplicate points (t >= 0.8: two CD-coloured slots, no assignment matches, (38)). A measurement
+                  named after its reference (measure_probes.py --name-reference, label <condition>_<seed>-ref<L>_k<k>)
+                  SUPERSEDES the same agent's measurement against its own reference (SUPERSEDES, (39)): when both are
+                  given, both are read, but only the superseding one enters the conclusions ("superseded" lists the other)
   shared_image.csv  (--compare-probes) the one swap image that is also an E4 probe image (T_ctrl at nw and se): b at step
                   1 at nw in the swap measurement against the E4-set measurement of the same model and checkpoint, and
                   the difference (a reproducibility control, (38)): the same model and walks, other draws
@@ -46,6 +49,8 @@ FAR_T = 0.5
 PRIMARY_AXES, SECONDARY_AXES = ("arc_ctrl", "arc_inc"), ("segment",)
 PLATEAU_POINTS = 3  # the plateau: the mean of the 3 furthest counted points (all at t >= FAR_T)
 ABOUT_MINUS_2, ABOUT_0 = -1.5, -0.5  # E5c's classes: b <= -1.5, -1.5 < b <= -0.5, b > -0.5
+# docs/e5/DECISIONS.md (39): seed A's pair against B's reference is A's measurement; against its own, it is reported only
+SUPERSEDES = {"A-refB": "A"}
 
 
 def truthy(v) -> bool:
@@ -170,8 +175,19 @@ def witness(pts: dict[float, tuple[float, bool]]) -> dict:
             "reading": "no counted point" if not pts else "about 0" if not departs else "departs", "departs_at": departs}
 
 
-def conclusion(readings: dict[str, dict], key: str = "verdict") -> str:
-    counted_ = [r[key] for r in readings.values() if r["counted"] and r.get(key, "not counted") != "not counted"]
+def superseded(labels: list[str]) -> list[str]:
+    """The labels whose agent has a superseding measurement among labels (SUPERSEDES, (39))."""
+    out = []
+    for x in labels:
+        condition, agent, k = x.split("_")
+        for new, old in SUPERSEDES.items():
+            if agent == old and f"{condition}_{new}_{k}" in labels:
+                out.append(x)
+    return out
+
+
+def conclusion(readings: dict[str, dict], key: str = "verdict", exclude: tuple[str, ...] = ()) -> str:
+    counted_ = [r[key] for x, r in readings.items() if x not in exclude and r["counted"] and r.get(key, "not counted") != "not counted"]
     if len(counted_) < 2:
         return "not readable"
     best = max(set(counted_), key=counted_.count)
@@ -183,11 +199,14 @@ def reading(crv: list[dict], labels: list[str]) -> dict:
     out = {"rule": {"min_swaps": MIN_SWAPS, "min_far_points": MIN_FAR_POINTS, "far_t": FAR_T, "plateau_points": PLATEAU_POINTS,
                     "about_minus_2": ABOUT_MINUS_2, "about_0": ABOUT_0, "primary_axes": list(PRIMARY_AXES),
                     "secondary_axes": list(SECONDARY_AXES)}, "delta": {}, "witnesses": {}}
+    old = tuple(superseded(shuffle))
+    if old:  # (39): reported, out of the conclusions
+        out["superseded"] = list(old)
     for axis in AXES:
         per = {x: verdict(counted(crv, x, axis, "delta"), axis) for x in shuffle}
-        out["delta"][axis] = {"role": "primary" if axis in PRIMARY_AXES else "secondary", "agents": per, "conclusion": conclusion(per)}
+        out["delta"][axis] = {"role": "primary" if axis in PRIMARY_AXES else "secondary", "agents": per, "conclusion": conclusion(per, exclude=old)}
         if axis in SECONDARY_AXES:
-            out["delta"][axis]["conclusion_without_near_duplicates"] = conclusion(per, "verdict_without_near_duplicates")
+            out["delta"][axis]["conclusion_without_near_duplicates"] = conclusion(per, "verdict_without_near_duplicates", exclude=old)
         out["witnesses"][axis] = {x: {cls: witness(counted(crv, x, axis, cls)) for cls in ("old_ud", "neutral")} for x in shuffle}
     return out
 
@@ -206,7 +225,8 @@ def validity(rows: list[dict]) -> list[dict]:
 
 def label_of(meta: dict) -> str:
     condition = "shuffle" if meta["training"] == "shuffle" else meta["training"]
-    return f"{condition}_{SEED_LABELS[int(meta['seed'])]}_k{int(meta['checkpoint_k']):06d}"
+    ref = f"-ref{meta['reference_seed_label']}" if meta.get("reference_seed_label") else ""  # --name-reference, (39)
+    return f"{condition}_{SEED_LABELS[int(meta['seed'])]}{ref}_k{int(meta['checkpoint_k']):06d}"
 
 
 def shared_image(rows: list[dict], probe_dirs: list[Path]) -> list[dict]:
@@ -265,6 +285,8 @@ def main(argv: list[str] | None = None) -> int:
         plateaus = {x: (None if v["plateau"] is None else round(v["plateau"], 2), v["verdict"]) for x, v in d["agents"].items()}
         extra = f"; without t >= 0.8: {d['conclusion_without_near_duplicates']}" if "conclusion_without_near_duplicates" in d else ""
         print(f"{d['role']} {axis}: {d['conclusion']}{extra} {plateaus}", flush=True)
+    if rd.get("superseded"):
+        print(f"superseded (reported, out of the conclusions, (39)): {rd['superseded']}", flush=True)
     if args.compare_probes:
         shared = shared_image(rows, args.compare_probes)
         write_csv(args.out / "shared_image.csv", shared)

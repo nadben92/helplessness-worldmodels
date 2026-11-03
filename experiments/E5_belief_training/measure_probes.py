@@ -36,6 +36,10 @@ step 1 (the diagnostic's agent_cell_accuracy, part zone_step1; NaN without a dia
 exposed model's localisation >= LOCALISATION_MIN, analysis_450k/LOCALISATION_CRITERION.md). validity_summary.json counts
 valid and kept rows by swap, axis and zone role. Directory probes-swap__<...> (no existing analysis globs it).
 
+--name-reference (with --reference-seed-label L; docs/e5/DECISIONS.md (39)): the directory is <...>__seed<NN>__ref<L>__k<...>
+and meta.yaml carries reference_seed_label, so a pair measured against two references keeps two names. Off by default:
+every other name and meta.yaml are unchanged.
+
 Usage, from the repo root:
   python experiments/E5_belief_training/measure_probes.py --checkpoint <k> --experimental-run <dir> --reference-run <dir>
       [--images all | training | extreme | 0 5 17] [--n-walks N] [--device cuda] [--out-dir results] [--save-steps]
@@ -117,6 +121,13 @@ def find_pair(args) -> tuple[Path, Path]:
                 e5_setup.find_e4_run(args.e4_results, cid, "reference", need=need))
     return (e5_setup.find_run(root, cid, args.training, "experimental", seed, args.fraction),
             e5_setup.find_run(root, cid, args.training, "reference", ref_seed, args.fraction, need=f"checkpoints/agent_env{args.checkpoint:06d}.pt"))
+
+
+def output_name(swap: bool, configuration: str, tag: str, seed: int, checkpoint: int, stamp: str, reference_label: str | None = None) -> str:
+    """The measurement's directory name; reference_label (--name-reference, docs/e5/DECISIONS.md (39)) adds __ref<L> after
+    the seed, None keeps the name of every earlier measurement."""
+    ref = f"__ref{reference_label}" if reference_label else ""
+    return f"{'probes-swap' if swap else 'probes'}__{configuration}__{tag}__seed{seed:02d}{ref}__k{checkpoint:06d}__{stamp}"
 
 
 def check_pair(exp: dict, ref: dict, cross_seed: bool = False) -> None:
@@ -225,6 +236,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--reference-seed-label", choices=e5_setup.SEED_LABELS, default=None,
                         help="--find-runs: the reference of ANOTHER seed (batches.REFERENCE_SEED_OF: seed B's locked-in experimental run "
                              "replaced by E and F against B's reference, docs/e5/DECISIONS.md (32)); with explicit runs: allow it")
+    parser.add_argument("--name-reference", action="store_true",
+                        help="name the output after --reference-seed-label (<...>__seed<NN>__ref<L>__k<...>) and write it in meta.yaml "
+                             "(docs/e5/DECISIONS.md (39): a pair measured against two references; off: names unchanged)")
     parser.add_argument("--e4-results", type=Path, default=None, help="E4's results root (the reference of immunisation A)")
     parser.add_argument("--probe-set", choices=PROBE_SETS, default="e4",
                         help="e4: E4's probe set (default, unchanged); swap: the theme-swap set (docs/e5/DECISIONS.md (38))")
@@ -242,6 +256,8 @@ def main(argv: list[str] | None = None) -> int:
         args.experimental_run, args.reference_run = find_pair(args)
     elif not (args.experimental_run and args.reference_run):
         parser.error("give --experimental-run and --reference-run, or --find-runs")
+    if args.name_reference and args.reference_seed_label is None:
+        parser.error("--name-reference needs --reference-seed-label")
     if args.n_walks is None:
         args.n_walks = int(e5_setup.load_config(args.config)["e5"]["probes"]["n_walks"])
     exp, ref = run_info(args.experimental_run), run_info(args.reference_run)
@@ -268,7 +284,8 @@ def main(argv: list[str] | None = None) -> int:
         images = [all_images[int(i)] for i in args.images]
     tag = e5_setup.training_tag(exp["training"], exp["fraction"])
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    out = args.out_dir / e5_setup.EXPERIMENT_ID / f"{'probes-swap' if swap else 'probes'}__{exp['configuration']}__{tag}__seed{exp['seed']:02d}__k{args.checkpoint:06d}__{stamp}"
+    out = args.out_dir / e5_setup.EXPERIMENT_ID / output_name(swap, exp["configuration"], tag, exp["seed"], args.checkpoint, stamp,
+                                                              args.reference_seed_label if args.name_reference else None)
     out.mkdir(parents=True, exist_ok=False)
     status = out / "status.json"
     status.write_text(json.dumps({"status": "running", "started_at": stamp}), encoding="utf-8")
@@ -318,6 +335,8 @@ def main(argv: list[str] | None = None) -> int:
                           else "the configuration's canonical layout")}
     if swap:
         meta["probe_set"] = "swap"
+    if args.name_reference:
+        meta["reference_seed_label"] = args.reference_seed_label
     (out / "meta.yaml").write_text(yaml.safe_dump(meta, sort_keys=False), encoding="utf-8")
     status.write_text(json.dumps({"status": "done", "seconds": seconds, "n_image_zones": len(result["rows"])}), encoding="utf-8")
     if swap:

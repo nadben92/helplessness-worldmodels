@@ -224,3 +224,72 @@ def test_segment_secondary_and_shared_image(tmp_path):
     out = analyse.shared_image(rows, [d])
     assert len(out) == 1 and out[0]["b_step1_e4_set"] == pytest.approx(0.05 - 2.3)
     assert out[0]["difference"] == pytest.approx(-2.2 - (0.05 - 2.3))
+
+
+def test_batch_e5_probes_swap_A_refB(monkeypatch):
+    """(39): one job, seed A's shuffle pair at --checkpoint against B's reference, its output named __refB__; every other
+    batch keeps its reference and its names (no --name-reference)."""
+    assert batches.batch_runs("e5_probes_swap_A_refB") == {}
+    assert batches.REFERENCE_SEED_OF == {("E", "shuffle"): "B", ("F", "shuffle"): "B"}
+    jobs = dict(batches.probe_args("e5_probes_swap_A_refB", batches.CONFIGURATION, [650000]))
+    assert list(jobs) == ["swap_A_sh100_k650000"]
+    args = jobs["swap_A_sh100_k650000"]
+    assert args[args.index("--seed-label") + 1] == "A" and args[args.index("--reference-seed-label") + 1] == "B"
+    assert "--name-reference" in args and args[-4:] == ["--probe-set", "swap", "--diagnose-walks", "150"]
+    for batch in ("e5_probes_swap", "e5_probes_a", "e5_probes_b", "e5_probes_baselines"):
+        for name, a in batches.probe_args(batch, batches.CONFIGURATION, [650000], "/e4"):
+            assert "--name-reference" not in a
+            if name.startswith(("swap_A_sh", "probes_A_sh")):
+                assert "--reference-seed-label" not in a
+    cmds = dict(submit.commands("probes", "py", "e5_probes_swap_A_refB", batches.CONFIGURATION, checkpoint=[650000]))
+    assert list(cmds) == ["swap_A_sh100_k650000"] and "--name-reference" in cmds["swap_A_sh100_k650000"]
+    # the output's name: unchanged without a reference label, __refB__ after the seed with it
+    assert measure_probes.output_name(True, "p1-b-d1", "sh100", 2, 650000, "S") == "probes-swap__p1-b-d1__sh100__seed02__k650000__S"
+    assert measure_probes.output_name(False, "p1-b-d1", "sh100", 402, 650000, "S") == "probes__p1-b-d1__sh100__seed402__k650000__S"
+    assert (measure_probes.output_name(True, "p1-b-d1", "sh100", 2, 650000, "S", "B")
+            == "probes-swap__p1-b-d1__sh100__seed02__refB__k650000__S")
+    # the reference chosen: seed A's experimental run, seed B's (102) f = 1 reference
+    calls = []
+    monkeypatch.setattr(measure_probes.e5_setup, "find_run", lambda root, cid, training, condition, seed, fraction=None, need=None:
+                        calls.append((training, condition, seed)) or f"{condition}{seed}")
+    ns = type("Args", (), {"config": measure_probes.e5_setup.DEFAULT_CONFIG, "configuration": batches.CONFIGURATION, "seed_label": "A",
+                           "reference_seed_label": "B", "find_runs": "results", "training": "shuffle", "fraction": 1.0,
+                           "checkpoint": 650000, "e4_results": None})()
+    assert measure_probes.find_pair(ns) == ("experimental2", "reference102")
+    assert calls == [("shuffle", "experimental", 2), ("shuffle", "reference", 102)]
+    with pytest.raises(SystemExit):  # --name-reference without a reference label
+        measure_probes.main(["--checkpoint", "1", "--experimental-run", "x", "--reference-run", "y", "--name-reference"])
+
+
+def test_export_and_analysis_of_the_refB_measurement(tmp_path):
+    """(39): the export takes the __refB__ directory in its own batch only; analyse_swap labels it shuffle_A-refB_k650000,
+    and the measurement of A against its own reference leaves the conclusions (reported, listed as superseded)."""
+    import re
+    import shutil
+
+    from helplessness.config import REPO_ROOT
+
+    export = load_experiment_module("E5_belief_training", "export_batch.py", "test_e5_export_swap_refB")
+    analyse = load_experiment_module("E5_belief_training", "analysis_swap/analyse_swap.py", "test_e5_analyse_swap_refB")
+    e5_cfg = REPO_ROOT / batches.CONFIG
+    base = re.search(r"^base:\s*(\S+)", e5_cfg.read_text(encoding="utf-8"), re.M).group(1)
+    for rel in (batches.CONFIG, base):
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(REPO_ROOT / rel, tmp_path / rel)
+    root = tmp_path / "results" / "E5_belief_training"
+    for name in ("probes-swap__p1-b-d1__sh100__seed02__k650000__X", "probes-swap__p1-b-d1__sh100__seed02__refB__k650000__Y"):
+        (root / name).mkdir(parents=True)
+        (root / name / "swap_probes.csv").write_text("x", encoding="utf-8")
+    refb, _ = export.collect(tmp_path, "e5_probes_swap_A_refB", "p1-b-d1", [], False)
+    assert {p.parent.name for p in refb} == {"probes-swap__p1-b-d1__sh100__seed02__refB__k650000__Y"}
+    own, _ = export.collect(tmp_path, "e5_probes_swap", "p1-b-d1", [], False)
+    assert {p.parent.name for p in own} == {"probes-swap__p1-b-d1__sh100__seed02__k650000__X"}
+    meta = {"training": "shuffle", "seed": 2, "checkpoint_k": 650000}
+    assert analyse.label_of(meta) == "shuffle_A_k650000"
+    assert analyse.label_of({**meta, "reference_seed_label": "B"}) == "shuffle_A-refB_k650000"
+    labels = ["shuffle_A-refB_k650000", "shuffle_A_k650000", "shuffle_E_k650000", "shuffle_F_k650000"]
+    assert analyse.superseded(labels) == ["shuffle_A_k650000"] and analyse.superseded(labels[1:]) == []
+    readings = {"shuffle_A_k650000": {"counted": True, "verdict": "both"}, "shuffle_A-refB_k650000": {"counted": False, "verdict": "not counted"},
+                "shuffle_F_k650000": {"counted": True, "verdict": "both"}}
+    assert analyse.conclusion(readings) == "both"
+    assert analyse.conclusion(readings, exclude=("shuffle_A_k650000",)) == "not readable"
