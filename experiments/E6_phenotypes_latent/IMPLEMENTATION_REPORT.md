@@ -1714,7 +1714,7 @@ entre 0,3 et 0,6. L'effet sur b disparaît alors que plus de la moitié de la no
 l'opérationnalisation écrite de « case de l'agent déplacée » (une baisse de la part des images prédites dont la case
 décodée est le vrai successeur) ne tient pas : cette part **monte** de 0,16–0,19 à 0,68–0,89 chez tous les agents,
 shuffle compris. Ce que la correction change dans la prédiction, c'est la case où l'agent arrive (le vrai successeur au
-lieu du tapis roulant), pas la couleur de la zone. Image reconstruite (descriptif) : D_inc passe de < 1 à 4 à 16 unités
+lieu du tapis roulant), pas la couleur de la zone. Image reconstruite (descriptif) : D_inc passe de < 1 à 13,6–16,0 unités
 RGB chez base_A, base_B, F et, moins, A et E (s ≤ 0,08).
 
 **C. Direction naturelle de la couleur : partielle pour A, E et F.** d_col est fiable (cosinus entre moitiés 0,99 à
