@@ -9,6 +9,11 @@ same steps (the constrained episodes' localised zone steps, d7_correction.csv); 
 episodes' (pairs.csv); no C1 / C3 for the latent fix, the oracle, nor the reference's C3 (not measured). The oracle's b
 is the reference's (the true belief, not a measurement); its localisation is not measured (h is not modified, the
 lookahead runs measure no zone localisation) and not drawn. Grey dashed: chance (2/5) on the directed share.
+Last panel: the decomposition at k = 1 (the agent's own decision rule: one imagined step, then the critic) of the
+directed share's gap between exposed and reference, per agent: belief effect = oracle k = 1 - exposed (the true
+transition in place of the belief), cache effect = reference - oracle k = 1 (what remains: the exposed critic's values).
+k = 5 is not a decomposition (its imagined steps leave the zone, where the values are right: it corrects belief and
+cache together); the oracle k = 5 bar only shows that the cache's trace is bypassed by planning further.
 
 Reads the campaign's finished runs (scratch/all/<job>/, status "done" only) and its analysis
 (results/E6_phenotypes_latent/all_agents_650k/: pairs.csv for C1, forms.json for each agent's constrained setting,
@@ -113,7 +118,7 @@ def figure(v: dict) -> None:
     panels = [("b", "b (bits)"), ("C1", "critic controllability (C1)"), ("C3", "planner directed (C3)"), ("loc", "localisation"),
               ("dir", "directed share")]
     groups = [(BASELINES, -0.2, None, "o"), (SHUFFLE, 0.2, "//", "^")]
-    fig, axes = plt.subplots(1, 5, figsize=(16, 7.5))
+    fig, axes = plt.subplots(1, 6, figsize=(18.5, 7.5), gridspec_kw={"width_ratios": [1, 1, 1, 1, 1, 0.55]})
     for ax, (m, lab) in zip(axes, panels):
         for i, (_, c, col) in enumerate(cats):
             for agents, dx, hatch, marker in groups:
@@ -130,8 +135,21 @@ def figure(v: dict) -> None:
         ax.set_ylabel(lab)
     axes[0].axhline(0, color="black", lw=1)
     axes[0].set_ylim(-2.35, 0.45)
-    for ax in axes[1:]:
+    for ax in axes[1:5]:
         ax.set_ylim(0, 1.05)
+    ax = axes[5]
+    effects = [("belief", lambda a: v["oracle1"]["dir"][a] - v["exposed"]["dir"][a], ORACLE),
+               ("cache", lambda a: v["reference"]["dir"][a] - v["oracle1"]["dir"][a], REFERENCE)]
+    for i, (_, fn, col) in enumerate(effects):
+        for agents, dx, hatch, marker in groups:
+            vals = np.array([fn(a) for a in agents], float)
+            ax.bar(i + dx, vals.mean(), width=0.38, color=col, edgecolor="black", lw=1, hatch=hatch)
+            ax.scatter(i + dx + np.linspace(-0.1, 0.1, len(agents)), vals, s=22, color="black", marker=marker, zorder=4)
+    ax.axhline(0, color="black", lw=1)
+    ax.set_xticks(range(len(effects)), [e for e, _, _ in effects], rotation=35, ha="right", rotation_mode="anchor")
+    ax.set_xlim(-0.6, len(effects) - 0.4)
+    ax.set_ylim(-0.05, 0.65)
+    ax.set_ylabel("directed share gap, k = 1")
     fig.tight_layout()
     fig.savefig(OUT / "E7_bars_650k.png", dpi=300, facecolor="white")
     plt.close(fig)

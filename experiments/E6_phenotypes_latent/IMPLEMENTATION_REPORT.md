@@ -1524,3 +1524,67 @@ Formes, pour chaque agent shuffle (A, E, F) ; les baselines sont rapportées pou
 - **M (mécanisme).** Les pas imaginés retombent vers le tapis roulant : b moyen de `model_corrected` au 5ᵉ pas imaginé
   a perdu au moins la moitié du gain de la correction à la racine, b_corr(racine) − b_corr(5) ≥ 0,5 ×
   (b_corr(racine) − b_model(racine)).
+
+### Décomposition à k = 1 et correction à k égal : résultats (4 novembre)
+
+**Décomposition principale, à k = 1** (la règle de décision de l'agent : un pas imaginé puis le critic). Écart de part
+dirigée entre exposé et référence (épisodes, image d'entraînement), par agent : **effet croyance** = oracle k = 1 −
+exposé (la vraie transition à la place de la croyance) ; **effet cache** = référence − oracle k = 1 (ce qui reste : les
+valeurs du critic exposé). Valeurs de `slides/out_v3/data/E7_bars_650k.csv`, dernier panneau de `E7_bars_650k`.
+
+| Agent | Exposé | Oracle k = 1 | Référence | Effet croyance | Effet cache | Part de la croyance |
+|---|---|---|---|---|---|---|
+| p1-a_e4 | 0,32 | 0,75 | 0,94 | +0,43 | +0,19 | 0,70 |
+| base_A | 0,49 | 0,88 | 0,94 | +0,39 | +0,06 | 0,86 |
+| p2-a_e4 | 0,33 | 0,93 | 0,94 | +0,59 | +0,01 | 0,98 |
+| p2-b_e4 | 0,40 | 0,86 | 0,94 | +0,46 | +0,08 | 0,85 |
+| base_B | 0,43 | 0,78 | 0,94 | +0,35 | +0,16 | 0,68 |
+| f1_A | 0,42 | 0,65 | 0,89 | +0,23 | +0,24 | 0,48 |
+| f1_E | 0,45 | 0,71 | 0,93 | +0,26 | +0,22 | 0,54 |
+| f1_F | 0,44 | 0,86 | 0,93 | +0,42 | +0,07 | 0,86 |
+
+Chez les baselines, l'effet croyance domine (68 à 98 % de l'écart). Chez les shuffle A et E, l'effet cache est aussi
+grand que l'effet croyance (≈ 0,23 chacun) ; F ressemble aux baselines.
+
+**k = 5 n'est pas une décomposition.** Ses pas imaginés sortent de la zone, où les valeurs sont justes : il corrige
+croyance et cache ensemble. L'oracle à k = 5 (0,94–0,95 chez tous les agents) montre seulement que **la trace du cache
+est contournée en planifiant plus loin**.
+
+**Correction à k égal : diagnostic, hors décomposition** (la croyance revient-elle dans les pas imaginés ?).
+`run_e7_diagnostics.py --phase values --constrained` sur les 8 agents (sorties `scratch/values_650k/`, réglage de
+chaque agent égal à celui de la forme 5, vérifié), `kdepth_650k.py` → `all_agents_650k/kdepth.csv`,
+`kdepth_forms.json`, `kdepth_trace.csv`. Part dirigée gloutonne statique sur les cases de la zone :
+
+| Agent | Oracle k = 1 / 5 / 10 | Exposé sans correction k = 1 / 5 | Corrigé k = 1 / 2 / 5 / 10 |
+|---|---|---|---|
+| p1-a_e4 | 0,75 / 0,86 / 0,99 | 0,48 / 0,41 | 0,67 / 0,67 / 0,65 / 0,66 |
+| base_A | 0,73 / 0,91 / 0,98 | 0,44 / 0,42 | 0,64 / 0,75 / 0,70 / 0,71 |
+| p2-a_e4 | 0,77 / 0,91 / 0,98 | 0,57 / 0,42 | 0,73 / 0,68 / 0,67 / 0,66 |
+| p2-b_e4 | 0,85 / 0,95 / 1,00 | 0,40 / 0,38 | 0,76 / 0,75 / 0,66 / 0,65 |
+| base_B | 0,64 / 0,90 / 0,96 | 0,29 / 0,43 | 0,63 / 0,68 / 0,70 / 0,68 |
+| f1_A | 0,66 / 0,94 / 0,96 | 0,49 / 0,47 | 0,77 / 0,78 / 0,70 / 0,70 |
+| f1_E | 0,77 / 0,97 / 1,00 | 0,56 / 0,40 | 0,81 / 0,76 / 0,73 / 0,72 |
+| f1_F | 0,74 / 0,94 / 1,00 | 0,53 / 0,51 | 0,77 / 0,74 / 0,68 / 0,67 |
+
+Verdicts des formes écrites avant le calcul (284d0ff), tels que calculés :
+
+- **K1 (|corrigé − oracle| ≤ 0,10 à k = 1) : non tenue**, à cause de A (0,77 contre 0,66, écart 0,105) ; E (0,81 /
+  0,77) et F (0,77 / 0,74) la tiennent.
+- **K5 (corrigé ≤ oracle − 0,10 à k = 5) : tenue** pour les trois (A 0,70 / 0,94, E 0,73 / 0,97, F 0,68 / 0,94). La
+  correction plafonne vers 0,70 quel que soit k ; l'oracle monte.
+- **M (b au 5ᵉ pas imaginé a perdu au moins la moitié du gain de la correction à la racine) : non tenue** (perte
+  0,21 / 1,90 pour A, 0,09 / 1,88 pour E, 0,11 / 1,65 pour F). Telle qu'écrite, M lit le b moyen de toutes les
+  particules suivies au 5ᵉ pas, quand 93 à 98 % d'entre elles sont décodées hors de la zone, où b ≈ 0 avec ou sans
+  correction (b moyen sans correction au 5ᵉ pas : +0,14, +0,05, +0,03).
+
+Description (pas une forme) : **dans la zone**, le b des pas imaginés de la version corrigée retombe **dès le premier
+pas imaginé** au niveau de la version non corrigée, alors que la racine était à ≈ 0 : A −1,45 contre −1,47, E −1,51
+contre −1,76, F −1,64 contre −1,69 (baselines : −1,81 à −2,06 contre −2,10 à −2,21), et y reste aux pas 2 à 4. La
+correction n'agit qu'au pas réel où h est corrigé ; le modèle imagine la suite avec sa croyance d'origine. C'est
+cohérent avec le plafond de K5 ; la forme M, écrite sur le 5ᵉ pas, ne pouvait pas le voir.
+
+**Limite du filtre de localisation.** Le filtre `loc_template_step1 ≥ 0,9` (couples intermédiaires, formes 2 et 3) et
+la sélection des pas bien localisés de D7 lisent la position **par le décodeur**. Ils peuvent écarter des pas où
+l'agent agit pourtant depuis sa vraie case : sous la correction latente, F agit de façon dirigée depuis sa vraie case
+sur 78 % des pas mal décodés (`free_offsets.csv`). Aucun filtre n'est changé ; les résultats ci-dessus restent ceux des
+filtres commités.
