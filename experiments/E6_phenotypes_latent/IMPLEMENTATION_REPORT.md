@@ -1368,7 +1368,85 @@ Phases, dans l'ordre : e6, c12, directions, constrained, corrected, oracle, anti
 processus ; c12 et anti ajoutés à la demande de l'utilisateur, nécessaires aux formes 2 à 4). Test à blanc avant le
 lancement (`--smoke f1_F segment_k1_ud`, n_reps = 1) : les 9 jobs terminés, sorties supprimées. Sorties de 475 000
 renommées en `scratch/all_475k/` ; nouvelles sorties dans `scratch/all/<job>/`, journaux dans `logs/all_cpu_650k/`
-(`STATUS.txt`, `pool_<phase>.txt`, `<phase>/<job>.log`). Durée estimée : 8 à 9 h.
+(`STATUS.txt`, `pool_<phase>.txt`, `<phase>/<job>.log`). Durée estimée : 8 à 9 h (réelle : 6 h 47).
 
-À faire après le run : `analyse_all.py --dev <runs de développement> --out <dir>`, comparaison aux formes 1 à 5
-ci-dessus, figure `E7_bars_650k`.
+Déroulement : le premier lancement (3 novembre, 19:37) a été tué 51 s après le départ par un Ctrl+C de console
+(`0xC000013A` sur les jobs ; aucune trace dans `STATUS.txt`, la chaîne n'interceptait pas l'interruption) ; 11 jobs e6
+terminés et 12 interrompus, mis de côté dans `scratch/all_interrupted/20261104T085650Z/`, journaux renommés
+`*_interrupted_20261103*`. `chain_all_cpu.py` corrigé (60a31a2 : toute exception écrite FAILED avec sa cause, arbre de
+processus tué, ligne heartbeat), relancé le 4 novembre à 08:56 par une tâche planifiée Windows (`E7_650k_chain`,
+`pythonw`, console propre) : les 8 phases terminées à 15:44 (6 h 47), 204 jobs sur 204 `done`, aucun échec (e6 70/70,
+c12 70/70, directions 8/8, constrained 8/8, corrected 8/8, oracle 8/8, anti 24/24, free 8/8).
+
+### Résultats à 650 000 (formes du § 21, verdicts tels que calculés)
+
+`analyse_all.py --dev <checkout principal>/scratch/e6dev/results --out results/E6_phenotypes_latent/all_agents_650k`
+(après 67533c7 : `analyse_e7_d7 --no-identity` plantait à l'écriture de `d7_forms.json`, chemin par défaut inchangé).
+Aucun seuil changé.
+
+| Forme | Attendu | Obtenu | Verdict |
+|---|---|---|---|
+| 1 | E4 rejoué à l'identique (E6, oracle, anti-oracle) | E6 35/35 tableaux, oracle 6/6, anti-oracle 26/26 pour les 4 agents | **tenue** |
+| 2 | ≥ 3 couples intermédiaires par shuffle (E, F dans le code) ; C1 dans ]0,50 ; 0,85[ pour ≥ la moitié ; ρ(b, C1) ≥ 0,5 | E 3, F **1** ; 1/8 ; ρ = 0,29 (8 couples) | **non tenue** |
+| 3 | part dirigée dans ]0,50 ; 0,85[ pour ≥ la moitié ; \|dirigée − anti-oracle au même b\| ≤ 0,10 pour ≥ la moitié | 4/8 (0,50) ; 7/8 | **tenue** (à la limite sur la première condition) |
+| 4 | chez B, E, F : effet de la croyance ≥ 0,40, effet du critic ≤ 0,20 et ≤ la moitié | B 0,45 / 0,16 ; F 0,47 / 0,07 ; **E 0,40 / 0,22** | **non tenue, à cause de E** (critic 0,22 > 0,20) |
+| 5 | part de l'écart comblée par b > par C1, chaque agent | vrai pour les 8 ; issue de D7 : « mesure trompée » 6, « réelle » base_A, « intermédiaire » f1_A | **tenue** |
+
+Forme 2, seuil de 3 couples pour A (calculé à la main, le code de la forme ne lit que E et F, écrit avant l'ajout de
+A) : f1_A a **4** couples intermédiaires valides et bien localisés : seuil **atteint**. Les autres conditions de la
+forme 2 portent sur l'ensemble des couples et ne changent pas.
+
+Couples intermédiaires (b au pas 1 de l'épisode dans ]−1,5 ; −0,5], image valide) avant et après la règle
+`loc_template_step1 ≥ 0,9` ; anti-oracle : courbe k = 1 de l'agent (référence, h moyen) interpolée au même b :
+
+| Agent | Image | b | loc | C1 | dirigée | anti-oracle | retenu |
+|---|---|---|---|---|---|---|---|
+| f1_A | arc_ctrl_k4_ud | −1,26 | 0,96 | 0,83 | 0,75 | 0,89 | oui |
+| f1_A | arc_ctrl_k5_ud | −1,11 | 0,97 | 0,88 | 0,83 | 0,89 | oui |
+| f1_A | position_only_k0_ud | −0,97 | 0,96 | 0,89 | 0,83 | 0,89 | oui |
+| f1_A | arc_ctrl_k6_ud | −0,88 | 0,95 | 0,89 | 0,80 | 0,89 | oui |
+| f1_A | arc_ctrl_k8_ud | −0,85 | 0,13 | 0,93 | 0,81 | 0,89 | non |
+| f1_A | arc_ctrl_k7_ud | −0,63 | 0,37 | 0,91 | 0,76 | 0,89 | non |
+| f1_E | position_only_k0_ud | −1,24 | 0,98 | 0,88 | 0,87 | 0,93 | oui |
+| f1_E | segment_k5_ud | −1,21 | 0,98 | 0,92 | 0,93 | 0,93 | oui |
+| f1_E | arc_ctrl_k5_ud | −1,02 | 0,79 | 0,95 | 0,89 | 0,93 | non |
+| f1_E | arc_ctrl_k7_neutral | −0,86 | 0,12 | 0,99 | 0,94 | 0,93 | non |
+| f1_E | arc_ctrl_k6_neutral | −0,79 | 0,28 | 0,98 | 0,92 | 0,93 | non |
+| f1_E | arc_ctrl_k8_neutral | −0,75 | 0,09 | 1,00 | 0,94 | 0,93 | non |
+| f1_E | segment_k3_neutral | −0,69 | 0,91 | 0,96 | 0,92 | 0,93 | oui |
+| f1_E | arc_ctrl_k6_ud | −0,67 | 0,32 | 1,00 | 0,92 | 0,93 | non |
+| f1_E | arc_ctrl_k6_cd | −0,58 | 0,08 | 1,00 | 0,93 | 0,93 | non |
+| f1_E | arc_ctrl_k5_neutral | −0,57 | 0,61 | 0,99 | 0,91 | 0,93 | non |
+| f1_F | arc_ctrl_k6_ud | −1,44 | 0,61 | 0,74 | 0,78 | 0,93 | non |
+| f1_F | segment_k3_neutral | −1,30 | 0,94 | 0,94 | 0,88 | 0,93 | oui |
+| f1_F | arc_ctrl_k7_ud | −1,27 | 0,62 | 0,76 | 0,80 | 0,93 | non |
+| f1_F | segment_k4_neutral | −0,99 | 0,88 | 0,96 | 0,92 | 0,93 | non |
+| f1_F | segment_k4_cd | −0,88 | 0,34 | 0,99 | 0,82 | 0,93 | non |
+| f1_F | segment_k5_cd | −0,61 | 0,54 | 1,00 | 0,91 | 0,93 | non |
+| p2-a_e4 | arc_ctrl_k5_ud | −1,13 | 0,22 | 0,71 | 0,67 | 0,94 | non |
+| p2-a_e4 | arc_inc_k10_cd | −0,51 | 0,01 | 1,00 | 0,91 | 0,94 | non |
+| p2-b_e4 | arc_ctrl_k3_ud | −1,44 | 0,46 | 0,44 | 0,60 | 0,94 | non |
+| p2-b_e4 | arc_ctrl_k5_ud | −0,80 | 0,03 | 0,73 | 0,64 | 0,94 | non |
+
+Lecture (description, pas de nouvelle forme) : sur les 8 couples retenus, C1 (0,83–0,94) et la part dirigée
+(0,75–0,93) sont près de l'amas de référence, b seul est intermédiaire ; C1 moyen par classe de b sur les couples
+valides et bien localisés : 0,44 (impuissants, 19), 0,90 (intermédiaires, 8), 0,99 (en contrôle, 6). Les 4 parts
+dirigées « intermédiaires » de la forme 3 sont les 4 couples de f1_A, entre 0,75 et 0,83, juste sous la borne 0,85 ;
+ceux de E et F sont au-dessus. La courbe anti-oracle k = 1 des agents shuffle est en marche : part dirigée 0,40 à
+p = 1 (b ≈ −2) et 0,89 (A) ou 0,93 (E, F, même référence) partout ailleurs ; « près de l'anti-oracle » veut donc dire
+ici « près de la référence ». Le critic et le comportement suivent l'amas (impuissant ou non), pas la valeur de b
+dans l'intervalle intermédiaire, comme sur les agents d'E4 (D7).
+
+Remarques :
+- **Localisation de F** (connue ici pour la première fois, poids à 650 000 absents de la copie locale lors des sondes) :
+  au pas 1 des épisodes E6, 3 images sur 14 atteignent 0,90 (entraînement 0,98, segment_k1_ud 0,96,
+  segment_k3_neutral 0,94 ; segment_k4_neutral 0,88), les arc_ctrl entre 0,61 et 0,79. Elle est plus faible en
+  épisodes E6 que dans les sondes d'échange de la branche `e5-robust` : le contexte de départ diffère (marche aléatoire
+  dans le couloir puis entrée dans la zone en E6, contexte fixé de la sonde).
+- **segment_k3_cd de F** : valide dans la sonde à 650 000 (masse 0,917, I 2,236) mais **invalide** dans le run E6
+  (critère d'E4 sur la référence au pas 1 de l'épisode) ; localisation 0,11. Il n'entre dans aucune forme.
+
+Sorties légères : `results/E6_phenotypes_latent/all_agents_650k/` (pairs.csv, forms.json, form3_gaps.csv,
+identity_e4.csv, t1_runs.csv, t1_identity.csv, table_2x2.csv, d7/). Figure : `slides/out_v3/E7_bars_650k.png`
+(`slides/figures_v3/E7_bars_650k.py`, valeurs dans `slides/out_v3/data/E7_bars_650k.csv`) : par condition, barre des 5
+baselines et barre hachurée des 3 shuffle, un point par agent.

@@ -1,0 +1,9 @@
+zbar,group,rho_b_C2,n
+draw,natural pooled,0.7575055492758431,15083
+draw,exposed,0.00772813319481998,7278
+draw,"references, no intervention",0.17903458771027456,7805
+draw,induced references,nan,0
+mean,natural pooled,0.7644796400722444,15083
+mean,exposed,0.027354978165527108,7278
+mean,"references, no intervention",0.17751418348696907,7805
+mean,induced references,nan,0
