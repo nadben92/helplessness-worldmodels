@@ -1588,3 +1588,68 @@ la sélection des pas bien localisés de D7 lisent la position **par le décodeu
 l'agent agit pourtant depuis sa vraie case : sous la correction latente, F agit de façon dirigée depuis sa vraie case
 sur 78 % des pas mal décodés (`free_offsets.csv`). Aucun filtre n'est changé ; les résultats ci-dessus restent ceux des
 filtres commités.
+
+## 22. h porte-t-il le contexte ou un « niveau de contrôle » ?
+
+Question : h porte-t-il le **contexte** (position, couleur dessinée), à partir duquel les poids recalculent la croyance à
+chaque pas, ou une **variable transportée** « niveau de contrôle » ? Acquis (§ 21) : en imagination, b retombe au niveau
+non corrigé dès le premier pas imaginé.
+
+Commun : CPU local, poids gelés (hash avant / après), image d'entraînement, monde de test (tout contrôlable), protocole
+d'E6 (180 épisodes : 20 départs sur chacune des 9 cases intérieures de la zone, horizon 36, ε de l'agent, mêmes graines
+qu'E6). Agents : shuffle A, E, F (650 000) et les 5 baselines (300 000), sauf C (shuffle seulement). Correction
+contrainte = celle de la forme 5 (réglage (48) de chaque agent, `best_setting`). Nouveau script
+`experiments/E7_latent_manipulation/run_e7_context.py` (phases `persist`, `decoder`, `coldir`), mêmes briques que D7
+(`stepwise_hook`, `fixed_hook`, `channel_q` pour V par action et Q, `localise`), sans changer aucune mesure ni aucun
+seuil existant. Formes et seuils ci-dessous écrits et commités **avant tout calcul** ; verdict par agent shuffle.
+
+### A. Persistance sur pas réels (`persist`)
+
+Correction contrainte appliquée **une seule fois**, au premier pas de l'épisode (t = 0, dans la zone), puis épisode
+normal. Comparé, sur les mêmes graines, à l'exposé sans correction et à la correction à chaque pas de zone (D7). Courbes
+en fonction de t (pas de zone, tant que ≥ 20 épisodes y sont encore) : b local, C1 et C3 (D7, z̄ = draw), masse sur le
+vrai successeur, part dirigée par indice. Mesure du verdict : la fraction résiduelle de l'effet sur b,
+r(t) = [b_unique(t) − b_exposé(t)] / [b_unique(0) − b_exposé(0)].
+
+- **Contexte** : r(2) ≤ 0,25 (retour au niveau de l'exposé en ≤ 2 pas).
+- **Variable transportée** : r(5) ≥ 0,50 (l'effet persiste au-delà de 5 pas).
+- Sinon (ou moins de 20 épisodes en zone à t = 5 pour trancher « transportée ») : **indéterminé**.
+C3, masse et part dirigée sont rapportées avec la même fraction r, sans verdict propre.
+
+### B. Décodeur (`decoder`, prioritaire)
+
+Contextes : les entrées de zone d'E6 (t = 0 des 180 épisodes de l'exposé). Image décodée de (h, z) avant et après la
+correction contrainte (le même d que la phase A à t = 0). Sur l'image décodée : couleur moyenne des pixels des cases de
+la zone hors case de l'agent ; distances RGB (0–255) à T_inc, T_ctrl et au neutre (couleur du couloir) ; case de
+l'agent décodée (`loc_agent`). Déplacement normalisé de la couleur : s = [D_inc(après) − D_inc(avant)] / ‖T_inc −
+neutre‖, intervalle bootstrap à 95 % sur les contextes (2 000 tirages).
+
+- **Shuffle, contexte** : la zone est dessinée moins T_inc après correction : s ≥ 0,10 et intervalle > 0.
+- **Baselines** : couleur inchangée, |s| ≤ 0,05 ; case de l'agent déplacée : `loc_agent` baisse d'au moins 0,10.
+- Rapporté sans verdict : D_ctrl et D_neutre avant / après, l'image décodée moyenne (figure).
+
+### C. Direction naturelle de la couleur (`coldir`, prioritaire, shuffle seulement)
+
+d_col : épisodes réels du protocole d'E6 dans le monde de test, avec l'image de chacune des 12 dispositions
+d'entraînement (`episode_sources.assignment_colors`) ; pour le quadrant de la zone d'entraînement, h moyen des pas de
+zone dans les dispositions où ce quadrant porte T_inc (3) moins dans celles où il est neutre (6), **à case égale** (une
+différence par case, moyennée sur les cases, pondérée par le nombre de pas). Fiabilité : cosinus entre les d_col de deux
+moitiés des épisodes ≥ 0,80, sinon C est déclarée non interprétable pour l'agent.
+
+Manipulation, image d'entraînement : h ← h − a · d_col à chaque pas de zone (`fixed_hook`, sans optimisation),
+a ∈ {0,25 ; 0,5 ; 0,75 ; 1 ; 1,5} ; contrôle : direction aléatoire (graine fixée) de même norme que d_col, a ∈ {1 ; 1,5}.
+Mesures : b au pas 1, C1, C3, localisation en zone (`loc_template_zone`), part dirigée. Cosinus : δh de la correction
+contrainte aux entrées de zone contre −d_col, moyenne sur les contextes ; hasard : 95ᵉ centile des cosinus moyens de δh
+avec 1 000 directions aléatoires.
+
+- **Contexte**, les cinq conditions :
+  1. b au pas 1 monte avec a (ρ de Spearman sur les 6 points a = 0 … 1,5 ≥ 0,9) et gagne au moins 0,5 bit à a = 1 ;
+  2. C3 et part dirigée gagnent chacun au moins 0,10 à a = 1 ;
+  3. la localisation tient jusqu'à a = 1 : `loc_template_zone` ≥ exposé − 0,10 pour a ≤ 1 ;
+  4. la direction aléatoire ne fait rien à a = 1 : |Δb| ≤ 0,20 bit, |ΔC3| ≤ 0,05, |Δ part dirigée| ≤ 0,05 ;
+  5. cos(δh, −d_col) au-dessus du 95ᵉ centile du hasard.
+- Une condition sur deux à quatre tenue : **partiel** ; aucune ou seulement la 4 : **non tenue**.
+
+Lecture conjointe (écrite avant) : A « contexte » + B shuffle + C tenue ⇒ h porte le contexte, la croyance est recalculée
+par les poids à chaque pas. A « transportée » ⇒ une variable persiste dans h au moins sur les pas réels. Des verdicts
+divergents seront rapportés tels quels.
