@@ -1502,3 +1502,25 @@ dans 78 % des cas, **depuis la case décodée** dans 55 % seulement : l'agent n'
 part dirigée tient sur les pas mal localisés presque autant que sur les bien localisés (0,78 contre 0,87). Ce qui baisse
 sous la correction, c'est la lecture de la position par le décodeur (h déplacé par la correction), pas le comportement
 dirigé. Même profil chez A et E (dirigée sur les pas mal localisés 0,89 et 0,88). p_goal dans la zone ≤ 0,013.
+
+### Correction contre oracle à k égal : formes attendues (écrites et commitées avant le calcul, 4 novembre)
+
+Profondeur de planification des runs `corrected`, `constrained` et `free` : la politique de l'agent
+(`agents.worldmodel.policy.q_values`), un pas imaginé par le modèle (16 tirages du prior) puis le critic, soit k = 1
+côté modèle ; l'oracle k = 1 de la figure fait un vrai pas de transition puis le critic. La comparaison de la figure
+est donc à k = 1 des deux côtés.
+
+Mesure (sans nouveau code) : `run_e7_diagnostics.py --phase values --constrained <con_<agent>>` sur les 8 agents, comme
+D4 sur E4 (version statique) : sur les cases de la zone de l'image d'entraînement (4 contextes de départ par case),
+part dirigée gloutonne (`greedy_directed`) de Q_k du modèle exposé pour k = 1 à 10, en trois variantes : `oracle`
+(vraies transitions, vraie récompense, critic du modèle), `model` (sans correction) et `model_corrected` (h + d de la
+correction contrainte au réglage (48) de l'agent, appliquée au pas réel, puis k pas imaginés par le modèle) ; et b le
+long des pas imaginés (`trace_b`, une particule suivie par contexte et action) pour `model` et `model_corrected`.
+
+Formes, pour chaque agent shuffle (A, E, F) ; les baselines sont rapportées pour comparaison, sans forme :
+
+- **K1.** À k = 1, la correction égale l'oracle : |corrigé(k = 1) − oracle(k = 1)| ≤ 0,10.
+- **K5.** À k = 5, la correction plafonne sous l'oracle : corrigé(k = 5) ≤ oracle(k = 5) − 0,10.
+- **M (mécanisme).** Les pas imaginés retombent vers le tapis roulant : b moyen de `model_corrected` au 5ᵉ pas imaginé
+  a perdu au moins la moitié du gain de la correction à la racine, b_corr(racine) − b_corr(5) ≥ 0,5 ×
+  (b_corr(racine) − b_model(racine)).
