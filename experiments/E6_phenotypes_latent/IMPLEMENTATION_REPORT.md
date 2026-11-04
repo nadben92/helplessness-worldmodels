@@ -1603,30 +1603,35 @@ contrainte = celle de la forme 5 (réglage (48) de chaque agent, `best_setting`)
 (`stepwise_hook`, `fixed_hook`, `channel_q` pour V par action et Q, `localise`), sans changer aucune mesure ni aucun
 seuil existant. Formes et seuils ci-dessous écrits et commités **avant tout calcul** ; verdict par agent shuffle.
 
-### A. Persistance sur pas réels (`persist`)
+### A. Persistance sur pas réels (`persist`), version appariée
 
 Correction contrainte appliquée **une seule fois**, au premier pas de l'épisode (t = 0, dans la zone), puis épisode
-normal. Comparé, sur les mêmes graines, à l'exposé sans correction et à la correction à chaque pas de zone (D7). Courbes
-en fonction de t (pas de zone, tant que ≥ 20 épisodes y sont encore) : b local, C1 et C3 (D7, z̄ = draw), masse sur le
-vrai successeur, part dirigée par indice. Mesure du verdict : la fraction résiduelle de l'effet sur b,
-r(t) = [b_unique(t) − b_exposé(t)] / [b_unique(0) − b_exposé(0)].
+normal : la politique corrigée une fois joue le chemin réel. Sur chaque épisode, **deux flux de h sur la même suite
+d'observations et d'actions** (ce chemin), rejoués avec les mêmes tirages (générateurs clonés) : l'un corrigé à t = 0,
+l'autre non. r(t) = [b_corrigé(t) − b_non corrigé(t)] / [b_corrigé(0) − b_non corrigé(0)], b moyen sur les épisodes
+encore dans la zone au pas t. Rapportés de même, sans verdict : C1, C3, masse sur le vrai successeur de l'action jouée
+(les deux flux), et la part dirigée par indice du chemin joué contre celle de l'exposé sans correction (mêmes graines).
 
-- **Contexte** : r(2) ≤ 0,25 (retour au niveau de l'exposé en ≤ 2 pas).
-- **Variable transportée** : r(5) ≥ 0,50 (l'effet persiste au-delà de 5 pas).
-- Sinon (ou moins de 20 épisodes en zone à t = 5 pour trancher « transportée ») : **indéterminé**.
-C3, masse et part dirigée sont rapportées avec la même fraction r, sans verdict propre.
+- **Contexte** : r(2) ≤ 0,25.
+- **Variable transportée** : r(3) ≥ 0,50.
+- **Indéterminé** : moins de 20 épisodes encore dans la zone à t = 3, ou aucune des deux conditions.
 
 ### B. Décodeur (`decoder`, prioritaire)
 
-Contextes : les entrées de zone d'E6 (t = 0 des 180 épisodes de l'exposé). Image décodée de (h, z) avant et après la
-correction contrainte (le même d que la phase A à t = 0). Sur l'image décodée : couleur moyenne des pixels des cases de
-la zone hors case de l'agent ; distances RGB (0–255) à T_inc, T_ctrl et au neutre (couleur du couloir) ; case de
-l'agent décodée (`loc_agent`). Déplacement normalisé de la couleur : s = [D_inc(après) − D_inc(avant)] / ‖T_inc −
-neutre‖, intervalle bootstrap à 95 % sur les contextes (2 000 tirages).
+Contextes : le premier pas d'un épisode commencé sur chaque case intérieure de la zone (`fresh_start_contexts`, 20 par
+case, 180), avant et après la correction contrainte (le même calcul de d que A à t = 0). La mesure du verdict porte sur
+l'**image prédite** : pour chaque action, h'_a = GRU(h, z, a), z' tiré du prior (4 tirages), image décodée de (h'_a, z') ;
+z vient du posterior, dominé par l'observation, si bien que l'image reconstruite ne peut presque pas montrer un
+changement de contexte porté par h. Sur l'image prédite : couleur moyenne des pixels des cases de la zone hors case de
+l'agent (la case actuelle et le vrai successeur de l'action) ; distances RGB (0–255) à T_inc, T_ctrl et au neutre
+(couleur du couloir) ; case de l'agent décodée. Déplacement normalisé de la couleur : s = [D_inc(après) −
+D_inc(avant)] / ‖T_inc − neutre‖, moyenne sur les actions et les tirages, intervalle bootstrap à 95 % sur les contextes
+(2 000 tirages). L'image reconstruite (z du posterior) est rapportée à titre descriptif, avec les mêmes mesures.
 
-- **Shuffle, contexte** : la zone est dessinée moins T_inc après correction : s ≥ 0,10 et intervalle > 0.
-- **Baselines** : couleur inchangée, |s| ≤ 0,05 ; case de l'agent déplacée : `loc_agent` baisse d'au moins 0,10.
-- Rapporté sans verdict : D_ctrl et D_neutre avant / après, l'image décodée moyenne (figure).
+- **Shuffle, contexte** : la zone est prédite moins T_inc après correction : s ≥ 0,10 et intervalle > 0.
+- **Baselines** : couleur inchangée, |s| ≤ 0,05 ; case de l'agent déplacée : la part des images prédites dont la case
+  de l'agent décodée est le vrai successeur baisse d'au moins 0,10.
+- Rapporté sans verdict : D_ctrl et D_neutre avant / après, l'image prédite moyenne (figure).
 
 ### C. Direction naturelle de la couleur (`coldir`, prioritaire, shuffle seulement)
 
@@ -1637,18 +1642,30 @@ différence par case, moyennée sur les cases, pondérée par le nombre de pas).
 moitiés des épisodes ≥ 0,80, sinon C est déclarée non interprétable pour l'agent.
 
 Manipulation, image d'entraînement : h ← h − a · d_col à chaque pas de zone (`fixed_hook`, sans optimisation),
-a ∈ {0,25 ; 0,5 ; 0,75 ; 1 ; 1,5} ; contrôle : direction aléatoire (graine fixée) de même norme que d_col, a ∈ {1 ; 1,5}.
+a ∈ {0,25 ; 0,5 ; 0,75 ; 1 ; 1,5} ; contrôle : 5 directions aléatoires (graines fixées) de même norme que d_col, a ∈ {1 ; 1,5}.
 Mesures : b au pas 1, C1, C3, localisation en zone (`loc_template_zone`), part dirigée. Cosinus : δh de la correction
 contrainte aux entrées de zone contre −d_col, moyenne sur les contextes ; hasard : 95ᵉ centile des cosinus moyens de δh
 avec 1 000 directions aléatoires.
+
+Ajouts (descriptifs, sans verdict) : d_col calculé **pour chaque quadrant** (épisodes partant de ce quadrant dans les 12
+dispositions), cosinus entre quadrants ; **d_ctrl** = h moyen en zone T_ctrl moins en zone neutre, à case égale
+(couleur pure, deux zones contrôlables dans le monde de test), cos(d_col, d_ctrl) ; **d_rec** = h aux pas ≥ 5 moins au
+pas 1 dans la zone T_inc, à case égale (la récupération au fil de l'épisode), cos(d_col, d_rec). C1 et C3 sont calculés
+sur les pas de zone bien localisés (convention de D7) ; la condition 4 utilise **5 directions aléatoires** (graines
+fixées), et elle tient si elle tient pour la **médiane** des 5.
 
 - **Contexte**, les cinq conditions :
   1. b au pas 1 monte avec a (ρ de Spearman sur les 6 points a = 0 … 1,5 ≥ 0,9) et gagne au moins 0,5 bit à a = 1 ;
   2. C3 et part dirigée gagnent chacun au moins 0,10 à a = 1 ;
   3. la localisation tient jusqu'à a = 1 : `loc_template_zone` ≥ exposé − 0,10 pour a ≤ 1 ;
-  4. la direction aléatoire ne fait rien à a = 1 : |Δb| ≤ 0,20 bit, |ΔC3| ≤ 0,05, |Δ part dirigée| ≤ 0,05 ;
+  4. la direction aléatoire ne fait rien à a = 1 (médiane des 5) : |Δb| ≤ 0,20 bit, |ΔC3| ≤ 0,05, |Δ part dirigée| ≤ 0,05 ;
   5. cos(δh, −d_col) au-dessus du 95ᵉ centile du hasard.
 - Une condition sur deux à quatre tenue : **partiel** ; aucune ou seulement la 4 : **non tenue**.
+
+**Limite (écrite avant).** d_col diffère en couleur **et** en croyance : les zones T_inc et neutre n'ont pas la même
+couleur, mais le modèle n'y a pas non plus la même croyance. C peut montrer qu'une direction naturelle de contexte
+cause la croyance, pas qu'elle est purement chromatique ; d_ctrl (deux couleurs, deux zones contrôlables) sert de point
+de comparaison, sans verdict.
 
 Lecture conjointe (écrite avant) : A « contexte » + B shuffle + C tenue ⇒ h porte le contexte, la croyance est recalculée
 par les poids à chaque pas. A « transportée » ⇒ une variable persiste dans h au moins sur les pas réels. Des verdicts
