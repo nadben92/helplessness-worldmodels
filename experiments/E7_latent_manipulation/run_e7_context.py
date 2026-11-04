@@ -10,7 +10,8 @@ Phases (--phase), one output directory per agent (and part), <out-dir>/E7_contex
   persist   A. E6's episodes of the exposed model with the correction applied ONCE, at t = 0; then the paired replay:
             on each episode's played path (its observations and actions), two streams of h with the same draws (cloned
             generators), corrected at t = 0 or not; per step b, C1, C3 (V and Q of channel_q, the D7 counterfactual) and
-            the mass on the true successor of the played action, for both streams. Also E6's exposed episodes (no
+            the mass on the true successor of the played action, for both streams; and |dh_t| = |h_corr - h_raw|, its
+            cos with dh_0. Also E6's exposed episodes (no
             correction, same seeds) for the directed share by index. episodes.npz, summary.json.
   decoder   B. The first-step contexts of episodes started on the zone's interior cells (20 per cell), before and after
             the correction: the PREDICTED images (for each action, h'_a = GRU(h, z, a), 4 prior draws z', decoded) and the
@@ -20,6 +21,8 @@ Phases (--phase), one output directory per agent (and part), <out-dir>/E7_contex
             the 12 training assignments (episode_sources.assignment_colors), starting in --slot: per (assignment,
             half (episode parity), cell, step class (t = 0, t >= 4, every zone step)) the sum of h and the count.
             collect.npz.
+  imagine   A in imagination, paired (B's contexts; h and h + d rolled 5 imagined steps with the same actions and draws):
+            per step |dh|, |dh| / |dh_0|, cos(dh, dh_0), b of both streams on zone cells. imagine.npz.
   coldir    C, shuffle agents. From the agent's four collect runs (--collect): d_col, d_ctrl, d_rec per slot and the
             split-half reliability; then, on the training image, h <- h + a * v at every zone step (run_e7_apply.fixed_hook)
             for v = -d_col (a in --amplitudes) and 5 random directions of d_col's norm (a in --random-amplitudes), with
@@ -67,8 +70,9 @@ from helplessness.probing.probe_validity import decoded_agent_cell
 from helplessness.runs import code_provenance, require_code_provenance
 
 EXPERIMENT_ID = "E7_context"
-PHASES = ("persist", "decoder", "collect", "coldir")
-NPZ = {"persist": "episodes.npz", "decoder": "decoder.npz", "collect": "collect.npz", "coldir": "episodes.npz"}
+PHASES = ("persist", "decoder", "collect", "coldir", "imagine")
+NPZ = {"persist": "episodes.npz", "decoder": "decoder.npz", "collect": "collect.npz", "coldir": "episodes.npz", "imagine": "imagine.npz"}
+IMAGINE_STEPS = 5
 N_COLS = two_zones.GRID_SHAPE[1]
 DECODER_PER_CELL = 20
 PRED_DRAWS = 4
@@ -123,6 +127,8 @@ def persist(st, setting: dict) -> tuple[dict, dict]:
     zone[st.zone] = True
     out = {f"{k}_{f}": np.full((n, H), np.nan) for k in ("b", "C1", "C3", "mass") for f in ("corr", "raw")}
     out["delta_norm"] = np.full(n, np.nan)
+    out["dh_norm"], out["dh_cos0"] = np.full((n, H), np.nan), np.full((n, H), np.nan)  # |h_corr - h_raw| and its cos with dh_0
+    dh0 = None
     g_post, g_meas, g_act, g_z = (gen([1, i], dev) for i in range(4))
     streams = {f: list(model.rssm.initial_state(n, dev)) for f in ("corr", "raw")}
     for t in range(H):
@@ -162,6 +168,12 @@ def persist(st, setting: dict) -> tuple[dict, dict]:
             out[f"mass_{f}"][rr, t] = sc["mass_true"][np.arange(inz.sum()), actions[rr, t]]
             ch = channel_q(model, h[sel], z[sel], g_act, g_z, mean_zbar=True)
             out[f"C1_{f}"][rr, t], out[f"C3_{f}"][rr, t] = c13(st, ch["V_zbar"].cpu().numpy(), ch["Q_hbar"].cpu().numpy(), s[inz])
+        dh = (streams["corr"][0][r_t] - streams["raw"][0][r_t]).cpu().numpy()  # no draw: the streams' draws are untouched
+        if t == 0:
+            dh0 = np.zeros((n, dh.shape[1]))
+            dh0[rows] = dh
+        out["dh_norm"][rows, t] = np.linalg.norm(dh, axis=1)
+        out["dh_cos0"][rows, t] = (dh * dh0[rows]).sum(axis=1) / (np.linalg.norm(dh, axis=1) * np.linalg.norm(dh0[rows], axis=1))
     exit_ = zp.first_exit(states, length, zone)["time"]
     first_stay = np.arange(H)[None, :] < exit_[:, None]
     by_t = []
@@ -169,7 +181,9 @@ def persist(st, setting: dict) -> tuple[dict, dict]:
         m = first_stay[:, t] & np.isfinite(out["b_corr"][:, t]) & np.isfinite(out["b_raw"][:, t])
         if m.sum() == 0:
             break
-        by_t.append({"t": t, "n_in_zone": int(m.sum()), **{f"{k}_{f}": float(np.nanmean(out[f"{k}_{f}"][m, t])) for k in ("b", "C1", "C3", "mass") for f in ("corr", "raw")}})
+        by_t.append({"t": t, "n_in_zone": int(m.sum()), **{f"{k}_{f}": float(np.nanmean(out[f"{k}_{f}"][m, t])) for k in ("b", "C1", "C3", "mass") for f in ("corr", "raw")},
+                     "dh_norm": float(np.nanmean(out["dh_norm"][m, t])), "dh_ratio": float(np.nanmean(out["dh_norm"][m, t] / out["dh_norm"][m, 0])),
+                     "dh_cos0": float(np.nanmean(out["dh_cos0"][m, t]))})
     dist = st.dist
     dir_once = zp.directed_by_index(states, length, zone, dist, H)
     dir_exp = zp.directed_by_index(ep0["states"], ep0["length"], zone, dist, H)
@@ -241,6 +255,61 @@ def decoder(st, setting: dict) -> tuple[dict, dict]:
                **{f"{p}_{m}_{tag}": float(np.mean(out[f"{p}_{m}_{tag}"])) for p in ("pred", "rec") for m in ("D_inc", "D_ctrl", "D_neu", "loc")
                   for tag in ("before", "after")}}
     return out, summary
+
+
+def imagine(st, setting: dict) -> tuple[dict, dict]:
+    """A in imagination, paired: B's contexts, h and h + d rolled IMAGINE_STEPS imagined steps with the same actions (the
+    first: each action; then uniform from a fixed seed) and the same prior draws; the particle's cell follows the true
+    transitions; per step |dh|, |dh| / |dh_0|, cos(dh, dh_0) and b (zone cells) of both streams."""
+    model, dev = st.models["experimental"], st.device
+    rssm, A, C = model.rssm, model.rssm.cfg.n_actions, model.rssm.cfg.n_classes
+    ref_fresh = fs.reference_fresh(st.models["reference"], st.tw, st.image, st.e6)
+    cells = np.repeat(fs.interior_states(st.image["slot"]), DECODER_PER_CELL)
+    h, z = fresh_start_contexts(rssm, st.tw, cells, gen([2, 0], dev))  # B's contexts
+    d = rdiag.correction(st, model, h, z, cells, setting)
+    zone = np.zeros(two_zones.N_STATES, bool)
+    zone[st.zone] = True
+    m, draws, margin = len(cells), int(st.e6["draws"]), float(st.e6["margin"])
+    shape = (A, IMAGINE_STEPS + 1, m)
+    out = {k: np.full(shape, np.nan) for k in ("dh_norm", "dh_cos0", "b_corr", "b_raw", "in_zone")}
+    for a0 in range(A):
+        g, gm = gen([4, a0], dev), gen([5, a0], dev)
+        acts = np.random.default_rng(np.random.SeedSequence([SEED, 4, a0])).integers(A, size=(m, IMAGINE_STEPS - 1))
+        hs, zs, cell = {"corr": h + d, "raw": h}, {"corr": z, "raw": z}, cells.copy()
+        for i in range(IMAGINE_STEPS + 1):
+            if i > 0:
+                a = np.full(m, a0) if i == 1 else acts[:, i - 2]
+                onehot = F.one_hot(torch.as_tensor(a, device=dev), A).to(h.dtype)
+                g_state = g.get_state()
+                for f in ("corr", "raw"):
+                    g.set_state(g_state)
+                    with torch.no_grad():
+                        im = rssm.imagination_step(hs[f], zs[f], onehot, generator=g)
+                        zs[f] = F.one_hot(sample_categorical_index(im["prior_probs"], g), C).to(h.dtype)
+                    hs[f] = im["h"]
+                cell = st.tw.succ[cell, a]
+            dh = (hs["corr"] - hs["raw"]).cpu().numpy()
+            out["dh_norm"][a0, i] = np.linalg.norm(dh, axis=1)
+            out["dh_cos0"][a0, i] = (dh * d.cpu().numpy()).sum(axis=1) / (np.linalg.norm(dh, axis=1) * d.norm(dim=1).cpu().numpy())
+            inz = zone[cell]
+            out["in_zone"][a0, i] = inz
+            if inz.any():
+                sel = torch.as_tensor(np.flatnonzero(inz), device=dev)
+                gm_state = gm.get_state()
+                for f in ("corr", "raw"):
+                    gm.set_state(gm_state)
+                    I = step_controllability(rssm, hs[f][sel], zs[f][sel], st.tw.templates_t, draws, margin, generator=gm)["I"]
+                    out[f"b_{f}"][a0, i, inz] = I - ref_fresh[cell[inz]]
+    by_i = []
+    gap0 = float(np.nanmean(out["b_corr"][:, 0] - out["b_raw"][:, 0]))
+    for i in range(IMAGINE_STEPS + 1):
+        inz = out["in_zone"][:, i] == 1
+        gap = float(np.nanmean((out["b_corr"][:, i] - out["b_raw"][:, i])[inz])) if inz.any() else np.nan
+        by_i.append({"step": i, "share_in_zone": float(inz.mean()), "b_gap": gap, "r_b": gap / gap0,
+                     "dh_ratio_all": float(np.nanmean(out["dh_norm"][:, i] / out["dh_norm"][:, 0])),
+                     "dh_ratio_in_zone": float(np.nanmean((out["dh_norm"][:, i] / out["dh_norm"][:, 0])[inz])) if inz.any() else np.nan,
+                     "dh_cos0_all": float(np.nanmean(out["dh_cos0"][:, i]))})
+    return out, {"by_step": by_i}
 
 
 # ------------------------------------------------------------------------------------------------------------- C
@@ -397,7 +466,7 @@ def main(argv: list[str] | None = None) -> int:
     provenance = code_provenance(REPO_ROOT)
     require_code_provenance(provenance)
     for agent in fs.load_agents(args.agents, args.runs_root, args.agent_ids):
-        setting = best_setting(args.constrained) if args.phase in ("persist", "decoder") else None
+        setting = best_setting(args.constrained) if args.phase in ("persist", "decoder", "imagine") else None
         part = {"collect": args.slot, "coldir": None if args.conditions is None else "-".join(args.conditions)}.get(args.phase)
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         out = args.out_dir / EXPERIMENT_ID / (f"e7ctx__{agent['id']}__{args.phase}" + (f"__{part}" if part else "") + f"__{stamp}")
@@ -412,6 +481,8 @@ def main(argv: list[str] | None = None) -> int:
                 arrays, summary = persist(st, setting)
             elif args.phase == "decoder":
                 arrays, summary = decoder(st, setting)
+            elif args.phase == "imagine":
+                arrays, summary = imagine(st, setting)
             elif args.phase == "collect":
                 arrays, summary = collect(st, args.slot)
             else:
