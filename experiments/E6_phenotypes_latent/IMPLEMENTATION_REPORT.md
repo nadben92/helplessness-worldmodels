@@ -1616,6 +1616,23 @@ encore dans la zone au pas t. Rapportés de même, sans verdict : C1, C3, masse 
 - **Variable transportée** : r(3) ≥ 0,50.
 - **Indéterminé** : moins de 20 épisodes encore dans la zone à t = 3, ou aucune des deux conditions.
 
+**Ajout à A (écrit le 4 novembre, avant le calcul de ces mesures ; la partie b de A était déjà lancée) : la perturbation
+de h est-elle transmise ou effacée ?** Sur les deux flux appariés, à chaque pas : ‖Δh_t‖ = ‖h_t(corrigé à t = 0) −
+h_t(non corrigé)‖, le rapport ρ_h(t) = ‖Δh_t‖ / ‖Δh_0‖ (par épisode, puis moyenne sur les épisodes encore dans la zone),
+et cos(Δh_t, Δh_0). Pas de lecture t* : le premier t ≥ 1 où r(t) ≤ 0,25 (b revenu à au plus 25 % de l'effet).
+
+- **(i) perturbation transmise mais ignorée** : ρ_h(t*) ≥ 0,5 ;
+- **(ii) perturbation effacée par le GRU** : ρ_h(t*) ≤ 0,2 ;
+- entre les deux, ou pas de t* : **indéterminé**.
+
+Même lecture **en imagination** (phase `imagine`) : les données de `values_650k` ne la permettent pas (h n'y est pas
+enregistré, et les variantes avec et sans correction n'y sont pas appariées, graines distinctes). Contextes : ceux de B
+(premier pas sur les cases intérieures de la zone, 20 par case) ; deux flux, h et h + d, déroulés 5 pas imaginés avec
+les mêmes actions (première action : chacune des 5 ; ensuite : action uniforme tirée d'une graine fixée, la même pour
+les deux flux) et les mêmes tirages du prior ; la case de la particule suit les vraies transitions de ces actions ; à
+chaque pas imaginé, b = I − I_ref de cette case (pas dans la zone seulement), ‖Δh_i‖, ρ_h(i), cos(Δh_i, Δh_0) ; t* et
+la lecture (i) / (ii) comme ci-dessus, sur l'écart de b apparié.
+
 ### B. Décodeur (`decoder`, prioritaire)
 
 Contextes : le premier pas d'un épisode commencé sur chaque case intérieure de la zone (`fresh_start_contexts`, 20 par
@@ -1666,6 +1683,10 @@ fixées), et elle tient si elle tient pour la **médiane** des 5.
 couleur, mais le modèle n'y a pas non plus la même croyance. C peut montrer qu'une direction naturelle de contexte
 cause la croyance, pas qu'elle est purement chromatique ; d_ctrl (deux couleurs, deux zones contrôlables) sert de point
 de comparaison, sans verdict.
+
+**Limite (écrite avant le calcul des mesures de Δh).** La correction est hors distribution : h + d n'est pas un état
+que le modèle produit lui-même. Sa non-persistance ne prouve pas que h ne peut pas porter de croyance : la récupération
+naturelle de b au fil de l'épisode, elle, persiste d'un pas à l'autre.
 
 Lecture conjointe (écrite avant) : A « contexte » + B shuffle + C tenue ⇒ h porte le contexte, la croyance est recalculée
 par les poids à chaque pas. A « transportée » ⇒ une variable persiste dans h au moins sur les pas réels. Des verdicts
