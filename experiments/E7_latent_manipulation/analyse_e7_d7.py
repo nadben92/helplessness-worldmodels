@@ -136,6 +136,7 @@ def main(argv: list[str] | None = None) -> int:
     figdir.mkdir(parents=True, exist_ok=True)
 
     # ---------------------------------------------------------------------------------------------------- identity
+    identity = None  # --no-identity: no checks, recorded as null in d7_forms.json
     if not args.no_identity:  # the checks against D6, E6 and the recorded plan-A rows
         identity = []
         d6 = {r["meta"]["agent"]: r for r in adis.runs_of(args.d6_runs) if r["meta"]["phase"] == "counterfactual"}
