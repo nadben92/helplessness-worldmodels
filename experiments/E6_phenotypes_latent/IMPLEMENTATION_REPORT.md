@@ -1691,3 +1691,55 @@ naturelle de b au fil de l'épisode, elle, persiste d'un pas à l'autre.
 Lecture conjointe (écrite avant) : A « contexte » + B shuffle + C tenue ⇒ h porte le contexte, la croyance est recalculée
 par les poids à chaque pas. A « transportée » ⇒ une variable persiste dans h au moins sur les pas réels. Des verdicts
 divergents seront rapportés tels quels.
+
+### Résultats (4 novembre)
+
+Runs : `scratch/ctx_650k/E7_context/` (non versionnés ; les premiers runs `persist`, sans Δh, mis de côté dans
+`scratch/ctx_650k_superseded/` : le nouveau `persist` les reproduit bit pour bit sur tous leurs tableaux). Analyse :
+`analyse_e7_context.py` → `results/E6_phenotypes_latent/all_agents_650k/context/` (persist.csv, imagine.csv,
+decoder.csv, coldir.csv, directions.csv, forms.json, figures/context.png). Verdicts tels que calculés, seuils inchangés.
+
+**A. Persistance sur pas réels : « contexte » pour les 8 agents.** L'écart de b entre les deux flux (1,4 à 2,0 bits à
+t = 0) a disparu dès t = 1 : r(2) entre −0,10 et +0,06, r(3) entre −0,06 et +0,03 (97 à 141 épisodes encore dans la
+zone à t = 3). C3 et la masse sur le vrai successeur reviennent de même dès t = 1 ou t = 2.
+
+**Lecture Δh (807fcdc) : « (i) perturbation transmise mais ignorée » pour les 8 agents, sur pas réels et en
+imagination.** t* = 1 partout. Sur pas réels, ‖Δh_1‖ / ‖Δh_0‖ = 0,52 à 0,68 (cos(Δh_1, Δh_0) 0,41 à 0,63), puis la
+perturbation décroît (≈ 0,3 à t = 2, ≈ 0,12 à t = 5) en tournant (cos ≈ 0,1). En imagination, le rapport au premier pas
+imaginé est 0,53 à 0,69 ; chez A et E il remonte vers 1 aux pas suivants (cos → 0), chez F et les baselines il reste
+entre 0,3 et 0,6. L'effet sur b disparaît alors que plus de la moitié de la norme de la perturbation est encore dans h.
+
+**B. Décodeur : non tenue pour les 8 agents.** Sur l'image prédite, la couleur de la zone ne bouge pas : s = −0,008 à
+−0,001 (intervalles de largeur ≤ 0,01), loin de 0,10 chez les shuffle. Chez les baselines, |s| ≤ 0,05 tient, mais
+l'opérationnalisation écrite de « case de l'agent déplacée » (une baisse de la part des images prédites dont la case
+décodée est le vrai successeur) ne tient pas : cette part **monte** de 0,16–0,19 à 0,68–0,89 chez tous les agents,
+shuffle compris. Ce que la correction change dans la prédiction, c'est la case où l'agent arrive (le vrai successeur au
+lieu du tapis roulant), pas la couleur de la zone. Image reconstruite (descriptif) : D_inc passe de < 1 à 4 à 16 unités
+RGB chez base_A, base_B, F et, moins, A et E (s ≤ 0,08).
+
+**C. Direction naturelle de la couleur : partielle pour A, E et F.** d_col est fiable (cosinus entre moitiés 0,99 à
+1,00 ; ‖d_col‖ 2,2 à 2,8, contre ‖d‖ 2,6 à 4,5 pour la correction optimisée).
+
+| Agent | 1. b monte (ρ ; gain à a = 1) | 2. ΔC3 / Δdirigée à a = 1 | 3. localisation a ≤ 1 | 4. aléatoire, médiane \|Δb\| / \|ΔC3\| / \|Δdirigée\| | 5. cos(δh, −d_col) / 95ᵉ centile | Verdict |
+|---|---|---|---|---|---|---|
+| f1_A | oui (1,00 ; +1,15) | oui (+0,61 / +0,41) | oui | **non** (0,48 / 0,08 / 0,11) | **non** (0,106 / 0,108) | partielle |
+| f1_E | oui (1,00 ; +0,77) | oui (+0,25 / +0,17) | oui | **non** (0,43 / 0,04 / 0,11) | **non** (0,084 / 0,091) | partielle |
+| f1_F | oui (1,00 ; +0,56) | oui (+0,45 / +0,27) | **non** (0,39 à a = 1) | **non** (0,44 / 0,13 / 0,09) | **non** (0,064 / 0,103) | partielle |
+
+Description (pas une forme) : les directions aléatoires de même norme font **aussi** monter b (+0,14 à +0,76 bit, toutes
+positives) en dégradant la localisation (−0,13 à −0,50), mais pas C3 ni la part dirigée (variations de signe mixte,
+souvent négatives). Le long de −d_col, C3 et la part dirigée montent de façon régulière jusqu'à a = 0,75–1, puis
+retombent à a = 1,5 quand la localisation s'effondre. La réponse de b à une perturbation de h n'est donc pas
+spécifique ; celle du planificateur et du comportement l'est. d_col par quadrant : cosinus entre quadrants −0,31 à 0,00
+(une direction propre à chaque quadrant, pas un axe de couleur commun) ; cos(d_col, d_ctrl) 0,12 à 0,52 ; cos(d_col,
+d_rec) 0,41 à 0,71 : la direction naturelle de la couleur T_inc s'aligne en partie sur celle de la récupération au fil
+de l'épisode.
+
+**Lecture conjointe** (celle écrite avant, appliquée aux verdicts) : A « contexte » partout, mais B non tenue et C
+partielle : la condition écrite pour conclure « h porte le contexte » (A + B shuffle + C tenue) n'est pas remplie. Ce qui
+est établi : une correction de h n'est pas transportée (b revient dès le pas suivant, sur pas réels comme en
+imagination) bien que la perturbation reste dans h (lecture (i)) ; elle change la prédiction de la case d'arrivée, pas la
+couleur prédite ; une direction naturelle de h liée au contexte de la zone (d_col) fait monter, de façon dosée, la
+croyance, le planificateur et le comportement, mais b répond aussi à des directions quelconques, et la correction
+optimisée n'est pas alignée sur d_col. Les limites écrites avant s'appliquent (correction hors distribution ; d_col
+diffère en couleur et en croyance).
