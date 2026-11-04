@@ -1450,3 +1450,55 @@ Sorties légères : `results/E6_phenotypes_latent/all_agents_650k/` (pairs.csv, 
 identity_e4.csv, t1_runs.csv, t1_identity.csv, table_2x2.csv, d7/). Figure : `slides/out_v3/E7_bars_650k.png`
 (`slides/figures_v3/E7_bars_650k.py`, valeurs dans `slides/out_v3/data/E7_bars_650k.csv`) : par condition, barre des 5
 baselines et barre hachurée des 3 shuffle, un point par agent.
+Version corrigée le 4 novembre (voir ci-dessous) : oracle à k = 1 et à k = 5 en deux barres ; C1 et C3 appariés ;
+localisation de l'oracle retirée.
+
+### Correction latente chez les shuffle : vérifications (4 novembre)
+
+**Portée du verdict D7 « mesure trompée ».** Il porte sur le **critic seul** (C1, argmax de V sur les successeurs) :
+b remonte d'au moins 1 bit, C1 change de 0,10 au plus et reste à plus de 0,10 sous la courbe naturelle au même b. Il ne
+dit rien du planificateur (C3, argmax de Q) ni du comportement (part dirigée, mesurée sur les vrais états).
+
+Par agent, image d'entraînement. b, C1 et C3 : D7 appariés (sans → avec la correction contrainte, mêmes pas : ceux de
+la zone des épisodes corrigés, bien localisés, z̄ = draw) ; part dirigée : exposé (E6), correction latente (free),
+correction contrainte (corrected), oracle exposé à k = 1 et k = 5 (lookahead), référence (E6).
+
+| Agent | Réglage | b | C1 | C3 | Dirigée : exp / latent / contr. / oracle k=1 / k=5 / réf. | D7 |
+|---|---|---|---|---|---|---|
+| p1-a_e4 | λ 0,1, μ 1 | −1,96 → −0,71 | 0,39 → 0,36 | 0,39 → 0,68 | 0,32 / 0,42 / 0,44 / 0,75 / 0,94 / 0,94 | mesure trompée |
+| base_A | λ 0,01, μ 1 | −2,07 → −0,43 | 0,54 → 0,74 | 0,45 → 0,73 | 0,49 / 0,69 / 0,71 / 0,88 / 0,94 / 0,94 | réelle |
+| p2-a_e4 | λ 0,01, μ 10 | −1,99 → −0,23 | 0,43 → 0,45 | 0,38 → 0,69 | 0,33 / 0,61 / 0,62 / 0,93 / 0,95 / 0,94 | mesure trompée |
+| p2-b_e4 | λ 0,1, μ 1 | −1,94 → −0,12 | 0,53 → 0,41 | 0,48 → 0,58 | 0,40 / 0,59 / 0,48 / 0,86 / 0,94 / 0,94 | mesure trompée |
+| base_B | λ 0,1, μ 0 | −2,06 → −0,22 | 0,52 → 0,55 | 0,45 → 0,80 | 0,43 / 0,68 / 0,69 / 0,78 / 0,94 / 0,94 | mesure trompée |
+| f1_A | λ 0,1, μ 1 | −1,35 → +0,31 | 0,46 → 0,77 | 0,33 → 0,44 | 0,42 / 0,83 / 0,55 / 0,65 / 0,92 / 0,89 | intermédiaire |
+| f1_E | λ 0,1, μ 0 | −1,48 → +0,06 | 0,73 → 0,76 | 0,66 → 0,89 | 0,45 / 0,79 / 0,81 / 0,71 / 0,94 / 0,93 | mesure trompée |
+| f1_F | λ 0,1, μ 10 | −1,70 → −0,05 | 0,64 → 0,68 | 0,51 → 0,82 | 0,44 / 0,81 / 0,87 / 0,86 / 0,94 / 0,93 | mesure trompée |
+
+Lecture : chez E et F, la correction rétablit **partiellement** le comportement par la prédiction des transitions (masse
+du modèle sur le vrai successeur de l'action jouée, dans la zone : 0,15 → 0,86 pour E, 0,27 → 0,78 pour F dans la
+correction latente ; C3 +0,23 et +0,31), **sans changer le critic** (C1 +0,03 et +0,04). Elle reste **sous l'oracle à
+k ≥ 5** (0,92–0,94 chez les trois shuffle) ; elle ne dépasse que l'oracle à k = 1 (0,65 pour A, 0,71 pour E), qui fait
+un vrai pas de transition puis s'en remet au critic exposé et en hérite la faiblesse. La version précédente de
+`E7_bars_650k` comparait à ce seul oracle k = 1, et son panneau C1 mettait le C1 de l'exposé dans ses épisodes naturels
+(0,37 pour E) face au C1 corrigé sur les pas des épisodes corrigés, ce qui exagérait la hausse ; corrigé.
+
+**Part dirigée de F sous la correction latente (0,81 avec une localisation de 0,42) : pas un artefact de la
+localisation.** Relance de la phase free pour A, E et F avec les épisodes (`run_e7_apply.py --save-episodes
+--episode-fields ...`, option ajoutée en 46d0960, défaut inchangé ; lignes de résultats identiques au bit près à la
+campagne), `free_offsets_650k.py` → `all_agents_650k/free_offsets.csv`. Sur les pas de zone :
+
+| Agent | Mode | Pas | Case décodée = vraie | Erreurs : vers le but / même dist. / plus loin | Taille moy. (cases) | Dirigée : bien loc. / mal loc. | Mal loc. : dirigée depuis la case décodée |
+|---|---|---|---|---|---|---|---|
+| f1_A | exposé | 861 | 0,76 | 0,26 / 0,12 / 0,61 | 7,9 | 0,41 / 0,47 | 0,51 |
+| f1_A | latent | 600 | 0,45 | 0,56 / 0,11 / 0,33 | 7,5 | 0,75 / 0,89 | 0,34 |
+| f1_E | exposé | 1 168 | 0,83 | 0,12 / 0,14 / 0,73 | 8,0 | 0,43 / 0,54 | 0,35 |
+| f1_E | latent | 732 | 0,67 | 0,24 / 0,13 / 0,63 | 7,1 | 0,75 / 0,88 | 0,45 |
+| f1_F | exposé | 950 | 0,80 | 0,13 / 0,10 / 0,76 | 9,1 | 0,43 / 0,48 | 0,50 |
+| f1_F | latent | 651 | 0,32 | 0,58 / 0,08 / 0,33 | 7,2 | 0,87 / 0,78 | 0,55 |
+
+Les erreurs de décodage sont grandes (7 cases en moyenne, 3 % à une case pour F) : la case décodée n'est pas une
+position voisine décalée vers la sortie. Sur les pas mal localisés de F, l'action est dirigée **depuis la vraie case**
+dans 78 % des cas, **depuis la case décodée** dans 55 % seulement : l'agent n'agit pas sur sa position décodée, et la
+part dirigée tient sur les pas mal localisés presque autant que sur les bien localisés (0,78 contre 0,87). Ce qui baisse
+sous la correction, c'est la lecture de la position par le décodeur (h déplacé par la correction), pas le comportement
+dirigé. Même profil chez A et E (dirigée sur les pas mal localisés 0,89 et 0,88). p_goal dans la zone ≤ 0,013.
