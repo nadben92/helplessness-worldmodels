@@ -17,11 +17,13 @@ submit = load_experiment_module("E6_phenotypes_latent", "submit_kubeflow.py", "e
 
 def test_agent_ids_of_both_files():
     assert batches.agent_ids(REPO_ROOT, "e6_dev_e4") == ["p1-a-d1_e4", "p1-b-d1_e4", "p2-a-d1_e4", "p2-b-d1_e4"]
-    # every agent of E6/E7 on all agents: E4's four pairs (E5's baseline A is E4's p1-b, listed once) and E5's B, E, F
-    assert batches.agent_ids(REPO_ROOT, "e6_e5") == ["p1-a_e4", "base_A", "p2-a_e4", "p2-b_e4", "base_B", "f1_E", "f1_F"]
+    # every agent of E6/E7 on all agents: E4's four pairs (E5's baseline A is E4's p1-b, listed once) and E5's B, and the
+    # shuffle pairs A, E, F at 650,000 (docs/e5/DECISIONS.md (37))
+    assert batches.agent_ids(REPO_ROOT, "e6_e5") == ["p1-a_e4", "base_A", "p2-a_e4", "p2-b_e4", "base_B", "f1_A", "f1_E", "f1_F"]
     raw = yaml.safe_load((REPO_ROOT / "configs" / "e6" / "agents_e5.yaml").read_text(encoding="utf-8"))
     by_id = {a["id"]: a for a in raw["agents"]}
-    assert all(by_id[a][r]["checkpoint"] == 475000 for a in ("f1_E", "f1_F") for r in ("experimental", "reference"))
+    assert all(by_id[a][r]["checkpoint"] == 650000 for a in ("f1_A", "f1_E", "f1_F") for r in ("experimental", "reference"))
+    assert "seed02" in by_id["f1_A"]["reference"]["run"]  # seed A's own f = 1 reference
     assert "seed102" in by_id["f1_E"]["reference"]["run"] and by_id["f1_E"]["reference"] == by_id["f1_F"]["reference"]
 
 
