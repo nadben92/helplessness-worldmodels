@@ -38,10 +38,13 @@ src/helplessness/                 the shared, importable library
   twin/                  The tabular twin: counts in, the full tabular measurement chain out (E2, reused by E3).
   probing/               Torch-side measurement of a world model (forward passes through a frozen RSSM -> arrays):
                          probe.py (E3), fixed_trajectory.py (I_s along fixed walks, E4), walks.py (the walks, numpy),
-                         theme_probes.py (E4's probe set).
+                         theme_probes.py (E4's probe set), swap_probes.py (E5's theme-swap probes), frozen_episodes.py,
+                         lookahead.py, belief_steering.py, context_walks.py (E6/E7: episodes of a frozen agent, the
+                         critic's side of the choice, the correction of h, context walks).
   pipeline/              The world-model run pipeline: runtime.py, world.py, measure.py, checkpoints.py (E3's run_mini),
                          agent_run.py (E3's closed-loop run; ClosedLoopHooks for another world, E4 on), two_zones.py
-                         (the world of a two-zone environment).
+                         (the world of a two-zone environment), episode_sources.py (E5's training histories),
+                         frozen_setup.py (E6/E7's frozen agents).
   cluster/               GPU cluster tooling: kubeflow.py (supervisor, runtime patches), handoff.py (handoff and the
                          results-branch layout), results_push.py (automatic push to results/<batch>), wandb_logger.py.
   config.py              Dataclass configs (E0) + compose()/FROZEN_BLOCKS (E1+).
@@ -55,15 +58,19 @@ experiments/             One directory per experiment: orchestration only (runne
   E1_offline_4zones/                                                                     FINISHED, frozen.
   E2_online_4zones/                                                                      FINISHED, frozen.
   E3_worldmodel_4zones/                                                                  FINISHED, frozen.
-  E4_generalization_gradient/   code ready (branch e4); launch: RUN_GPU.md.
-  E5_belief_training/, E6_phenotypes_latent/, E7_latent_manipulation/
+  E4_generalization_gradient/                                                            FINISHED (branch e4).
+  E5_belief_training/                                                       FINISHED (branches e5, e5-robust).
+  E6_phenotypes_latent/, E7_latent_manipulation/       FINISHED (branch e6; one report for both, in E6's directory).
+  E8: therapy and relapse, planned, not started (docs/EXPERIMENTS.md).
 docs/                    EXPERIMENTS.md (the central tracker), one file per experiment, RESULTS_CONVENTION.md,
-                         e3/ (E3's decisions, spec status, phase reports), archive/ (abandoned plans).
+                         e3/, e5/, e6/ (decisions; e6/ is shared by E6 and E7), archive/ (abandoned plans, the
+                         dropped E8 immunisation).
+slides/                  Presentation figures: scripts (figures*/, style*/, make_all*.py) and outputs (out*/), MANIFEST*.md.
 results/                 Run outputs (see "results" below). Heavy artefacts are never versioned.
 reports/                 Frozen outputs of E0 and E3 (reports/README.md). Nothing new writes here.
 paper/                   LaTeX paper and reports, figure and number scripts (see "Paper" below).
 archive/                 Retired material.
-tests/                   Mirrors src/ (plus tests/e3/ for E3's orchestration).
+tests/                   Mirrors src/ (plus tests/e3/ ... tests/e6/ for each experiment's orchestration).
 ```
 
 Finished experiments are frozen

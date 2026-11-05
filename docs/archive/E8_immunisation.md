@@ -1,3 +1,5 @@
+> **Outdated (archived 2026-11-05).** E8 is now therapy and relapse (`docs/EXPERIMENTS.md`); the immunisation experiment described below was abandoned and never run. Its code stays in E5 (`run_e5.py --training immunisation`).
+
 # E8 — Immunisation
 
 **Status (2026-10-22): not started.** Moved out of E5 (docs/e5/DECISIONS.md (29)), as an annex experiment: prevention,
