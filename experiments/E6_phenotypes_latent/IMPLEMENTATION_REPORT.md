@@ -1857,7 +1857,7 @@ A dépasse le seuil de persistance tout juste (0,502). E et F ne remplissent auc
 de b à t = 0 n'est que la moitié de la cible : son r(t) part d'un écart de 0,27 bit et il est moins précis. Description :
 l'effet de d_rec sur b décroît nettement moins vite que celui de −d_col (r_b(2) 0,31 à 0,97 contre −0,62 à −0,06), alors
 que la perturbation de h, elle, s'efface plus vite (ρ_h(3) 0,13 à 0,35 contre 0,26 à 0,42). Le gain de b ne croît pas de
-façon monotone avec α (il retombe à α = 3–4 chez A et F, à α = 4 chez E) ; d_rec a une norme 2,9 à 3,2 fois celle de d_col
+façon monotone avec α (il retombe au-delà de α = 2 chez A, de α = 1,5 chez F, à α = 4 chez E) ; α · d_rec a une norme 2,4 à 3,4 fois celle de d_col
 à α = 1,5–2.
 
 **E. Transfert de d_col : « pas d'axe global » (3 agents sur 3).** Gain de part dirigée dans le quadrant d'origine
