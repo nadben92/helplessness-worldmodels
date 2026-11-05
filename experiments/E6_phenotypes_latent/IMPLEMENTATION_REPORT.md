@@ -1803,5 +1803,5 @@ Lecture (écrite avant) : forme tenue ⇒ la direction qui fait monter le compor
 monter ailleurs : h code le contexte T_inc par quadrant (avec la position), pas une variable « couleur incontrôlable »
 commune. Forme non tenue avec des gains de transfert proches des gains d'origine ⇒ une composante commune existe malgré
 les faibles cosinus entre quadrants. Limite : d_col(Q1) est appliqué avec sa norme propre, et une direction quelconque
-de même norme fait aussi bouger b (C, condition 4) ; seule la part dirigée porte le verdict, parce qu'elle ne répond
-pas aux directions aléatoires.
+de même norme fait aussi bouger b (C, condition 4) ; seule la part dirigée porte le verdict, parce qu'elle ne monte
+pas sous les directions aléatoires (C : variations de signe mixte, médiane des |Δ| 0,09 à 0,11).

@@ -16,6 +16,10 @@ Phases (--phase), one output directory per agent (and part), <out-dir>/E7_contex
   natpersist  D. persist with a NATURAL direction applied once in place of the correction (--direction col: -d_col,
             a = 1; rec: +alpha * d_rec, alpha calibrated so that b's gain at t = 0 equals -d_col's), d_col and d_rec of
             the training slot from the agent's four collect runs (--collect). episodes.npz, summary.json.
+  transfer  E, shuffle agents. Episodes starting in --slot in the test world drawn with each of the 3 training
+            assignments where --slot carries T_inc (collect's images and seeds): exposed, and h <- h - d_col(Q1) at every
+            zone step (a = 1) for each of the 4 quadrants Q1 (d_col from --collect); b at step 1, C1, C3 (localised zone
+            steps), zone localisation, directed share. episodes.npz, summary.json.
   decoder   B. The first-step contexts of episodes started on the zone's interior cells (20 per cell), before and after
             the correction: the PREDICTED images (for each action, h'_a = GRU(h, z, a), 4 prior draws z', decoded) and the
             reconstruction (h, z): the zone's mean colour off the agent's cells, its RGB distance to T_inc, T_ctrl and
@@ -75,9 +79,9 @@ from helplessness.probing.probe_validity import decoded_agent_cell
 from helplessness.runs import code_provenance, require_code_provenance
 
 EXPERIMENT_ID = "E7_context"
-PHASES = ("persist", "decoder", "collect", "coldir", "imagine", "natpersist")
+PHASES = ("persist", "decoder", "collect", "coldir", "imagine", "natpersist", "transfer")
 NPZ = {"persist": "episodes.npz", "decoder": "decoder.npz", "collect": "collect.npz", "coldir": "episodes.npz", "imagine": "imagine.npz",
-       "natpersist": "episodes.npz"}
+       "natpersist": "episodes.npz", "transfer": "episodes.npz"}
 IMAGINE_STEPS = 5
 N_COLS = two_zones.GRID_SHAPE[1]
 DECODER_PER_CELL = 20
@@ -452,6 +456,62 @@ def coldir_conditions(dirs: dict, slot: str, dim: int, amplitudes, random_amplit
     return items
 
 
+def measure_condition(st, tw, image: dict, hook, ref_plain: dict, ref_fresh: np.ndarray) -> tuple[dict, dict]:
+    """One condition of C or E on (tw, image), with D7's q_fn: b at step 1, localisation, directed share, C1 and C3 on
+    the localised zone steps (the zone of image's slot)."""
+    model, e6 = st.models["experimental"], {**st.e6, "measure": "zone"}
+    if not np.array_equal(tw.succ, st.tw.succ):
+        raise RuntimeError("the test world's transitions differ from the training image's (c13 reads st's)")
+    zgen = torch.Generator(device=st.device).manual_seed(rdis.seed_of(st.d["seed"], "rollout", 0.0, 7))  # the same for every condition
+    buffer: list[dict] = []
+
+    def q_fn(h, z, s, g):
+        ch = channel_q(model, h, z, rd7.clone(g, st.device), zgen, mean_zbar=True)
+        q = q_values(model.rssm, model.goal_head, model.critic, h, z, model.cfg.k_act, model.cfg, g)
+        if not torch.equal(q, ch["Q_normal"]):
+            raise RuntimeError("the counterfactual's Q differs from the policy's")
+        buffer.append({k: ch[k].cpu().numpy() for k in rd7.KEYS})
+        return q
+    ep = fs.run_model(model, tw, image, e6, st.eps["experimental"], hook=hook, q_fn=q_fn)
+    full = rd7.assemble(buffer, ep["length"], ep["Q"].shape, "")
+    belief = fs.belief_row(ep, ref_plain, ref_fresh, image)
+    ph = fs.phenotype_row(ep, image, st.eps["experimental"], st.e6, with_bootstrap=False)
+    st_, ln = ep["states"], ep["length"]
+    zone = np.zeros(two_zones.N_STATES, bool)
+    zone[fs.zone_states(image["slot"])] = True
+    keep = zp.in_zone_steps(st_, ln, zone) & (ep["loc_template"] == 1)
+    i, t = np.nonzero(keep)
+    C1, C3 = c13(st, full["V_zbar"][i, t], full["Q_hbar"][i, t], st_[i, t]) if len(i) else (np.array([np.nan]), np.array([np.nan]))
+    return {"b_step1": belief["b_step1"], "loc_template_zone": belief["loc_template_zone"], "loc_template_step1": belief["loc_template_step1"],
+            "directed_share": ph["directed_share"], "C1": float(np.nanmean(C1)), "C3": float(np.nanmean(C3)), "n_C_steps": int(len(i))}, ep
+
+
+def transfer(st, collect_dirs: list[Path], slot: str) -> tuple[dict, dict]:
+    """E: episodes starting in slot (the zone) in the test world drawn with each of the 3 training assignments where slot
+    carries T_inc (collect's images and seeds); exposed, and h <- h - d_col(Q1) at every zone step for each Q1."""
+    dirs = directions(collect_dirs)
+    rows, arrays = [], {}
+    e6 = {**st.e6, "measure": "zone"}
+    for k in range(len(es.ASSIGNMENTS)):
+        if es.assignment_roles(k)[slot] != "ud":
+            continue
+        colors = es.assignment_colors(k, st.conf["diagonal"], st.conf["t_inc"], st.conf["t_ctrl"])
+        _, tw = fs.build_test_world(st.cfg, st.conf, colors, st.device)
+        image = {"name": f"assignment{k}_{slot}", "index": 3000 + k, "slot": slot}  # collect's image
+        ref_fresh = fs.reference_fresh(st.models["reference"], tw, image, st.e6)
+        ref_plain = fs.run_model(st.models["reference"], tw, image, e6, st.eps["reference"])
+        for q1 in [None, *QUADRANT_ORDER]:
+            t0 = time.perf_counter()
+            hook = None if q1 is None else ra.fixed_hook(-dirs[q1]["d_col"], 1.0, "zone")
+            row, ep = measure_condition(st, tw, image, hook, ref_plain, ref_fresh)
+            name = "exposed" if q1 is None else f"dcol_{q1}"
+            rows.append({"assignment": k, "slot": slot, "condition": name, "q1": q1, **row, "seconds": time.perf_counter() - t0})
+            arrays[f"a{k}__{name}__states"], arrays[f"a{k}__{name}__loc_template"] = ep["states"], ep["loc_template"]
+            print(f"[ctx transfer] {st.agent['id']} {slot} a{k} {name}: b_step1 {row['b_step1']:+.3f}, C3 {row['C3']:.2f}, "
+                  f"directed {row['directed_share']:.3f}, loc zone {row['loc_template_zone']:.2f}; {rows[-1]['seconds']:.0f} s", flush=True)
+    return arrays, {"rows": rows, "slot": slot, "norms": {q: float(np.linalg.norm(dq["d_col"])) for q, dq in dirs.items()}}
+
+
 def coldir(st, collect_dirs: list[Path], only: list[str] | None, amplitudes, random_amplitudes) -> tuple[dict, dict]:
     model, e6 = st.models["experimental"], {**st.e6, "measure": "zone"}
     dirs = directions(collect_dirs)
@@ -465,31 +525,10 @@ def coldir(st, collect_dirs: list[Path], only: list[str] | None, amplitudes, ran
             continue
         t0 = time.perf_counter()
         hook = None if it["vector"] is None else ra.fixed_hook(it["vector"], it["alpha"], "zone")
-        zgen = torch.Generator(device=st.device).manual_seed(rdis.seed_of(st.d["seed"], "rollout", 0.0, 7))  # the same for every condition
-        buffer: list[dict] = []
-
-        def q_fn(h, z, s, g, zgen=zgen, buffer=buffer):
-            ch = channel_q(model, h, z, rd7.clone(g, st.device), zgen, mean_zbar=True)
-            q = q_values(model.rssm, model.goal_head, model.critic, h, z, model.cfg.k_act, model.cfg, g)
-            if not torch.equal(q, ch["Q_normal"]):
-                raise RuntimeError("the counterfactual's Q differs from the policy's")
-            buffer.append({k: ch[k].cpu().numpy() for k in rd7.KEYS})
-            return q
-        ep = fs.run_model(model, st.tw, st.image, e6, st.eps["experimental"], hook=hook, q_fn=q_fn)
-        full = rd7.assemble(buffer, ep["length"], ep["Q"].shape, "")
-        belief = fs.belief_row(ep, ref_plain, ref_fresh, st.image)
-        ph = fs.phenotype_row(ep, st.image, st.eps["experimental"], st.e6, with_bootstrap=False)
-        st_, ln = ep["states"], ep["length"]
-        zone = np.zeros(two_zones.N_STATES, bool)
-        zone[st.zone] = True
-        keep = zp.in_zone_steps(st_, ln, zone) & (ep["loc_template"] == 1)
-        i, t = np.nonzero(keep)
-        C1, C3 = c13(st, full["V_zbar"][i, t], full["Q_hbar"][i, t], st_[i, t]) if len(i) else (np.array([np.nan]), np.array([np.nan]))
+        row, ep = measure_condition(st, st.tw, st.image, hook, ref_plain, ref_fresh)
         rows.append({"condition": it["name"], "alpha": it["alpha"], "norm": 0.0 if it["vector"] is None else float(it["alpha"] * np.linalg.norm(it["vector"])),
-                     "b_step1": belief["b_step1"], "loc_template_zone": belief["loc_template_zone"], "loc_template_step1": belief["loc_template_step1"],
-                     "directed_share": ph["directed_share"], "C1": float(np.nanmean(C1)), "C3": float(np.nanmean(C3)), "n_C_steps": int(len(i)),
-                     "seconds": time.perf_counter() - t0})
-        arrays[f"{it['name']}__states"], arrays[f"{it['name']}__loc_template"] = st_, ep["loc_template"]
+                     **row, "seconds": time.perf_counter() - t0})
+        arrays[f"{it['name']}__states"], arrays[f"{it['name']}__loc_template"] = ep["states"], ep["loc_template"]
         print(f"[ctx coldir] {st.agent['id']} {it['name']}: b_step1 {rows[-1]['b_step1']:+.3f}, C3 {rows[-1]['C3']:.2f}, "
               f"directed {rows[-1]['directed_share']:.3f}, loc zone {rows[-1]['loc_template_zone']:.2f}; {rows[-1]['seconds']:.0f} s", flush=True)
     summary = {"rows": rows, "slot": slot, "directions": {q: {"norm_d_col": float(np.linalg.norm(dq["d_col"])), "n_cells_col": dq["n_cells_col"],
@@ -531,7 +570,7 @@ def main(argv: list[str] | None = None) -> int:
     for agent in fs.load_agents(args.agents, args.runs_root, args.agent_ids):
         setting = best_setting(args.constrained) if args.phase in ("persist", "decoder", "imagine") else None
         part = {"collect": args.slot, "coldir": None if args.conditions is None else "-".join(args.conditions),
-                "natpersist": args.direction}.get(args.phase)
+                "natpersist": args.direction, "transfer": args.slot}.get(args.phase)
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         out = args.out_dir / EXPERIMENT_ID / (f"e7ctx__{agent['id']}__{args.phase}" + (f"__{part}" if part else "") + f"__{stamp}")
         out.mkdir(parents=True, exist_ok=False)
@@ -553,6 +592,8 @@ def main(argv: list[str] | None = None) -> int:
                     raise RuntimeError(f"d_rec not calibratable: {calib}")
                 arrays, summary = persist(st, None, vector)
                 arrays["vector"], summary["calibration"] = vector, calib
+            elif args.phase == "transfer":
+                arrays, summary = transfer(st, args.collect, args.slot)
             elif args.phase == "collect":
                 arrays, summary = collect(st, args.slot)
             else:
@@ -567,7 +608,7 @@ def main(argv: list[str] | None = None) -> int:
         np.savez_compressed(out / NPZ[args.phase], **arrays)
         (out / "summary.json").write_text(json.dumps({**summary, "setting": setting}, indent=1, default=float), encoding="utf-8")
         meta = {"agent": agent["id"], "condition": agent["condition"], "configuration": agent["configuration"], "phase": args.phase, "part": part,
-                "slot": args.slot if args.phase == "collect" else st.image["slot"], "image": st.image["name"],
+                "slot": args.slot if args.phase in ("collect", "transfer") else st.image["slot"], "image": st.image["name"],
                 "constrained": None if args.constrained is None else str(args.constrained), "collect": [str(p) for p in args.collect],
                 "weights": {r: str(p_) for r, p_ in agent["weights"].items()}, "weights_hash_before": before, "weights_hash_after": after,
                 "agents_file": str(args.agents), "config": str(args.config), "config_bases": cfg["_bases"], "n_reps": int(cfg["e6"]["n_reps"]),
