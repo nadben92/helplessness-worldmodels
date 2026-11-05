@@ -1743,3 +1743,40 @@ couleur prédite ; une direction naturelle de h liée au contexte de la zone (d_
 croyance, le planificateur et le comportement, mais b répond aussi à des directions quelconques, et la correction
 optimisée n'est pas alignée sur d_col. Les limites écrites avant s'appliquent (correction hors distribution ; d_col
 diffère en couleur et en croyance).
+
+### D. Persistance d'une direction naturelle, appliquée une fois (`natpersist`) : formes attendues (écrites et commitées avant le calcul, 5 novembre)
+
+Question : la non-persistance de A tient-elle au caractère hors distribution de la correction optimisée ? Même
+protocole apparié que A (épisodes d'E6, perturbation appliquée **une seule fois** à t = 0, puis deux flux de h sur la
+même suite d'observations et d'actions, le chemin joué par la politique perturbée une fois, mêmes tirages), mais la
+perturbation à t = 0 est une direction **naturelle** de h, sans optimisation :
+
+- **−d_col**, a = 1 (h ← h − d_col ; d_col du quadrant d'entraînement, celui de C, mêmes runs `collect`) ;
+- **+α · d_rec**, α réglé pour que le gain de b à t = 0 (b_perturbé(0) − b_non perturbé(0), moyenne sur les 180
+  contextes de t = 0, mêmes tirages que le rejeu) égale celui de −d_col à a = 1. Réglage : grille α ∈ {0,25 ; 0,5 ;
+  0,75 ; 1 ; 1,5 ; 2 ; 3 ; 4} (en multiples de d_rec), interpolation linéaire entre les deux points de la grille qui
+  encadrent le gain cible (le premier encadrement en partant de α = 0), puis gain vérifié à l'α retenu et rapporté. Si
+  aucun point de la grille n'atteint le gain cible, α = celui du gain maximal de la grille, signalé ; si ce gain
+  maximal est < 0,10 bit (par exemple si +d_rec fait baisser b : cos(d_col, d_rec) est positif, 0,41 à 0,71, alors que
+  c'est −d_col qui fait monter b), d_rec est déclarée **non calibrable** et n'a pas de verdict.
+
+Agents : shuffle A, E, F. Mesures sur les deux flux, à chaque pas, épisodes encore dans leur premier séjour dans la
+zone : b, C3 (Q̄ de `channel_q`, comme A), **part dirigée** = part greedy dirigée de la Q de la politique
+(`Q_normal` de `channel_q`, identique à celle qui choisit l'action ; les actions jouées étant communes aux deux flux,
+la part dirigée de chaque flux est celle de son action greedy, ε mis à part) ; r(t) = [X_perturbé(t) − X_non
+perturbé(t)] / [X_perturbé(0) − X_non perturbé(0)] pour X = b, C3, part dirigée ; ρ_h(t) = ‖Δh_t‖ / ‖Δh_0‖ et
+cos(Δh_t, Δh_0). r(t) de C3 et de la part dirigée n'est rapporté que si leur écart à t = 0 est ≥ 0,05.
+
+Verdict par direction, sur r(t) de **b** (comme A) ; un agent ne compte pour aucune des deux conditions si moins de
+20 épisodes sont encore dans la zone à t = 3 ou si l'écart de b à t = 0 est < 0,10 bit :
+
+- **persistance naturelle** : r(3) ≥ 0,50 pour au moins 2 agents sur 3 ;
+- **réévaluation à chaque pas** : r(2) ≤ 0,25 pour au moins 2 agents sur 3 ;
+- sinon **indéterminé** (et si les deux tenaient à la fois, rapporté tel quel comme indéterminé).
+
+Lecture (écrite avant) : réévaluation pour −d_col et +d_rec ⇒ même une perturbation naturelle de h n'est pas
+transportée ; la non-persistance de A ne tient pas seulement au caractère hors distribution de la correction.
+Persistance pour l'une d'elles ⇒ h peut transporter une perturbation de cette direction d'un pas à l'autre, et la
+non-persistance de A est propre à la correction optimisée. Limite : −d_col et d_rec sont des différences de h moyens
+entre conditions ; h + v reste hors de la distribution des h que le modèle produit sur une trajectoire donnée, moins
+loin que h + d mais pas dedans.
