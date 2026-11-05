@@ -55,6 +55,7 @@ on 2026-10-14; its files are kept in `docs/archive/plan_2026-09/`.
 ## Where things live
 
 - Shared library: `src/helplessness/` (see `CLAUDE.md`, "Structure").
-- Results of a cluster batch: an orphan branch `results/<batch>` (`docs/RESULTS_CONVENTION.md`).
+- Results of a cluster batch: an archive made by `export_batch.py`, analysed locally; light outputs committed
+  (`docs/RESULTS_CONVENTION.md`; the orphan-branch convention `results/<batch>` was not used from E4 on).
 - Paper and reports: `paper/` (`paper/README.md`).
 - Presentation figures: `slides/` (scripts `slides/figures*/`, outputs `slides/out*/`, `slides/MANIFEST*.md`).

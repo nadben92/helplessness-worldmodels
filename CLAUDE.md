@@ -158,10 +158,13 @@ Results
   (`runs.write_run_meta`: seed, git commit, code hash, status, times), metrics, `artifacts/`. `run_name =
   grid<RxC>__<zone_preset>__pair-<experimental|control>__<agent_type>__seed<NN>__<UTC timestamp>`
   (`runs.make_run_name`); `pair_role` always explicit; `make_run_dir` never overwrites.
-- GPU cluster batches (E4 on): what a batch returns goes to **its own orphan branch `results/<batch>`**, never
-  merged, read through `git worktree` (`docs/RESULTS_CONVENTION.md`; built by `cluster.handoff.write_results_layout`,
-  `make_handoff.py --results-layout`). Weights, buffers, `arrays.npz` and checkpoints stay on the cluster's
-  storage; `handoff.json` lists them with their absolute cluster path and SHA-256.
+- GPU cluster batches (E4 on): a batch comes back as one archive made by the experiment's `export_batch.py create`
+  (light files, the needed weights, probes, logs, `MANIFEST.json` with SHA-256), transferred, checked by
+  `export_batch.py verify` and extracted outside the repo; the analyses run locally on the extracted directory and
+  their light outputs are committed on the work branch (`docs/RESULTS_CONVENTION.md`). Archives, weights, buffers,
+  `arrays.npz` and checkpoints are never committed. The orphan-branch convention `results/<batch>` (designed
+  2026-10-14, tooling in `cluster.results_push` and `cluster.handoff.write_results_layout`, off by default) was not
+  used from E4 on; no such branch exists.
 - Never versioned: `handoff/`, `logs/`, `*.pt`, `**/replay.npz`, `**/wandb/`, checkpoints, bulk arrays (see
   `.gitignore`). E3's handoffs versioned before 2026-10-14 stay in the history only.
 

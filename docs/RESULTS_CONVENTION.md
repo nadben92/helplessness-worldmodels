@@ -1,8 +1,26 @@
-# Results of the GPU cluster: one orphan branch per batch
+# Results of the GPU cluster
 
-From E4 on, what a GPU batch (UCL ARC Kubeflow) returns to git goes to **its own orphan branch**
-`results/<batch>`, never to `main` or to a work branch. Heavy artefacts (weights, buffers, bulk arrays) stay on
-the cluster's storage; the branch records where they are and their SHA-256.
+## What is actually done (E4 on)
+
+A GPU batch (UCL ARC Kubeflow) comes back as **one archive**, made on the cluster by the experiment's
+`export_batch.py create` (`experiments/E4_generalization_gradient/`, `experiments/E5_belief_training/`): each run's
+light files, the weights of the checkpoints the analyses need, the probe measurements, the supervisor's logs, and a
+`MANIFEST.json` with every file's size and SHA-256. The archive is transferred to the local machine, checked by
+`export_batch.py verify`, and extracted **outside the repository**. The analyses (and E6/E7, which run on the local
+CPU with frozen weights, `--runs-root <root>`) read the extracted directory. Their **light outputs** (tables, JSON,
+reports, small figures) are committed on the experiment's work branch, under `results/<experiment_id>/` or the
+experiment's own analysis directory, then merged into `main` like the rest of the work. Archives, weights and raw
+arrays are never committed (`.gitignore`).
+
+**The orphan-branch convention described below was not used from E4 on**: no `results/<batch>` branch exists in the
+repository. Its tooling (`helplessness.cluster.results_push`, `handoff.write_results_layout`, `submit_kubeflow.py
+--push-secret`) is still there and off by default. The rest of this file documents it as it was designed.
+
+## The orphan-branch convention (designed 2026-10-14, not used)
+
+What a GPU batch returns to git would go to **its own orphan branch** `results/<batch>`, never to `main` or to a work
+branch. Heavy artefacts (weights, buffers, bulk arrays) stay on the cluster's storage; the branch records where they
+are and their SHA-256.
 
 The batches run before this convention (E3's `handoff/<batch>/`, `logs/kubeflow/*.tgz`) remain in the history
 of the work branch up to tag `e3-final`; they are no longer versioned and were not moved to branches.
