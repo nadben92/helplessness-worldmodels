@@ -121,3 +121,22 @@ Résultat intermédiaire ; les limites ci-dessous ne sont pas sur les figures.
   d'E5a_v3, E5a_v2 reste valable.
 - **Oral** : « On ne garde que les sondes où le modèle sait encore où est l'agent : la baseline est plate partout, seul
   le shuffle réagit à la couleur du tapis. »
+
+## Sondes finales à 650 000 (docs/e5/DECISIONS.md (37)) — suffixes `_650k`, `_650k_matched`
+
+- **Régénérer** (sur `e5` : `experiments/E5_belief_training/analysis_650k/analyse_650k.py`, puis `apply_localisation.py
+  --tables .../analysis_650k/tables --labels ...`) : `make_e5_v2.py --set 650k --tables <analysis_650k/tables>`,
+  `--set 650k_matched`, et `--loc --set 650k`. Les figures de 475 000 sont inchangées (vérifié pixel par pixel).
+- **Données** : shuffle A (2, sa référence), E (402) et F (502) (référence B) à **650 000** (plafond, critère d'E4 non
+  atteint) ; `_650k` = baselines A et B à 300 000 ; `_650k_matched` = baselines A et B à 100 000 (comparaison appariée,
+  principale). Rapport : `experiments/E5_belief_training/analysis_650k/REPORT.md` (branche `e5`).
+- **E5a_v2_..._650k(_matched)** : position seule shuffle −0,46 (A), −0,48 (E), −0,89 (F) ; baselines −2,30 / −2,27
+  (300 000), −2,12 / −2,24 (100 000). **Thème seul : aucune sonde shuffle valide** (référence, masse 0,84–0,85 < 0,90) :
+  la barre est vide, ce n'est pas un 0. Valeurs invalides, pour mémoire seulement : −0,49, −0,98, −0,71.
+- **E5e_theme_only_650k(_matched)** (sondes valides) : côté shuffle, E et F seulement (A n'a aucune sonde neutre valide),
+  à partir de 0,3 D (de 0 à 0,2 D toutes invalides à 650 000).
+- **E5e_loc_650k** : côté shuffle, **E seul** (F non localisé : poids absents en local ; A sans sonde neutre) : −0,55
+  (0,3 D), −0,26 (0,4 D), puis −0,08 à −0,10 de 0,5 à 1,0 D ; baseline plate. Pas de variante localisée appariée (poids des
+  baselines à 100 000 non locaux) ; pas d'E5a_v3 (aucune sonde extrême valide retirée).
+- **À dire** : les conclusions sur la position tiennent (appariée ou 300 000) ; celle sur le thème seul ne peut plus être
+  lue à 650 000.

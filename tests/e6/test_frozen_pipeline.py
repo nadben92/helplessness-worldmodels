@@ -259,3 +259,14 @@ def test_apply_plans():
     assert all(i["setting"]["setting"] == "lam1_mupos10" for i in items if i["plan"] == "A")
     assert [i["mode"] for i in apply.build_plan(["A", "B"], other, vec, [], [], e7, kept, lambda s: None)] == ["none"] + \
         ["constrained_direction", "constrained_stepwise"]
+
+
+def test_apply_episode_arrays_default():
+    """--episode-fields' default keeps episodes.npz as before: states and I only."""
+    from _experiment_loader import load_experiment_module
+
+    apply = load_experiment_module("E7_latent_manipulation", "run_e7_apply.py", "e7_apply_arrays_under_test")
+    ep = {"states": np.zeros((2, 3)), "I": np.ones((2, 2)), "actions": np.zeros((2, 2)), "decoded_cell": np.zeros((2, 2))}
+    assert sorted(apply.episode_arrays("training__none__0", ep)) == ["training__none__0__I", "training__none__0__states"]
+    more = apply.episode_arrays("t", ep, ("actions", "decoded_cell"))
+    assert sorted(more) == ["t__I", "t__actions", "t__decoded_cell", "t__states"] and more["t__I"] is ep["I"]

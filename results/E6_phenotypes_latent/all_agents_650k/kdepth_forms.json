@@ -1,0 +1,67 @@
+{
+ "f1_A": {
+  "K1": {
+   "corrected": 0.765,
+   "oracle": 0.66,
+   "holds": false
+  },
+  "K5": {
+   "corrected": 0.7,
+   "oracle": 0.94,
+   "holds": true
+  },
+  "M": {
+   "b_model_root": -1.683990939759753,
+   "b_corrected_root": 0.21813275750623784,
+   "b_corrected_step5": 0.009374157216456278,
+   "gain_at_root": 1.9021236972659907,
+   "lost_by_step5": 0.20875860028978155,
+   "holds": false
+  }
+ },
+ "f1_E": {
+  "K1": {
+   "corrected": 0.805,
+   "oracle": 0.7716666666666667,
+   "holds": true
+  },
+  "K5": {
+   "corrected": 0.735,
+   "oracle": 0.975,
+   "holds": true
+  },
+  "M": {
+   "b_model_root": -1.8669753355759995,
+   "b_corrected_root": 0.01591393309669274,
+   "b_corrected_step5": -0.07826636856329033,
+   "gain_at_root": 1.8828892686726921,
+   "lost_by_step5": 0.09418030165998308,
+   "holds": false
+  }
+ },
+ "f1_F": {
+  "K1": {
+   "corrected": 0.765,
+   "oracle": 0.745,
+   "holds": true
+  },
+  "K5": {
+   "corrected": 0.68,
+   "oracle": 0.94,
+   "holds": true
+  },
+  "M": {
+   "b_model_root": -1.6599459408635209,
+   "b_corrected_root": -0.010047899403597795,
+   "b_corrected_step5": -0.11817097971448776,
+   "gain_at_root": 1.6498980414599231,
+   "lost_by_step5": 0.10812308031088996,
+   "holds": false
+  }
+ },
+ "verdict": {
+  "K1": false,
+  "K5": true,
+  "M": false
+ }
+}

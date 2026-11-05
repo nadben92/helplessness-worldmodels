@@ -1349,3 +1349,531 @@ versionnés : décision (63), § 21 ci-dessus pour les formes attendues) :
 Options ajoutées pour ce lancement (défauts = comportement antérieur, testés) : `run_e7_d7.py --image`, `--no-overlay` ;
 `run_e7_diagnostics.induction_items(plan_b=...)` ; `analyse_e7_d7.py --no-identity` (sans l'option, sorties de D7
 identiques bit pour bit).
+
+### Relance du 3 novembre : agents shuffle à 650 000
+
+Agents de `configs/e6/agents_e5.yaml` (0e8606c) : les 4 couples d'E4 et la baseline B à 300 000 (les poids à 100 000 ne
+sont pas locaux ; choix inchangé), shuffle A (graine 2, sa référence), E (402) et F (502) contre la référence de la
+graine B, à 650 000. Racine des runs `C:\nrw\e7_650k_root` : l'arborescence du cluster, une jonction de répertoire par
+dossier de run (baselines vers `C:\nrw\e6all`, shuffle vers `C:\nrw\e5_extends\extracted\e5_extend_{a,b}__*`), rien
+copié. Les 16 fichiers de poids résolus par `frozen_setup.load_agents` ont le SHA-256 de
+`experiments/E5_belief_training/analysis_robustness/tables/inventory.csv` (branche `e5-robust`, égal aux sondes du
+cluster) pour les 10 modèles qu'elle liste, et celui des runs du 28 octobre pour les 6 autres (p1-a, p2-a, p2-b d'E4).
+
+Images : `select_images.py` relancé sur les tables `analysis_650k` (inchangées depuis b5494ee) : sélection identique à
+celle commitée (37 images, 70 couples). p1-a_e4 et base_B n'ont aucune sonde valide intermédiaire (quota 2) : 2 + 2
+images et l'image d'entraînement.
+
+Phases, dans l'ordre : e6, c12, directions, constrained, corrected, oracle, anti, free (`chain_all_cpu.py`, 12
+processus ; c12 et anti ajoutés à la demande de l'utilisateur, nécessaires aux formes 2 à 4). Test à blanc avant le
+lancement (`--smoke f1_F segment_k1_ud`, n_reps = 1) : les 9 jobs terminés, sorties supprimées. Sorties de 475 000
+renommées en `scratch/all_475k/` ; nouvelles sorties dans `scratch/all/<job>/`, journaux dans `logs/all_cpu_650k/`
+(`STATUS.txt`, `pool_<phase>.txt`, `<phase>/<job>.log`). Durée estimée : 8 à 9 h (réelle : 6 h 47).
+
+Déroulement : le premier lancement (3 novembre, 19:37) a été tué 51 s après le départ par un Ctrl+C de console
+(`0xC000013A` sur les jobs ; aucune trace dans `STATUS.txt`, la chaîne n'interceptait pas l'interruption) ; 11 jobs e6
+terminés et 12 interrompus, mis de côté dans `scratch/all_interrupted/20261104T085650Z/`, journaux renommés
+`*_interrupted_20261103*`. `chain_all_cpu.py` corrigé (60a31a2 : toute exception écrite FAILED avec sa cause, arbre de
+processus tué, ligne heartbeat), relancé le 4 novembre à 08:56 par une tâche planifiée Windows (`E7_650k_chain`,
+`pythonw`, console propre) : les 8 phases terminées à 15:44 (6 h 47), 204 jobs sur 204 `done`, aucun échec (e6 70/70,
+c12 70/70, directions 8/8, constrained 8/8, corrected 8/8, oracle 8/8, anti 24/24, free 8/8).
+
+### Résultats à 650 000 (formes du § 21, verdicts tels que calculés)
+
+`analyse_all.py --dev <checkout principal>/scratch/e6dev/results --out results/E6_phenotypes_latent/all_agents_650k`
+(après 67533c7 : `analyse_e7_d7 --no-identity` plantait à l'écriture de `d7_forms.json`, chemin par défaut inchangé).
+Aucun seuil changé.
+
+| Forme | Attendu | Obtenu | Verdict |
+|---|---|---|---|
+| 1 | E4 rejoué à l'identique (E6, oracle, anti-oracle) | E6 35/35 tableaux, oracle 6/6, anti-oracle 26/26 pour les 4 agents | **tenue** |
+| 2 | ≥ 3 couples intermédiaires par shuffle (E, F dans le code) ; C1 dans ]0,50 ; 0,85[ pour ≥ la moitié ; ρ(b, C1) ≥ 0,5 | E 3, F **1** ; 1/8 ; ρ = 0,29 (8 couples) | **non tenue** |
+| 3 | part dirigée dans ]0,50 ; 0,85[ pour ≥ la moitié ; \|dirigée − anti-oracle au même b\| ≤ 0,10 pour ≥ la moitié | 4/8 (0,50) ; 7/8 | **tenue** (à la limite sur la première condition) |
+| 4 | chez B, E, F : effet de la croyance ≥ 0,40, effet du critic ≤ 0,20 et ≤ la moitié | B 0,45 / 0,16 ; F 0,47 / 0,07 ; **E 0,40 / 0,22** | **non tenue, à cause de E** (critic 0,22 > 0,20) |
+| 5 | part de l'écart comblée par b > par C1, chaque agent | vrai pour les 8 ; issue de D7 : « mesure trompée » 6, « réelle » base_A, « intermédiaire » f1_A | **tenue** |
+
+Forme 2, seuil de 3 couples pour A (calculé à la main, le code de la forme ne lit que E et F, écrit avant l'ajout de
+A) : f1_A a **4** couples intermédiaires valides et bien localisés : seuil **atteint**. Les autres conditions de la
+forme 2 portent sur l'ensemble des couples et ne changent pas.
+
+Couples intermédiaires (b au pas 1 de l'épisode dans ]−1,5 ; −0,5], image valide) avant et après la règle
+`loc_template_step1 ≥ 0,9` ; anti-oracle : courbe k = 1 de l'agent (référence, h moyen) interpolée au même b :
+
+| Agent | Image | b | loc | C1 | dirigée | anti-oracle | retenu |
+|---|---|---|---|---|---|---|---|
+| f1_A | arc_ctrl_k4_ud | −1,26 | 0,96 | 0,83 | 0,75 | 0,89 | oui |
+| f1_A | arc_ctrl_k5_ud | −1,11 | 0,97 | 0,88 | 0,83 | 0,89 | oui |
+| f1_A | position_only_k0_ud | −0,97 | 0,96 | 0,89 | 0,83 | 0,89 | oui |
+| f1_A | arc_ctrl_k6_ud | −0,88 | 0,95 | 0,89 | 0,80 | 0,89 | oui |
+| f1_A | arc_ctrl_k8_ud | −0,85 | 0,13 | 0,93 | 0,81 | 0,89 | non |
+| f1_A | arc_ctrl_k7_ud | −0,63 | 0,37 | 0,91 | 0,76 | 0,89 | non |
+| f1_E | position_only_k0_ud | −1,24 | 0,98 | 0,88 | 0,87 | 0,93 | oui |
+| f1_E | segment_k5_ud | −1,21 | 0,98 | 0,92 | 0,93 | 0,93 | oui |
+| f1_E | arc_ctrl_k5_ud | −1,02 | 0,79 | 0,95 | 0,89 | 0,93 | non |
+| f1_E | arc_ctrl_k7_neutral | −0,86 | 0,12 | 0,99 | 0,94 | 0,93 | non |
+| f1_E | arc_ctrl_k6_neutral | −0,79 | 0,28 | 0,98 | 0,92 | 0,93 | non |
+| f1_E | arc_ctrl_k8_neutral | −0,75 | 0,09 | 1,00 | 0,94 | 0,93 | non |
+| f1_E | segment_k3_neutral | −0,69 | 0,91 | 0,96 | 0,92 | 0,93 | oui |
+| f1_E | arc_ctrl_k6_ud | −0,67 | 0,32 | 1,00 | 0,92 | 0,93 | non |
+| f1_E | arc_ctrl_k6_cd | −0,58 | 0,08 | 1,00 | 0,93 | 0,93 | non |
+| f1_E | arc_ctrl_k5_neutral | −0,57 | 0,61 | 0,99 | 0,91 | 0,93 | non |
+| f1_F | arc_ctrl_k6_ud | −1,44 | 0,61 | 0,74 | 0,78 | 0,93 | non |
+| f1_F | segment_k3_neutral | −1,30 | 0,94 | 0,94 | 0,88 | 0,93 | oui |
+| f1_F | arc_ctrl_k7_ud | −1,27 | 0,62 | 0,76 | 0,80 | 0,93 | non |
+| f1_F | segment_k4_neutral | −0,99 | 0,88 | 0,96 | 0,92 | 0,93 | non |
+| f1_F | segment_k4_cd | −0,88 | 0,34 | 0,99 | 0,82 | 0,93 | non |
+| f1_F | segment_k5_cd | −0,61 | 0,54 | 1,00 | 0,91 | 0,93 | non |
+| p2-a_e4 | arc_ctrl_k5_ud | −1,13 | 0,22 | 0,71 | 0,67 | 0,94 | non |
+| p2-a_e4 | arc_inc_k10_cd | −0,51 | 0,01 | 1,00 | 0,91 | 0,94 | non |
+| p2-b_e4 | arc_ctrl_k3_ud | −1,44 | 0,46 | 0,44 | 0,60 | 0,94 | non |
+| p2-b_e4 | arc_ctrl_k5_ud | −0,80 | 0,03 | 0,73 | 0,64 | 0,94 | non |
+
+Lecture (description, pas de nouvelle forme) : sur les 8 couples retenus, C1 (0,83–0,94) et la part dirigée
+(0,75–0,93) sont près de l'amas de référence, b seul est intermédiaire ; C1 moyen par classe de b sur les couples
+valides et bien localisés : 0,44 (impuissants, 19), 0,90 (intermédiaires, 8), 0,99 (en contrôle, 6). Les 4 parts
+dirigées « intermédiaires » de la forme 3 sont les 4 couples de f1_A, entre 0,75 et 0,83, juste sous la borne 0,85 ;
+ceux de E et F sont au-dessus. La courbe anti-oracle k = 1 des agents shuffle est en marche : part dirigée 0,40 à
+p = 1 (b ≈ −2) et 0,89 (A) ou 0,93 (E, F, même référence) partout ailleurs ; « près de l'anti-oracle » veut donc dire
+ici « près de la référence ». Le critic et le comportement suivent l'amas (impuissant ou non), pas la valeur de b
+dans l'intervalle intermédiaire, comme sur les agents d'E4 (D7).
+
+Remarques :
+- **Localisation de F** (connue ici pour la première fois, poids à 650 000 absents de la copie locale lors des sondes) :
+  au pas 1 des épisodes E6, 3 images sur 14 atteignent 0,90 (entraînement 0,98, segment_k1_ud 0,96,
+  segment_k3_neutral 0,94 ; segment_k4_neutral 0,88), les arc_ctrl entre 0,61 et 0,79. Elle est plus faible en
+  épisodes E6 que dans les sondes d'échange de la branche `e5-robust` : le contexte de départ diffère (marche aléatoire
+  dans le couloir puis entrée dans la zone en E6, contexte fixé de la sonde).
+- **segment_k3_cd de F** : valide dans la sonde à 650 000 (masse 0,917, I 2,236) mais **invalide** dans le run E6
+  (critère d'E4 sur la référence au pas 1 de l'épisode) ; localisation 0,11. Il n'entre dans aucune forme.
+
+Sorties légères : `results/E6_phenotypes_latent/all_agents_650k/` (pairs.csv, forms.json, form3_gaps.csv,
+identity_e4.csv, t1_runs.csv, t1_identity.csv, table_2x2.csv, d7/). Figure : `slides/out_v3/E7_bars_650k.png`
+(`slides/figures_v3/E7_bars_650k.py`, valeurs dans `slides/out_v3/data/E7_bars_650k.csv`) : par condition, barre des 5
+baselines et barre hachurée des 3 shuffle, un point par agent.
+Version corrigée le 4 novembre (voir ci-dessous) : oracle à k = 1 et à k = 5 en deux barres ; C1 et C3 appariés ;
+localisation de l'oracle retirée.
+
+### Correction latente chez les shuffle : vérifications (4 novembre)
+
+**Portée du verdict D7 « mesure trompée ».** Il porte sur le **critic seul** (C1, argmax de V sur les successeurs) :
+b remonte d'au moins 1 bit, C1 change de 0,10 au plus et reste à plus de 0,10 sous la courbe naturelle au même b. Il ne
+dit rien du planificateur (C3, argmax de Q) ni du comportement (part dirigée, mesurée sur les vrais états).
+
+Par agent, image d'entraînement. b, C1 et C3 : D7 appariés (sans → avec la correction contrainte, mêmes pas : ceux de
+la zone des épisodes corrigés, bien localisés, z̄ = draw) ; part dirigée : exposé (E6), correction latente (free),
+correction contrainte (corrected), oracle exposé à k = 1 et k = 5 (lookahead), référence (E6).
+
+| Agent | Réglage | b | C1 | C3 | Dirigée : exp / latent / contr. / oracle k=1 / k=5 / réf. | D7 |
+|---|---|---|---|---|---|---|
+| p1-a_e4 | λ 0,1, μ 1 | −1,96 → −0,71 | 0,39 → 0,36 | 0,39 → 0,68 | 0,32 / 0,42 / 0,44 / 0,75 / 0,94 / 0,94 | mesure trompée |
+| base_A | λ 0,01, μ 1 | −2,07 → −0,43 | 0,54 → 0,74 | 0,45 → 0,73 | 0,49 / 0,69 / 0,71 / 0,88 / 0,94 / 0,94 | réelle |
+| p2-a_e4 | λ 0,01, μ 10 | −1,99 → −0,23 | 0,43 → 0,45 | 0,38 → 0,69 | 0,33 / 0,61 / 0,62 / 0,93 / 0,95 / 0,94 | mesure trompée |
+| p2-b_e4 | λ 0,1, μ 1 | −1,94 → −0,12 | 0,53 → 0,41 | 0,48 → 0,58 | 0,40 / 0,59 / 0,48 / 0,86 / 0,94 / 0,94 | mesure trompée |
+| base_B | λ 0,1, μ 0 | −2,06 → −0,22 | 0,52 → 0,55 | 0,45 → 0,80 | 0,43 / 0,68 / 0,69 / 0,78 / 0,94 / 0,94 | mesure trompée |
+| f1_A | λ 0,1, μ 1 | −1,35 → +0,31 | 0,46 → 0,77 | 0,33 → 0,44 | 0,42 / 0,83 / 0,55 / 0,65 / 0,92 / 0,89 | intermédiaire |
+| f1_E | λ 0,1, μ 0 | −1,48 → +0,06 | 0,73 → 0,76 | 0,66 → 0,89 | 0,45 / 0,79 / 0,81 / 0,71 / 0,94 / 0,93 | mesure trompée |
+| f1_F | λ 0,1, μ 10 | −1,70 → −0,05 | 0,64 → 0,68 | 0,51 → 0,82 | 0,44 / 0,81 / 0,87 / 0,86 / 0,94 / 0,93 | mesure trompée |
+
+Lecture : chez E et F, la correction rétablit **partiellement** le comportement par la prédiction des transitions (masse
+du modèle sur le vrai successeur de l'action jouée, dans la zone : 0,15 → 0,86 pour E, 0,27 → 0,78 pour F dans la
+correction latente ; C3 +0,23 et +0,31), **sans changer le critic** (C1 +0,03 et +0,04). Elle reste **sous l'oracle à
+k ≥ 5** (0,92–0,94 chez les trois shuffle) ; elle ne dépasse que l'oracle à k = 1 (0,65 pour A, 0,71 pour E), qui fait
+un vrai pas de transition puis s'en remet au critic exposé et en hérite la faiblesse. La version précédente de
+`E7_bars_650k` comparait à ce seul oracle k = 1, et son panneau C1 mettait le C1 de l'exposé dans ses épisodes naturels
+(0,37 pour E) face au C1 corrigé sur les pas des épisodes corrigés, ce qui exagérait la hausse ; corrigé.
+
+**Part dirigée de F sous la correction latente (0,81 avec une localisation de 0,42) : pas un artefact de la
+localisation.** Relance de la phase free pour A, E et F avec les épisodes (`run_e7_apply.py --save-episodes
+--episode-fields ...`, option ajoutée en 46d0960, défaut inchangé ; lignes de résultats identiques au bit près à la
+campagne), `free_offsets_650k.py` → `all_agents_650k/free_offsets.csv`. Sur les pas de zone :
+
+| Agent | Mode | Pas | Case décodée = vraie | Erreurs : vers le but / même dist. / plus loin | Taille moy. (cases) | Dirigée : bien loc. / mal loc. | Mal loc. : dirigée depuis la case décodée |
+|---|---|---|---|---|---|---|---|
+| f1_A | exposé | 861 | 0,76 | 0,26 / 0,12 / 0,61 | 7,9 | 0,41 / 0,47 | 0,51 |
+| f1_A | latent | 600 | 0,45 | 0,56 / 0,11 / 0,33 | 7,5 | 0,75 / 0,89 | 0,34 |
+| f1_E | exposé | 1 168 | 0,83 | 0,12 / 0,14 / 0,73 | 8,0 | 0,43 / 0,54 | 0,35 |
+| f1_E | latent | 732 | 0,67 | 0,24 / 0,13 / 0,63 | 7,1 | 0,75 / 0,88 | 0,45 |
+| f1_F | exposé | 950 | 0,80 | 0,13 / 0,10 / 0,76 | 9,1 | 0,43 / 0,48 | 0,50 |
+| f1_F | latent | 651 | 0,32 | 0,58 / 0,08 / 0,33 | 7,2 | 0,87 / 0,78 | 0,55 |
+
+Les erreurs de décodage sont grandes (7 cases en moyenne, 3 % à une case pour F) : la case décodée n'est pas une
+position voisine décalée vers la sortie. Sur les pas mal localisés de F, l'action est dirigée **depuis la vraie case**
+dans 78 % des cas, **depuis la case décodée** dans 55 % seulement : l'agent n'agit pas sur sa position décodée, et la
+part dirigée tient sur les pas mal localisés presque autant que sur les bien localisés (0,78 contre 0,87). Ce qui baisse
+sous la correction, c'est la lecture de la position par le décodeur (h déplacé par la correction), pas le comportement
+dirigé. Même profil chez A et E (dirigée sur les pas mal localisés 0,89 et 0,88). p_goal dans la zone ≤ 0,013.
+
+### Correction contre oracle à k égal : formes attendues (écrites et commitées avant le calcul, 4 novembre)
+
+Profondeur de planification des runs `corrected`, `constrained` et `free` : la politique de l'agent
+(`agents.worldmodel.policy.q_values`), un pas imaginé par le modèle (16 tirages du prior) puis le critic, soit k = 1
+côté modèle ; l'oracle k = 1 de la figure fait un vrai pas de transition puis le critic. La comparaison de la figure
+est donc à k = 1 des deux côtés.
+
+Mesure (sans nouveau code) : `run_e7_diagnostics.py --phase values --constrained <con_<agent>>` sur les 8 agents, comme
+D4 sur E4 (version statique) : sur les cases de la zone de l'image d'entraînement (4 contextes de départ par case),
+part dirigée gloutonne (`greedy_directed`) de Q_k du modèle exposé pour k = 1 à 10, en trois variantes : `oracle`
+(vraies transitions, vraie récompense, critic du modèle), `model` (sans correction) et `model_corrected` (h + d de la
+correction contrainte au réglage (48) de l'agent, appliquée au pas réel, puis k pas imaginés par le modèle) ; et b le
+long des pas imaginés (`trace_b`, une particule suivie par contexte et action) pour `model` et `model_corrected`.
+
+Formes, pour chaque agent shuffle (A, E, F) ; les baselines sont rapportées pour comparaison, sans forme :
+
+- **K1.** À k = 1, la correction égale l'oracle : |corrigé(k = 1) − oracle(k = 1)| ≤ 0,10.
+- **K5.** À k = 5, la correction plafonne sous l'oracle : corrigé(k = 5) ≤ oracle(k = 5) − 0,10.
+- **M (mécanisme).** Les pas imaginés retombent vers le tapis roulant : b moyen de `model_corrected` au 5ᵉ pas imaginé
+  a perdu au moins la moitié du gain de la correction à la racine, b_corr(racine) − b_corr(5) ≥ 0,5 ×
+  (b_corr(racine) − b_model(racine)).
+
+### Décomposition à k = 1 et correction à k égal : résultats (4 novembre)
+
+**Décomposition principale, à k = 1** (la règle de décision de l'agent : un pas imaginé puis le critic). Écart de part
+dirigée entre exposé et référence (épisodes, image d'entraînement), par agent : **effet croyance** = oracle k = 1 −
+exposé (la vraie transition à la place de la croyance) ; **effet cache** = référence − oracle k = 1 (ce qui reste : les
+valeurs du critic exposé). Valeurs de `slides/out_v3/data/E7_bars_650k.csv`, dernier panneau de `E7_bars_650k`.
+
+| Agent | Exposé | Oracle k = 1 | Référence | Effet croyance | Effet cache | Part de la croyance |
+|---|---|---|---|---|---|---|
+| p1-a_e4 | 0,32 | 0,75 | 0,94 | +0,43 | +0,19 | 0,70 |
+| base_A | 0,49 | 0,88 | 0,94 | +0,39 | +0,06 | 0,86 |
+| p2-a_e4 | 0,33 | 0,93 | 0,94 | +0,59 | +0,01 | 0,98 |
+| p2-b_e4 | 0,40 | 0,86 | 0,94 | +0,46 | +0,08 | 0,85 |
+| base_B | 0,43 | 0,78 | 0,94 | +0,35 | +0,16 | 0,68 |
+| f1_A | 0,42 | 0,65 | 0,89 | +0,23 | +0,24 | 0,48 |
+| f1_E | 0,45 | 0,71 | 0,93 | +0,26 | +0,22 | 0,54 |
+| f1_F | 0,44 | 0,86 | 0,93 | +0,42 | +0,07 | 0,86 |
+
+Chez les baselines, l'effet croyance domine (68 à 98 % de l'écart). Chez les shuffle A et E, l'effet cache est aussi
+grand que l'effet croyance (≈ 0,23 chacun) ; F ressemble aux baselines.
+
+**k = 5 n'est pas une décomposition.** Ses pas imaginés sortent de la zone, où les valeurs sont justes : il corrige
+croyance et cache ensemble. L'oracle à k = 5 (0,94–0,95 chez tous les agents) montre seulement que **la trace du cache
+est contournée en planifiant plus loin**.
+
+**Correction à k égal : diagnostic, hors décomposition** (la croyance revient-elle dans les pas imaginés ?).
+`run_e7_diagnostics.py --phase values --constrained` sur les 8 agents (sorties `scratch/values_650k/`, réglage de
+chaque agent égal à celui de la forme 5, vérifié), `kdepth_650k.py` → `all_agents_650k/kdepth.csv`,
+`kdepth_forms.json`, `kdepth_trace.csv`. Part dirigée gloutonne statique sur les cases de la zone :
+
+| Agent | Oracle k = 1 / 5 / 10 | Exposé sans correction k = 1 / 5 | Corrigé k = 1 / 2 / 5 / 10 |
+|---|---|---|---|
+| p1-a_e4 | 0,75 / 0,86 / 0,99 | 0,48 / 0,41 | 0,67 / 0,67 / 0,65 / 0,66 |
+| base_A | 0,73 / 0,91 / 0,98 | 0,44 / 0,42 | 0,64 / 0,75 / 0,70 / 0,71 |
+| p2-a_e4 | 0,77 / 0,91 / 0,98 | 0,57 / 0,42 | 0,73 / 0,68 / 0,67 / 0,66 |
+| p2-b_e4 | 0,85 / 0,95 / 1,00 | 0,40 / 0,38 | 0,76 / 0,75 / 0,66 / 0,65 |
+| base_B | 0,64 / 0,90 / 0,96 | 0,29 / 0,43 | 0,63 / 0,68 / 0,70 / 0,68 |
+| f1_A | 0,66 / 0,94 / 0,96 | 0,49 / 0,47 | 0,77 / 0,78 / 0,70 / 0,70 |
+| f1_E | 0,77 / 0,97 / 1,00 | 0,56 / 0,40 | 0,81 / 0,76 / 0,73 / 0,72 |
+| f1_F | 0,74 / 0,94 / 1,00 | 0,53 / 0,51 | 0,77 / 0,74 / 0,68 / 0,67 |
+
+Verdicts des formes écrites avant le calcul (284d0ff), tels que calculés :
+
+- **K1 (|corrigé − oracle| ≤ 0,10 à k = 1) : non tenue**, à cause de A (0,77 contre 0,66, écart 0,105) ; E (0,81 /
+  0,77) et F (0,77 / 0,74) la tiennent.
+- **K5 (corrigé ≤ oracle − 0,10 à k = 5) : tenue** pour les trois (A 0,70 / 0,94, E 0,73 / 0,97, F 0,68 / 0,94). La
+  correction plafonne vers 0,70 quel que soit k ; l'oracle monte.
+- **M (b au 5ᵉ pas imaginé a perdu au moins la moitié du gain de la correction à la racine) : non tenue** (perte
+  0,21 / 1,90 pour A, 0,09 / 1,88 pour E, 0,11 / 1,65 pour F). Telle qu'écrite, M lit le b moyen de toutes les
+  particules suivies au 5ᵉ pas, quand 93 à 98 % d'entre elles sont décodées hors de la zone, où b ≈ 0 avec ou sans
+  correction (b moyen sans correction au 5ᵉ pas : +0,14, +0,05, +0,03).
+
+Description (pas une forme) : **dans la zone**, le b des pas imaginés de la version corrigée retombe **dès le premier
+pas imaginé** au niveau de la version non corrigée, alors que la racine était à ≈ 0 : A −1,45 contre −1,47, E −1,51
+contre −1,76, F −1,64 contre −1,69 (baselines : −1,81 à −2,06 contre −2,10 à −2,21), et y reste aux pas 2 à 4. La
+correction n'agit qu'au pas réel où h est corrigé ; le modèle imagine la suite avec sa croyance d'origine. C'est
+cohérent avec le plafond de K5 ; la forme M, écrite sur le 5ᵉ pas, ne pouvait pas le voir.
+
+**Limite du filtre de localisation.** Le filtre `loc_template_step1 ≥ 0,9` (couples intermédiaires, formes 2 et 3) et
+la sélection des pas bien localisés de D7 lisent la position **par le décodeur**. Ils peuvent écarter des pas où
+l'agent agit pourtant depuis sa vraie case : sous la correction latente, F agit de façon dirigée depuis sa vraie case
+sur 78 % des pas mal décodés (`free_offsets.csv`). Aucun filtre n'est changé ; les résultats ci-dessus restent ceux des
+filtres commités.
+
+## 22. h porte-t-il le contexte ou un « niveau de contrôle » ?
+
+Question : h porte-t-il le **contexte** (position, couleur dessinée), à partir duquel les poids recalculent la croyance à
+chaque pas, ou une **variable transportée** « niveau de contrôle » ? Acquis (§ 21) : en imagination, b retombe au niveau
+non corrigé dès le premier pas imaginé.
+
+Commun : CPU local, poids gelés (hash avant / après), image d'entraînement, monde de test (tout contrôlable), protocole
+d'E6 (180 épisodes : 20 départs sur chacune des 9 cases intérieures de la zone, horizon 36, ε de l'agent, mêmes graines
+qu'E6). Agents : shuffle A, E, F (650 000) et les 5 baselines (300 000), sauf C (shuffle seulement). Correction
+contrainte = celle de la forme 5 (réglage (48) de chaque agent, `best_setting`). Nouveau script
+`experiments/E7_latent_manipulation/run_e7_context.py` (phases `persist`, `decoder`, `coldir`), mêmes briques que D7
+(`stepwise_hook`, `fixed_hook`, `channel_q` pour V par action et Q, `localise`), sans changer aucune mesure ni aucun
+seuil existant. Formes et seuils ci-dessous écrits et commités **avant tout calcul** ; verdict par agent shuffle.
+
+### A. Persistance sur pas réels (`persist`), version appariée
+
+Correction contrainte appliquée **une seule fois**, au premier pas de l'épisode (t = 0, dans la zone), puis épisode
+normal : la politique corrigée une fois joue le chemin réel. Sur chaque épisode, **deux flux de h sur la même suite
+d'observations et d'actions** (ce chemin), rejoués avec les mêmes tirages (générateurs clonés) : l'un corrigé à t = 0,
+l'autre non. r(t) = [b_corrigé(t) − b_non corrigé(t)] / [b_corrigé(0) − b_non corrigé(0)], b moyen sur les épisodes
+encore dans la zone au pas t. Rapportés de même, sans verdict : C1, C3, masse sur le vrai successeur de l'action jouée
+(les deux flux), et la part dirigée par indice du chemin joué contre celle de l'exposé sans correction (mêmes graines).
+
+- **Contexte** : r(2) ≤ 0,25.
+- **Variable transportée** : r(3) ≥ 0,50.
+- **Indéterminé** : moins de 20 épisodes encore dans la zone à t = 3, ou aucune des deux conditions.
+
+**Ajout à A (écrit le 4 novembre, avant le calcul de ces mesures ; la partie b de A était déjà lancée) : la perturbation
+de h est-elle transmise ou effacée ?** Sur les deux flux appariés, à chaque pas : ‖Δh_t‖ = ‖h_t(corrigé à t = 0) −
+h_t(non corrigé)‖, le rapport ρ_h(t) = ‖Δh_t‖ / ‖Δh_0‖ (par épisode, puis moyenne sur les épisodes encore dans la zone),
+et cos(Δh_t, Δh_0). Pas de lecture t* : le premier t ≥ 1 où r(t) ≤ 0,25 (b revenu à au plus 25 % de l'effet).
+
+- **(i) perturbation transmise mais ignorée** : ρ_h(t*) ≥ 0,5 ;
+- **(ii) perturbation effacée par le GRU** : ρ_h(t*) ≤ 0,2 ;
+- entre les deux, ou pas de t* : **indéterminé**.
+
+Même lecture **en imagination** (phase `imagine`) : les données de `values_650k` ne la permettent pas (h n'y est pas
+enregistré, et les variantes avec et sans correction n'y sont pas appariées, graines distinctes). Contextes : ceux de B
+(premier pas sur les cases intérieures de la zone, 20 par case) ; deux flux, h et h + d, déroulés 5 pas imaginés avec
+les mêmes actions (première action : chacune des 5 ; ensuite : action uniforme tirée d'une graine fixée, la même pour
+les deux flux) et les mêmes tirages du prior ; la case de la particule suit les vraies transitions de ces actions ; à
+chaque pas imaginé, b = I − I_ref de cette case (pas dans la zone seulement), ‖Δh_i‖, ρ_h(i), cos(Δh_i, Δh_0) ; t* et
+la lecture (i) / (ii) comme ci-dessus, sur l'écart de b apparié.
+
+### B. Décodeur (`decoder`, prioritaire)
+
+Contextes : le premier pas d'un épisode commencé sur chaque case intérieure de la zone (`fresh_start_contexts`, 20 par
+case, 180), avant et après la correction contrainte (le même calcul de d que A à t = 0). La mesure du verdict porte sur
+l'**image prédite** : pour chaque action, h'_a = GRU(h, z, a), z' tiré du prior (4 tirages), image décodée de (h'_a, z') ;
+z vient du posterior, dominé par l'observation, si bien que l'image reconstruite ne peut presque pas montrer un
+changement de contexte porté par h. Sur l'image prédite : couleur moyenne des pixels des cases de la zone hors case de
+l'agent (la case actuelle et le vrai successeur de l'action) ; distances RGB (0–255) à T_inc, T_ctrl et au neutre
+(couleur du couloir) ; case de l'agent décodée. Déplacement normalisé de la couleur : s = [D_inc(après) −
+D_inc(avant)] / ‖T_inc − neutre‖, moyenne sur les actions et les tirages, intervalle bootstrap à 95 % sur les contextes
+(2 000 tirages). L'image reconstruite (z du posterior) est rapportée à titre descriptif, avec les mêmes mesures.
+
+- **Shuffle, contexte** : la zone est prédite moins T_inc après correction : s ≥ 0,10 et intervalle > 0.
+- **Baselines** : couleur inchangée, |s| ≤ 0,05 ; case de l'agent déplacée : la part des images prédites dont la case
+  de l'agent décodée est le vrai successeur baisse d'au moins 0,10.
+- Rapporté sans verdict : D_ctrl et D_neutre avant / après, l'image prédite moyenne (figure).
+
+### C. Direction naturelle de la couleur (`coldir`, prioritaire, shuffle seulement)
+
+d_col : épisodes réels du protocole d'E6 dans le monde de test, avec l'image de chacune des 12 dispositions
+d'entraînement (`episode_sources.assignment_colors`) ; pour le quadrant de la zone d'entraînement, h moyen des pas de
+zone dans les dispositions où ce quadrant porte T_inc (3) moins dans celles où il est neutre (6), **à case égale** (une
+différence par case, moyennée sur les cases, pondérée par le nombre de pas). Fiabilité : cosinus entre les d_col de deux
+moitiés des épisodes ≥ 0,80, sinon C est déclarée non interprétable pour l'agent.
+
+Manipulation, image d'entraînement : h ← h − a · d_col à chaque pas de zone (`fixed_hook`, sans optimisation),
+a ∈ {0,25 ; 0,5 ; 0,75 ; 1 ; 1,5} ; contrôle : 5 directions aléatoires (graines fixées) de même norme que d_col, a ∈ {1 ; 1,5}.
+Mesures : b au pas 1, C1, C3, localisation en zone (`loc_template_zone`), part dirigée. Cosinus : δh de la correction
+contrainte aux entrées de zone contre −d_col, moyenne sur les contextes ; hasard : 95ᵉ centile des cosinus moyens de δh
+avec 1 000 directions aléatoires.
+
+Ajouts (descriptifs, sans verdict) : d_col calculé **pour chaque quadrant** (épisodes partant de ce quadrant dans les 12
+dispositions), cosinus entre quadrants ; **d_ctrl** = h moyen en zone T_ctrl moins en zone neutre, à case égale
+(couleur pure, deux zones contrôlables dans le monde de test), cos(d_col, d_ctrl) ; **d_rec** = h aux pas ≥ 5 moins au
+pas 1 dans la zone T_inc, à case égale (la récupération au fil de l'épisode), cos(d_col, d_rec). C1 et C3 sont calculés
+sur les pas de zone bien localisés (convention de D7) ; la condition 4 utilise **5 directions aléatoires** (graines
+fixées), et elle tient si elle tient pour la **médiane** des 5.
+
+- **Contexte**, les cinq conditions :
+  1. b au pas 1 monte avec a (ρ de Spearman sur les 6 points a = 0 … 1,5 ≥ 0,9) et gagne au moins 0,5 bit à a = 1 ;
+  2. C3 et part dirigée gagnent chacun au moins 0,10 à a = 1 ;
+  3. la localisation tient jusqu'à a = 1 : `loc_template_zone` ≥ exposé − 0,10 pour a ≤ 1 ;
+  4. la direction aléatoire ne fait rien à a = 1 (médiane des 5) : |Δb| ≤ 0,20 bit, |ΔC3| ≤ 0,05, |Δ part dirigée| ≤ 0,05 ;
+  5. cos(δh, −d_col) au-dessus du 95ᵉ centile du hasard.
+- Une condition sur deux à quatre tenue : **partiel** ; aucune ou seulement la 4 : **non tenue**.
+
+**Limite (écrite avant).** d_col diffère en couleur **et** en croyance : les zones T_inc et neutre n'ont pas la même
+couleur, mais le modèle n'y a pas non plus la même croyance. C peut montrer qu'une direction naturelle de contexte
+cause la croyance, pas qu'elle est purement chromatique ; d_ctrl (deux couleurs, deux zones contrôlables) sert de point
+de comparaison, sans verdict.
+
+**Limite (écrite avant le calcul des mesures de Δh).** La correction est hors distribution : h + d n'est pas un état
+que le modèle produit lui-même. Sa non-persistance ne prouve pas que h ne peut pas porter de croyance : la récupération
+naturelle de b au fil de l'épisode, elle, persiste d'un pas à l'autre.
+
+Lecture conjointe (écrite avant) : A « contexte » + B shuffle + C tenue ⇒ h porte le contexte, la croyance est recalculée
+par les poids à chaque pas. A « transportée » ⇒ une variable persiste dans h au moins sur les pas réels. Des verdicts
+divergents seront rapportés tels quels.
+
+### Résultats (4 novembre)
+
+Runs : `scratch/ctx_650k/E7_context/` (non versionnés ; les premiers runs `persist`, sans Δh, mis de côté dans
+`scratch/ctx_650k_superseded/` : le nouveau `persist` les reproduit bit pour bit sur tous leurs tableaux). Analyse :
+`analyse_e7_context.py` → `results/E6_phenotypes_latent/all_agents_650k/context/` (persist.csv, imagine.csv,
+decoder.csv, coldir.csv, directions.csv, forms.json, figures/context.png). Verdicts tels que calculés, seuils inchangés.
+
+**A. Persistance sur pas réels : « contexte » pour les 8 agents.** L'écart de b entre les deux flux (1,4 à 2,0 bits à
+t = 0) a disparu dès t = 1 : r(2) entre −0,10 et +0,06, r(3) entre −0,06 et +0,03 (97 à 141 épisodes encore dans la
+zone à t = 3). C3 et la masse sur le vrai successeur reviennent de même dès t = 1 ou t = 2.
+
+Par agent (`persist.csv`), r(t) de b, ρ_h(t) = ‖Δh_t‖ / ‖Δh_0‖ et cos(Δh_t, Δh_0) de la correction optimisée
+(épisodes encore dans leur premier séjour dans la zone ; n = 180 à t = 1) :
+
+| Agent | t = 1 : r_b / ρ_h / cos | t = 2 : r_b / ρ_h / cos | t = 3 : r_b / ρ_h / cos (n) |
+|---|---|---|---|
+| p1-a_e4 | −0,01 / 0,59 / 0,53 | −0,01 / 0,38 / 0,36 | −0,02 / 0,27 / 0,25 (140) |
+| base_A | +0,05 / 0,52 / 0,60 | −0,10 / 0,26 / 0,33 | −0,01 / 0,15 / 0,19 (137) |
+| p2-a_e4 | +0,05 / 0,54 / 0,63 | +0,03 / 0,33 / 0,42 | +0,01 / 0,25 / 0,32 (141) |
+| p2-b_e4 | −0,10 / 0,64 / 0,61 | −0,05 / 0,41 / 0,36 | −0,01 / 0,30 / 0,27 (141) |
+| base_B | +0,05 / 0,63 / 0,61 | +0,01 / 0,38 / 0,35 | +0,02 / 0,24 / 0,24 (115) |
+| f1_A | −0,02 / 0,68 / 0,41 | −0,09 / 0,42 / 0,24 | −0,06 / 0,30 / 0,14 (111) |
+| f1_E | +0,15 / 0,67 / 0,42 | +0,06 / 0,40 / 0,26 | +0,03 / 0,25 / 0,15 (97) |
+| f1_F | +0,04 / 0,58 / 0,54 | −0,00 / 0,30 / 0,30 | −0,03 / 0,19 / 0,23 (103) |
+
+**Lecture Δh (807fcdc) : « (i) perturbation transmise mais ignorée » pour les 8 agents, sur pas réels et en
+imagination.** t* = 1 partout. Sur pas réels, ‖Δh_1‖ / ‖Δh_0‖ = 0,52 à 0,68 (cos(Δh_1, Δh_0) 0,41 à 0,63), puis la
+perturbation décroît (≈ 0,3 à t = 2, ≈ 0,12 à t = 5) en tournant (cos ≈ 0,1). En imagination, le rapport au premier pas
+imaginé est 0,53 à 0,69 ; chez A et E il remonte vers 1 aux pas suivants (cos → 0), chez F et les baselines il reste
+entre 0,3 et 0,6. L'effet sur b disparaît alors que plus de la moitié de la norme de la perturbation est encore dans h.
+
+**B. Décodeur : non tenue pour les 8 agents.** Sur l'image prédite, la couleur de la zone ne bouge pas : s = −0,008 à
+−0,001 (intervalles de largeur ≤ 0,01), loin de 0,10 chez les shuffle. Chez les baselines, |s| ≤ 0,05 tient, mais
+l'opérationnalisation écrite de « case de l'agent déplacée » (une baisse de la part des images prédites dont la case
+décodée est le vrai successeur) ne tient pas : cette part **monte** de 0,16–0,19 à 0,68–0,89 chez tous les agents,
+shuffle compris. Ce que la correction change dans la prédiction, c'est la case où l'agent arrive (le vrai successeur au
+lieu du tapis roulant), pas la couleur de la zone. Image reconstruite (descriptif) : D_inc passe de < 1 à 13,6–16,0 unités
+RGB chez base_A, base_B et F, à 3,7–5,3 chez A, E et p2-b, et reste < 1 chez p1-a et p2-a (s ≤ 0,08).
+
+**Remarque (5 novembre) : la forme B des baselines a été mal traduite.** L'hypothèse était que, chez les baselines, la
+correction déplace la case de l'agent prédite sans toucher à la couleur. La traduction écrite en a pris la mauvaise
+direction : elle attendait une **baisse** de la part des images prédites dont la case décodée est le vrai successeur,
+alors que « déplacer » la case, ici, c'est l'amener du tapis roulant vers le vrai successeur, ce qui fait **monter**
+cette part. Le verdict reste tel que calculé (non tenue pour les 5 baselines), parce que la forme est celle qui a été
+commitée avant le calcul. Avec la direction corrigée, la mesure montrerait la case déplacée et la couleur inchangée chez
+les 5 baselines, mais ce verdict, lu après les chiffres, n'a pas valeur de forme.
+
+**C. Direction naturelle de la couleur : partielle pour A, E et F.** d_col est fiable (cosinus entre moitiés 0,99 à
+1,00 ; ‖d_col‖ 2,2 à 2,8, contre ‖d‖ 2,6 à 4,5 pour la correction optimisée).
+
+| Agent | 1. b monte (ρ ; gain à a = 1) | 2. ΔC3 / Δdirigée à a = 1 | 3. localisation a ≤ 1 | 4. aléatoire, médiane \|Δb\| / \|ΔC3\| / \|Δdirigée\| | 5. cos(δh, −d_col) / 95ᵉ centile | Verdict |
+|---|---|---|---|---|---|---|
+| f1_A | oui (1,00 ; +1,15) | oui (+0,61 / +0,41) | oui | **non** (0,48 / 0,08 / 0,11) | **non** (0,106 / 0,108) | partielle |
+| f1_E | oui (1,00 ; +0,77) | oui (+0,25 / +0,17) | oui | **non** (0,43 / 0,04 / 0,11) | **non** (0,084 / 0,091) | partielle |
+| f1_F | oui (1,00 ; +0,56) | oui (+0,45 / +0,27) | **non** (0,39 à a = 1) | **non** (0,44 / 0,13 / 0,09) | **non** (0,064 / 0,103) | partielle |
+
+Description (pas une forme) : les directions aléatoires de même norme font **aussi** monter b (+0,14 à +0,76 bit, toutes
+positives) en dégradant la localisation (−0,13 à −0,50), mais pas C3 ni la part dirigée (variations de signe mixte,
+souvent négatives). Le long de −d_col, C3 et la part dirigée montent de façon régulière jusqu'à a = 0,75–1, puis
+retombent à a = 1,5 quand la localisation s'effondre. La réponse de b à une perturbation de h n'est donc pas
+spécifique ; celle du planificateur et du comportement l'est. d_col par quadrant : cosinus entre quadrants −0,31 à 0,00
+(une direction propre à chaque quadrant, pas un axe de couleur commun) ; cos(d_col, d_ctrl) 0,12 à 0,52 ; cos(d_col,
+d_rec) 0,41 à 0,71 : la direction naturelle de la couleur T_inc s'aligne en partie sur celle de la récupération au fil
+de l'épisode.
+
+**Lecture conjointe** (celle écrite avant, appliquée aux verdicts) : A « contexte » partout, mais B non tenue et C
+partielle : la condition écrite pour conclure « h porte le contexte » (A + B shuffle + C tenue) n'est pas remplie. Ce qui
+est établi : une correction de h n'est pas transportée (b revient dès le pas suivant, sur pas réels comme en
+imagination) bien que la perturbation reste dans h (lecture (i)) ; elle change la prédiction de la case d'arrivée, pas la
+couleur prédite ; une direction naturelle de h liée au contexte de la zone (d_col) fait monter, de façon dosée, la
+croyance, le planificateur et le comportement, mais b répond aussi à des directions quelconques, et la correction
+optimisée n'est pas alignée sur d_col. Les limites écrites avant s'appliquent (correction hors distribution ; d_col
+diffère en couleur et en croyance).
+
+### D. Persistance d'une direction naturelle, appliquée une fois (`natpersist`) : formes attendues (écrites et commitées avant le calcul, 5 novembre)
+
+Question : la non-persistance de A tient-elle au caractère hors distribution de la correction optimisée ? Même
+protocole apparié que A (épisodes d'E6, perturbation appliquée **une seule fois** à t = 0, puis deux flux de h sur la
+même suite d'observations et d'actions, le chemin joué par la politique perturbée une fois, mêmes tirages), mais la
+perturbation à t = 0 est une direction **naturelle** de h, sans optimisation :
+
+- **−d_col**, a = 1 (h ← h − d_col ; d_col du quadrant d'entraînement, celui de C, mêmes runs `collect`) ;
+- **+α · d_rec**, α réglé pour que le gain de b à t = 0 (b_perturbé(0) − b_non perturbé(0), moyenne sur les 180
+  contextes de t = 0, mêmes tirages que le rejeu) égale celui de −d_col à a = 1. Réglage : grille α ∈ {0,25 ; 0,5 ;
+  0,75 ; 1 ; 1,5 ; 2 ; 3 ; 4} (en multiples de d_rec), interpolation linéaire entre les deux points de la grille qui
+  encadrent le gain cible (le premier encadrement en partant de α = 0), puis gain vérifié à l'α retenu et rapporté. Si
+  aucun point de la grille n'atteint le gain cible, α = celui du gain maximal de la grille, signalé ; si ce gain
+  maximal est < 0,10 bit (par exemple si +d_rec fait baisser b : cos(d_col, d_rec) est positif, 0,41 à 0,71, alors que
+  c'est −d_col qui fait monter b), d_rec est déclarée **non calibrable** et n'a pas de verdict.
+
+Agents : shuffle A, E, F. Mesures sur les deux flux, à chaque pas, épisodes encore dans leur premier séjour dans la
+zone : b, C3 (Q̄ de `channel_q`, comme A), **part dirigée** = part greedy dirigée de la Q de la politique
+(`Q_normal` de `channel_q`, identique à celle qui choisit l'action ; les actions jouées étant communes aux deux flux,
+la part dirigée de chaque flux est celle de son action greedy, ε mis à part) ; r(t) = [X_perturbé(t) − X_non
+perturbé(t)] / [X_perturbé(0) − X_non perturbé(0)] pour X = b, C3, part dirigée ; ρ_h(t) = ‖Δh_t‖ / ‖Δh_0‖ et
+cos(Δh_t, Δh_0). r(t) de C3 et de la part dirigée n'est rapporté que si leur écart à t = 0 est ≥ 0,05.
+
+Verdict par direction, sur r(t) de **b** (comme A) ; un agent ne compte pour aucune des deux conditions si moins de
+20 épisodes sont encore dans la zone à t = 3 ou si l'écart de b à t = 0 est < 0,10 bit :
+
+- **persistance naturelle** : r(3) ≥ 0,50 pour au moins 2 agents sur 3 ;
+- **réévaluation à chaque pas** : r(2) ≤ 0,25 pour au moins 2 agents sur 3 ;
+- sinon **indéterminé** (et si les deux tenaient à la fois, rapporté tel quel comme indéterminé).
+
+Lecture (écrite avant) : réévaluation pour −d_col et +d_rec ⇒ même une perturbation naturelle de h n'est pas
+transportée ; la non-persistance de A ne tient pas seulement au caractère hors distribution de la correction.
+Persistance pour l'une d'elles ⇒ h peut transporter une perturbation de cette direction d'un pas à l'autre, et la
+non-persistance de A est propre à la correction optimisée. Limite : −d_col et d_rec sont des différences de h moyens
+entre conditions ; h + v reste hors de la distribution des h que le modèle produit sur une trajectoire donnée, moins
+loin que h + d mais pas dedans.
+
+### E. Transfert de d_col entre quadrants (`transfer`) : forme attendue (écrite et commitée avant le calcul, 5 novembre)
+
+Question : d_col est-il un axe global « T_inc » de h, ou une direction propre à chaque quadrant (C : cosinus entre
+quadrants −0,31 à 0,00) ? Agents shuffle A, E, F. Pour chaque quadrant Q2, les épisodes du protocole d'E6 partent de Q2
+dans le monde de test dessiné avec chacune des 3 dispositions d'entraînement où Q2 porte T_inc (mêmes images et mêmes
+graines que les runs `collect` de C ; zone = Q2). Conditions, pour chaque Q2 : exposé (sans perturbation), et
+h ← h − d_col(Q1) à chaque pas de zone (`fixed_hook`, a = 1, sans optimisation) pour chacun des 4 quadrants Q1, d_col(Q1)
+étant celui de C (runs `collect`, à case égale dans Q1). Q1 = Q2 : **quadrant d'origine** ; Q1 ≠ Q2 : **transfert**.
+Mesures, chacune moyennée sur les 3 dispositions : b au pas 1, C3 (pas de zone bien localisés, convention de D7, z̄ de
+D7), part dirigée ; gain = condition − exposé, sur les mêmes images.
+
+- Pour chaque couple ordonné (Q1, Q2), Q1 ≠ Q2 (12 couples) : gain d'origine G(Q1 → Q1) et gain de transfert
+  G(Q1 → Q2), sur la part dirigée.
+- Un agent est **sans axe global** si, sur les couples dont le gain d'origine est ≥ 0,10, la médiane des gains de
+  transfert est ≤ 0,05. Il ne compte pas (ni pour ni contre) si aucun quadrant n'a un gain d'origine ≥ 0,10.
+- **Pas d'axe global** si au moins 2 agents sur 3 sont sans axe global ; sinon la forme n'est pas tenue.
+- Rapportés sans verdict : les mêmes gains sur b et sur C3, le rapport transfert / origine, la localisation en zone.
+
+Lecture (écrite avant) : forme tenue ⇒ la direction qui fait monter le comportement dans un quadrant ne le fait pas
+monter ailleurs : h code le contexte T_inc par quadrant (avec la position), pas une variable « couleur incontrôlable »
+commune. Forme non tenue avec des gains de transfert proches des gains d'origine ⇒ une composante commune existe malgré
+les faibles cosinus entre quadrants. Limite : d_col(Q1) est appliqué avec sa norme propre, et une direction quelconque
+de même norme fait aussi bouger b (C, condition 4) ; seule la part dirigée porte le verdict, parce qu'elle ne monte
+pas sous les directions aléatoires (C : variations de signe mixte, médiane des |Δ| 0,09 à 0,11).
+
+### Résultats de D et E (5 novembre)
+
+Runs : `scratch/ctx_650k/E7_context/` (`natpersist__col`, `natpersist__rec`, `transfer__<Q2>`, non versionnés).
+Analyse : `analyse_e7_context.py` → `natpersist.csv`, `transfer.csv`, `forms.json` (clés D et E) ; les sorties de A, B
+et C sont inchangées. Verdicts tels que calculés, seuils inchangés. Écart au texte des formes : dans le calibrage de
+d_rec, le gain moyen de b ne garde que les contextes où les deux b sont finis (b est NaN sur quelques contextes aux
+grandes amplitudes), comme la moyenne par pas du rejeu ; fixé après un run réduit, avant les runs complets.
+
+**D. −d_col (a = 1) : « réévaluation à chaque pas » (3 agents sur 3).** Écart de b à t = 0 : +1,11 (A), +0,77 (E),
++0,57 (F) bit ; r_b(2) = −0,22, −0,06, −0,62 ; r_b(3) = −0,17, −0,05, −0,38 (138 à 148 épisodes à t = 3). La perturbation
+reste dans h plus longtemps que celle de la correction optimisée (ρ_h(1) 0,61 à 0,95, cos 0,78 à 0,82 ; ρ_h(3) 0,26 à
+0,42), et b revient quand même dès t = 1–2 (r_b(1) −0,11 à +0,32), en passant sous l'exposé chez A et F. Description :
+chez A et F, l'effet sur C3 et la part dirigée tient plus longtemps que celui sur b (part dirigée : r(2) = 0,70 chez A,
+1,15 chez F ; r(3) 0,11 et 0,42) ; chez E, l'effet sur C3 et sur la part dirigée à t = 0 est négatif (−0,13 / −0,26 ;
+appliquée une seule fois, −d_col fait baisser la part greedy dirigée de E, alors qu'à chaque pas, en C, elle la fait
+monter).
+
+**D. +α·d_rec : « indéterminé » (1 agent sur 3 en persistance, aucun en réévaluation).**
+
+| Agent | α (‖α·d_rec‖) | gain de b à t = 0 / cible | r_b(1) | r_b(2) | r_b(3) (n) | ρ_h(1) / ρ_h(3) |
+|---|---|---|---|---|---|---|
+| f1_A | 2,0 (7,9), cible non atteinte (maximum de la grille) | +1,07 / +1,11 | +0,96 | +0,47 | **+0,50** (144) | 0,55 / 0,35 |
+| f1_E | 1,55 (6,3) | +0,80 / +0,77 | +0,45 | +0,31 | +0,03 (122) | 0,44 / 0,15 |
+| f1_F | 1,5 (6,6), cible non atteinte (maximum de la grille) | +0,27 / +0,57 | +1,78 | +0,97 | +0,40 (101) | 0,43 / 0,13 |
+
+A dépasse le seuil de persistance tout juste (0,502). E et F ne remplissent aucune des deux conditions. Chez F, le gain
+de b à t = 0 n'est que la moitié de la cible : son r(t) part d'un écart de 0,27 bit et il est moins précis. Description :
+l'effet de d_rec sur b décroît nettement moins vite que celui de −d_col (r_b(2) 0,31 à 0,97 contre −0,62 à −0,06), alors
+que la perturbation de h, elle, s'efface plus vite (ρ_h(3) 0,13 à 0,35 contre 0,26 à 0,42). Le gain de b ne croît pas de
+façon monotone avec α (il retombe au-delà de α = 2 chez A, de α = 1,5 chez F, à α = 4 chez E) ; α · d_rec a une norme 2,4 à 3,4 fois celle de d_col
+à α = 1,5–2.
+
+**E. Transfert de d_col : « pas d'axe global » (3 agents sur 3).** Gain de part dirigée dans le quadrant d'origine
+(Q1 = Q2) : A 0,44 / 0,17 / 0,39 / 0,11 (nw / ne / se / sw) ; E 0,05 / 0,45 / 0,15 / 0,00 ; F 0,17 / 0,40 / 0,02 / 0,38.
+Sur les couples dont l'origine est ≥ 0,10 (12 chez A, 6 chez E, 9 chez F), la médiane des gains de transfert est
+−0,06 (A), −0,11 (E), −0,12 (F) : appliqué hors de son quadrant, d_col fait plutôt **baisser** la part dirigée. Quelques
+couples transfèrent un peu (A nw → ne +0,13 ; E se → ne +0,20 ; F se → sw +0,17). Description : en transfert, b monte
+quand même (médianes +0,39 à +0,64, de +0,12 à +0,95), mais C3 ne monte pas (médianes −0,06 à +0,03) et la
+localisation en zone s'effondre (médianes −0,33 à −0,36) ; à l'origine, la localisation tient chez A et E (médiane
+−0,02 à −0,01), pas chez F (−0,27). C'est le profil des directions aléatoires de C (b monte, localisation dégradée, pas
+le planificateur), ce qui va avec les cosinus quasi nuls ou négatifs entre les d_col des quadrants.
+
+**Lecture (celle écrite avant, appliquée aux verdicts).** D, −d_col : même une perturbation naturelle de h, appliquée une
+fois, n'est pas transportée pour b ; la non-persistance de A ne tient pas seulement au caractère hors distribution de la
+correction optimisée. D, +d_rec : non conclusif ; la direction de la récupération naturelle tient plus longtemps sur b
+(jusqu'à la moitié de l'effet à t = 3 chez A) sans atteindre le seuil chez 2 agents sur 3. E : la direction qui fait
+monter le comportement dans un quadrant ne le fait pas monter ailleurs ; h code le contexte T_inc par quadrant (avec la
+position), pas une variable « couleur incontrôlable » commune. Limite (écrite avant) : −d_col et d_rec restent hors de
+la distribution des h produits sur une trajectoire donnée, moins loin que h + d mais pas dedans.

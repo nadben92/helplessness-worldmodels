@@ -1,6 +1,16 @@
 # E7 — The causal test: correcting h
 
-**Status (2026-10-23): code ready (branch `e6`), developed on E4's weights on the CPU; waiting for E5's agents and
+**Status (2026-11-05): finished.** Run with E6 on all agents (branch `e6`, local CPU; E4's pairs and baseline B at
+300,000, shuffle A, E, F at 650,000), `experiments/E6_phenotypes_latent/IMPLEMENTATION_REPORT.md` sections 21-22.
+Section 21: the constrained correction raises b more than C1 in all 8 agents (form 5 held); decomposition at k = 1:
+the belief effect dominates in the baselines (68-98 % of the exposed-reference gap in directed share), the cached-value
+effect is as large as the belief effect in shuffle A and E, F resembles the baselines. Section 22 (does h carry the
+context or a transported "control level"?): a correction of h is not transported (b returns from the next step, on
+real steps and in imagination) although the perturbation stays in h; the condition written for "h carries the
+context" is not met (B not held, C partial); d_col does not transfer between quadrants ("no global axis"); +d_rec
+indeterminate. Light outputs: `results/E6_phenotypes_latent/all_agents_650k/` (and `context/`).
+
+Earlier status (2026-10-23): **code ready (branch `e6`), developed on E4's weights on the CPU; waiting for E5's agents and
 E6's curves.** Decisions: `docs/e6/DECISIONS.md` (33)-(43). Report: `experiments/E6_phenotypes_latent/IMPLEMENTATION_REPORT.md`.
 2026-10-26: diagnostics of the cached value and of the decision rule (`run_e7_diagnostics.py`, decisions (51)-(54),
 report section 16), run on E4's weights.

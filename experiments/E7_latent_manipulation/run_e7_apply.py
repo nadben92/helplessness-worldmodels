@@ -146,8 +146,14 @@ def zone_mean(ep: dict, field: str, image: dict) -> float:
     return float(np.nanmean(v)) if np.isfinite(v).any() else float("nan")
 
 
+def episode_arrays(tag: str, ep: dict, fields: tuple = ()) -> dict:
+    """What episodes.npz keeps of one (image, mode, setting, alpha): states and I, plus the per-step `fields` of
+    run_episodes asked for (--episode-fields; default none: the file as before)."""
+    return {f"{tag}__{k}": ep[k] for k in ("states", "I", *fields)}
+
+
 def run_agent(cfg, e6, e7, agent, directions: Path, device, images_only, modes, alphas, bootstrap, plans=("v1",), constrained_dir=None,
-              log=print):
+              log=print, episode_fields: tuple = ()):
     conf = {**setup.configuration(cfg, agent["configuration"]), "seed": agent["seed"]}
     images = fs.test_images(conf, e6["images"])
     if images_only:
@@ -193,8 +199,7 @@ def run_agent(cfg, e6, e7, agent, directions: Path, device, images_only, modes, 
                    "seconds": time.perf_counter() - t0}
             rows.append(row)
             tag = f"{im['name']}__{mode}__" + ("" if setting is None else setting["setting"] + "__") + f"{alpha:g}"
-            arrays[f"{tag}__states"] = ep["states"]
-            arrays[f"{tag}__I"] = ep["I"]
+            arrays.update(episode_arrays(tag, ep, episode_fields))
             log(f"[E7 apply] {agent['id']} {im['name']} {mode} {row['setting'] or ''} alpha {alpha:g}: b_step1 {row['b_step1']:+.3f}, directed {row['directed_share']:.3f}, "
                 f"loc {row['loc_template_step1']:.2f}/{row['loc_template_zone']:.2f}, |d| {row['delta_norm_zone']:.2f}; {row['seconds']:.0f} s")
     return rows, arrays
@@ -214,6 +219,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--alphas", nargs="+", type=float, default=None)
     parser.add_argument("--bootstrap", action="store_true", help="bootstrap intervals of the phenotypes (off: E7's points are read on E6's curves)")
     parser.add_argument("--save-episodes", action="store_true")
+    parser.add_argument("--episode-fields", nargs="+", default=[],
+                        help="with --save-episodes: more per-step arrays of the episodes (e.g. actions decoded_cell loc_template p_goal)")
     parser.add_argument("--device", choices=("cpu", "cuda", "auto"), default=None)
     parser.add_argument("--out-dir", type=Path, default=REPO_ROOT / "results")
     parser.add_argument("--n-reps", type=int, default=None)
@@ -240,7 +247,8 @@ def main(argv: list[str] | None = None) -> int:
         t0 = time.perf_counter()
         try:
             rows, arrays = run_agent(cfg, e6, e7, agent, directions, device, args.images, modes, alphas, args.bootstrap, plans,
-                                     find_constrained(args.constrained, agent["id"]) if "A" in plans else None)
+                                     find_constrained(args.constrained, agent["id"]) if "A" in plans else None,
+                                     episode_fields=tuple(args.episode_fields))
         except BaseException as err:
             status.write_text(json.dumps({"status": "failed", "error": f"{type(err).__name__}: {err}",
                                           "traceback": traceback.format_exc()[-4000:]}, indent=1), encoding="utf-8")

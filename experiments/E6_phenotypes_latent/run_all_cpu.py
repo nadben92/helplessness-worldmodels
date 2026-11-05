@@ -11,9 +11,13 @@ Phases:
   oracle       run_e7_diagnostics.py --phase lookahead, one job per agent
   anti         run_e7_dissociation.py: references p in 0..0.5 and 0.6..1 (two jobs), exposed p in {0, 1}; k in {1, 5}
   corrected    run_e7_d7.py --phase corrected at each agent's (48) setting (read from its constrained sweep)
+  free         run_e7_apply.py --plans v1 --modes stepwise --alphas 1 --images training: the unconstrained stepwise correction
+               at alpha = 1 (E7_bars' "latent fix"), one job per agent (needs directions)
+
+--images <name> ... keeps only these images in the e6 and c12 phases (default: every image of each agent).
 
 Usage, from the repo root (src of this checkout on PYTHONPATH):
-  python experiments/E6_phenotypes_latent/run_all_cpu.py --phase e6 --runs-root <root> --workers 12 --logs <dir> [--dry-run]
+  python experiments/E6_phenotypes_latent/run_all_cpu.py --phase e6 --runs-root <root> --workers 12 --logs <dir> [--images ...] [--dry-run]
 """
 
 from __future__ import annotations
@@ -58,9 +62,11 @@ def best_setting(con_dir: str) -> tuple[float, float]:
     return float(best["lam"]), float(best["mu_pos"])
 
 
-def jobs(phase: str, py: str, runs_root: str) -> list[tuple[str, list[str]]]:
+def jobs(phase: str, py: str, runs_root: str, only_images: list[str] | None = None) -> list[tuple[str, list[str]]]:
     ids = [a["id"] for a in yaml.safe_load((REPO_ROOT / AGENTS).read_text(encoding="utf-8"))["agents"]]
     images = yaml.safe_load((REPO_ROOT / IMAGES).read_text(encoding="utf-8"))
+    if only_images is not None:
+        images = {a: [im for im in ims if im in only_images] for a, ims in images.items()}
     common = ["--agents", AGENTS, "--runs-root", runs_root, "--device", "cpu"]
     out = []
     for a in ids:
@@ -87,6 +93,10 @@ def jobs(phase: str, py: str, runs_root: str) -> list[tuple[str, list[str]]]:
             lam, mu = best_setting(con)
             out.append((f"cor_{a}", [py, "-u", E7 + "run_e7_d7.py", "--phase", "corrected", "--lam", f"{lam:g}", "--mu-pos", f"{mu:g}",
                                      "--constrained", con, "--config", E7_CONFIG, *one]))
+        elif phase == "free":
+            out.append((f"free_{a}", [py, "-u", E7 + "run_e7_apply.py", *one, "--config", E7_CONFIG, "--plans", "v1",
+                                      "--modes", "stepwise", "--alphas", "1", "--images", "training",
+                                      "--directions", newest(f"E7_latent_manipulation/e7dir__{a}__*")]))
         else:
             raise SystemExit(f"unknown phase {phase}")
     return [(name, [*cmd, "--out-dir", f"{OUT}/{name}"]) for name, cmd in out]
@@ -98,9 +108,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--runs-root", required=True)
     parser.add_argument("--workers", type=int, default=12)
     parser.add_argument("--logs", type=Path, required=True)
+    parser.add_argument("--images", nargs="+", default=None, help="e6 and c12: only these images (default: all)")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
-    todo = jobs(args.phase, sys.executable, args.runs_root)
+    todo = jobs(args.phase, sys.executable, args.runs_root, args.images)
     if args.dry_run:
         for name, cmd in todo:
             print(name, " ".join(cmd))

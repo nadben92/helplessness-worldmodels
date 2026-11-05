@@ -1,6 +1,13 @@
 # E6 — The behavioural signature of the controllability belief
 
-**Status (2026-10-28): E6/E7 on all agents (docs/e6/DECISIONS.md (63)) STOPPED by the user -- E5's shuffle models under-trained; E5's probes then E6/E7 to be rerun on the converged models, the same scripts with the new checkpoints. Done: E6 and C1/C2 (64 pairs), E7's directions; E7's anti-oracle 8/21, sweep 0/7 (interrupted); no analysis of the partial E7 runs (IMPLEMENTATION_REPORT.md, section 21).** Earlier status (2026-10-23): code ready (branch `e6`), developed and tested on E4's weights on the CPU; waiting for E5's
+**Status (2026-11-05): finished.** E6/E7 on all agents rerun on 2026-11-03/04 (204 jobs out of 204, local CPU, frozen
+weights): E4's four pairs and E5's baseline B at 300,000, E5's shuffle pairs A, E, F at 650,000 (docs/e5/DECISIONS.md
+(37)). Forms of `IMPLEMENTATION_REPORT.md` section 21, as computed: 1 (E4 replayed identically), 3 and 5 held; 2 (b and
+C1 agree among intermediate pairs) and 4 (the 2 x 2 reproduced in B, E, F; not held because of E) not held. Light
+outputs: `results/E6_phenotypes_latent/all_agents_650k/`. E7's follow-ups (decomposition at k = 1, section 22): see
+`docs/E7_latent_manipulation.md`.
+
+Earlier status (2026-10-28): **E6/E7 on all agents (docs/e6/DECISIONS.md (63)) STOPPED by the user -- E5's shuffle models under-trained; E5's probes then E6/E7 to be rerun on the converged models, the same scripts with the new checkpoints. Done: E6 and C1/C2 (64 pairs), E7's directions; E7's anti-oracle 8/21, sweep 0/7 (interrupted); no analysis of the partial E7 runs (IMPLEMENTATION_REPORT.md, section 21).** Earlier status (2026-10-23): code ready (branch `e6`), developed and tested on E4's weights on the CPU; waiting for E5's
 agents.** Decisions: `docs/e6/DECISIONS.md` (33)-(43), shared with E7. Implementation report, phase 0 and preliminary
 results: `experiments/E6_phenotypes_latent/IMPLEMENTATION_REPORT.md`. Deterministic dynamics only.
 

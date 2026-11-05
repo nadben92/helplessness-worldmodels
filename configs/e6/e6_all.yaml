@@ -92,61 +92,65 @@ e6:
     axis: arc_inc
     k: 4
     position: neutral
-  - name: segment_k4_ud
+  - name: segment_k2_ud
     axis: segment
-    k: 4
+    k: 2
+    position: ud
+  - name: arc_ctrl_k8_ud
+    axis: arc_ctrl
+    k: 8
     position: ud
   - name: arc_ctrl_k4_ud
     axis: arc_ctrl
     k: 4
     position: ud
-  - name: segment_k0_neutral
-    axis: segment
-    k: 0
-    position: neutral
-  - name: arc_ctrl_k1_neutral
-    axis: arc_ctrl
-    k: 1
-    position: neutral
-  - name: segment_k1_neutral
-    axis: segment
-    k: 1
-    position: neutral
-  - name: arc_ctrl_k4_neutral
-    axis: arc_ctrl
-    k: 4
-    position: neutral
-  - name: segment_k2_neutral
-    axis: segment
-    k: 2
-    position: neutral
-  - name: arc_ctrl_k6_neutral
-    axis: arc_ctrl
-    k: 6
-    position: neutral
-  - name: segment_k3_neutral
-    axis: segment
-    k: 3
-    position: neutral
-  - name: arc_ctrl_k2_ud
-    axis: arc_ctrl
-    k: 2
-    position: ud
   - name: position_only_k0_ud
     axis: position_only
     k: 0
     position: ud
+  - name: arc_ctrl_k6_neutral
+    axis: arc_ctrl
+    k: 6
+    position: neutral
+  - name: arc_ctrl_k8_neutral
+    axis: arc_ctrl
+    k: 8
+    position: neutral
+  - name: arc_ctrl_k5_neutral
+    axis: arc_ctrl
+    k: 5
+    position: neutral
+  - name: arc_ctrl_k6_cd
+    axis: arc_ctrl
+    k: 6
+    position: cd
+  - name: segment_k3_neutral
+    axis: segment
+    k: 3
+    position: neutral
+  - name: arc_inc_k1_neutral
+    axis: arc_inc
+    k: 1
+    position: neutral
+  - name: segment_k3_cd
+    axis: segment
+    k: 3
+    position: cd
   - name: segment_k4_cd
     axis: segment
     k: 4
+    position: cd
+  - name: segment_k5_cd
+    axis: segment
+    k: 5
     position: cd
   - name: segment_k4_neutral
     axis: segment
     k: 4
     position: neutral
-  - name: arc_inc_k5_cd
+  - name: arc_inc_k6_cd
     axis: arc_inc
-    k: 5
+    k: 6
     position: cd
   n_reps: 20
   horizon: 36
