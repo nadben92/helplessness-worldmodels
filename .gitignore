@@ -104,3 +104,17 @@ results/E3_worldmodel_4zones/grid12x12__4zones__pair-experimental__worldmodel-ag
 
 # Git Bash crash dumps (Windows), never versioned.
 *.stackdump
+
+# Archives, weights and bulk arrays under any name (repository clean-up, 2026-11-05): GPU exports and
+# handoffs, checkpoints of any framework, per-walk raw outputs. Light outputs (CSV, JSON, figures) stay versioned.
+*.tgz
+*.tar.gz
+*.zip
+*.ckpt
+*.pth
+*.safetensors
+results/**/arrays.npz
+**/steps.npz
+
+# Claude Code's local settings
+.claude/settings.local.json
