@@ -11,8 +11,11 @@ Phases (--phase), one output directory per agent (and part), <out-dir>/E7_contex
             on each episode's played path (its observations and actions), two streams of h with the same draws (cloned
             generators), corrected at t = 0 or not; per step b, C1, C3 (V and Q of channel_q, the D7 counterfactual) and
             the mass on the true successor of the played action, for both streams; and |dh_t| = |h_corr - h_raw|, its
-            cos with dh_0. Also E6's exposed episodes (no
-            correction, same seeds) for the directed share by index. episodes.npz, summary.json.
+            cos with dh_0; the policy's greedy directed share on its own Q (Q_normal of channel_q) for both streams. Also
+            E6's exposed episodes (no correction, same seeds) for the directed share by index. episodes.npz, summary.json.
+  natpersist  D. persist with a NATURAL direction applied once in place of the correction (--direction col: -d_col,
+            a = 1; rec: +alpha * d_rec, alpha calibrated so that b's gain at t = 0 equals -d_col's), d_col and d_rec of
+            the training slot from the agent's four collect runs (--collect). episodes.npz, summary.json.
   decoder   B. The first-step contexts of episodes started on the zone's interior cells (20 per cell), before and after
             the correction: the PREDICTED images (for each action, h'_a = GRU(h, z, a), 4 prior draws z', decoded) and the
             reconstruction (h, z): the zone's mean colour off the agent's cells, its RGB distance to T_inc, T_ctrl and
@@ -50,6 +53,7 @@ import torch.nn.functional as F
 import yaml
 
 import analyse_e7_d7 as d7a
+import analyse_e7_diagnostics as ad
 import run_e7_apply as ra
 import run_e7_d7 as rd7
 import run_e7_diagnostics as rdiag
@@ -59,6 +63,7 @@ from helplessness.agents.worldmodel.rssm import sample_categorical_index
 from helplessness.config import REPO_ROOT
 from helplessness.envs.layouts import two_zones
 from helplessness.envs.layouts.four_zones import QUADRANT_ORDER
+from helplessness.measures import decision_rule as dr
 from helplessness.measures import zone_phenotypes as zp
 from helplessness.pipeline import episode_sources as es
 from helplessness.pipeline import frozen_setup as fs
@@ -70,8 +75,9 @@ from helplessness.probing.probe_validity import decoded_agent_cell
 from helplessness.runs import code_provenance, require_code_provenance
 
 EXPERIMENT_ID = "E7_context"
-PHASES = ("persist", "decoder", "collect", "coldir", "imagine")
-NPZ = {"persist": "episodes.npz", "decoder": "decoder.npz", "collect": "collect.npz", "coldir": "episodes.npz", "imagine": "imagine.npz"}
+PHASES = ("persist", "decoder", "collect", "coldir", "imagine", "natpersist")
+NPZ = {"persist": "episodes.npz", "decoder": "decoder.npz", "collect": "collect.npz", "coldir": "episodes.npz", "imagine": "imagine.npz",
+       "natpersist": "episodes.npz"}
 IMAGINE_STEPS = 5
 N_COLS = two_zones.GRID_SHAPE[1]
 DECODER_PER_CELL = 20
@@ -79,6 +85,7 @@ PRED_DRAWS = 4
 N_RANDOM = 5
 AMPLITUDES = (0.25, 0.5, 0.75, 1.0, 1.5)
 RANDOM_AMPLITUDES = (1.0, 1.5)
+REC_GRID = (0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0)  # D: the grid of d_rec's calibration
 STEP_CLASSES = ("first", "late", "all")  # t = 0, t >= 4 (step >= 5), every zone step
 SEED = 2207  # this section's seeds (decoder contexts, replay, random directions); E6's episodes keep E6's
 
@@ -108,11 +115,24 @@ def c13(st, V: np.ndarray, Qh: np.ndarray, s: np.ndarray) -> tuple[np.ndarray, n
 
 
 # ------------------------------------------------------------------------------------------------------------- A
-def persist(st, setting: dict) -> tuple[dict, dict]:
+def persist(st, setting: dict | None, vector: np.ndarray | None = None) -> tuple[dict, dict]:
+    """A (setting: the constrained correction) or D (vector: a fixed perturbation of h on zone rows, setting None)."""
     model, e6, dev = st.models["experimental"], st.e6, st.device
     ref_fresh = fs.reference_fresh(st.models["reference"], st.tw, st.image, e6)
-    inner = ra.stepwise_hook(model, st.tw, st.e7, 1.0, st.e7["apply_in"], setting["lam"], setting["mu_pos"], setting["mu_goal"],
-                             float(st.e7["constrained"]["tau"]))
+    zone = np.zeros(two_zones.N_STATES, bool)
+    zone[st.zone] = True
+    if vector is None:
+        inner = ra.stepwise_hook(model, st.tw, st.e7, 1.0, st.e7["apply_in"], setting["lam"], setting["mu_pos"], setting["mu_goal"],
+                                 float(st.e7["constrained"]["tau"]))
+
+        def perturb(h, z, s):
+            return rdiag.correction(st, model, h, z, s, setting)
+    else:
+        inner = ra.fixed_hook(vector, 1.0, "zone")
+
+        def perturb(h, z, s):
+            on = torch.as_tensor(zone[s], device=h.device)[:, None].to(h.dtype)
+            return torch.as_tensor(vector, dtype=h.dtype, device=h.device)[None, :] * on
 
     def once(t, h, z, states, in_zone, rows):
         if t == 0:
@@ -123,9 +143,7 @@ def persist(st, setting: dict) -> tuple[dict, dict]:
     states, actions, length = ep["states"], ep["actions"], ep["length"]
     n, H = actions.shape
     A = model.rssm.cfg.n_actions
-    zone = np.zeros(two_zones.N_STATES, bool)
-    zone[st.zone] = True
-    out = {f"{k}_{f}": np.full((n, H), np.nan) for k in ("b", "C1", "C3", "mass") for f in ("corr", "raw")}
+    out = {f"{k}_{f}": np.full((n, H), np.nan) for k in ("b", "C1", "C3", "mass", "dir") for f in ("corr", "raw")}
     out["delta_norm"] = np.full(n, np.nan)
     out["dh_norm"], out["dh_cos0"] = np.full((n, H), np.nan), np.full((n, H), np.nan)  # |h_corr - h_raw| and its cos with dh_0
     dh0 = None
@@ -151,7 +169,7 @@ def persist(st, setting: dict) -> tuple[dict, dict]:
                 obs = model.rssm.observation_step(h_all[r_t], z_all[r_t], a_prev, x, first, generator=g_post)
             h, z = obs["h"], obs["z"]
             if t == 0 and f == "corr":
-                d = rdiag.correction(st, model, h, z, s, setting)
+                d = perturb(h, z, s)
                 h = h + d
                 out["delta_norm"][rows] = d.norm(dim=1).cpu().numpy()
             h_all, z_all = h_all.clone(), z_all.clone()
@@ -168,6 +186,7 @@ def persist(st, setting: dict) -> tuple[dict, dict]:
             out[f"mass_{f}"][rr, t] = sc["mass_true"][np.arange(inz.sum()), actions[rr, t]]
             ch = channel_q(model, h[sel], z[sel], g_act, g_z, mean_zbar=True)
             out[f"C1_{f}"][rr, t], out[f"C3_{f}"][rr, t] = c13(st, ch["V_zbar"].cpu().numpy(), ch["Q_hbar"].cpu().numpy(), s[inz])
+            out[f"dir_{f}"][rr, t] = dr.greedy_directed_share(ch["Q_normal"].cpu().numpy(), st.directed[s[inz]], ad.TIE_TOL)
         dh = (streams["corr"][0][r_t] - streams["raw"][0][r_t]).cpu().numpy()  # no draw: the streams' draws are untouched
         if t == 0:
             dh0 = np.zeros((n, dh.shape[1]))
@@ -181,7 +200,7 @@ def persist(st, setting: dict) -> tuple[dict, dict]:
         m = first_stay[:, t] & np.isfinite(out["b_corr"][:, t]) & np.isfinite(out["b_raw"][:, t])
         if m.sum() == 0:
             break
-        by_t.append({"t": t, "n_in_zone": int(m.sum()), **{f"{k}_{f}": float(np.nanmean(out[f"{k}_{f}"][m, t])) for k in ("b", "C1", "C3", "mass") for f in ("corr", "raw")},
+        by_t.append({"t": t, "n_in_zone": int(m.sum()), **{f"{k}_{f}": float(np.nanmean(out[f"{k}_{f}"][m, t])) for k in ("b", "C1", "C3", "mass", "dir") for f in ("corr", "raw")},
                      "dh_norm": float(np.nanmean(out["dh_norm"][m, t])), "dh_ratio": float(np.nanmean(out["dh_norm"][m, t] / out["dh_norm"][m, 0])),
                      "dh_cos0": float(np.nanmean(out["dh_cos0"][m, t]))})
     dist = st.dist
@@ -192,6 +211,49 @@ def persist(st, setting: dict) -> tuple[dict, dict]:
     arrays = {**out, "states": states, "actions": actions, "length": length, "first_stay": first_stay, "exposed_states": ep0["states"],
               "exposed_length": ep0["length"]}
     return arrays, summary
+
+
+def b_gain_t0(st, vectors: list[np.ndarray]) -> list[float]:
+    """D's calibration: b's mean gain at t = 0 over E6's starts for h + v, with the replay's own t = 0 draws (persist's
+    posterior and measure generators, fresh), so that the gain is the replay's at t = 0 (mean over the starts where both b are
+    finite, as the replay's by_t)."""
+    model, dev = st.models["experimental"], st.device
+    ref_fresh = fs.reference_fresh(st.models["reference"], st.tw, st.image, st.e6)
+    s = fs.starts_for(st.image["slot"], st.e6["n_reps"])
+    h0, z0 = model.rssm.initial_state(len(s), dev)
+    x = st.tw.templates_t[torch.as_tensor(s, device=dev)]
+    with torch.no_grad():
+        obs = model.rssm.observation_step(h0, z0, torch.zeros(len(s), model.rssm.cfg.n_actions, device=dev), x,
+                                          torch.ones(len(s), dtype=torch.bool, device=dev), generator=gen([1, 0], dev))
+
+    def b(h):
+        return step_controllability(model.rssm, h, obs["z"], st.tw.templates_t, int(st.e6["draws"]), float(st.e6["margin"]),
+                                    generator=gen([1, 1], dev), true_successor=st.tw.succ[s])["I"] - ref_fresh[s]
+    b_raw = b(obs["h"])
+    return [float(np.nanmean(b(obs["h"] + torch.as_tensor(v, dtype=obs["h"].dtype, device=dev)) - b_raw)) for v in vectors]  # finite pairs, as the replay
+
+
+def natural_vector(st, collect_dirs: list[Path], which: str) -> tuple[np.ndarray | None, dict]:
+    """D: -d_col (a = 1), or +alpha * d_rec with alpha calibrated on b's gain at t = 0 (None: not calibratable)."""
+    dq = directions(collect_dirs)[st.image["slot"]]
+    v_col = -dq["d_col"]
+    target = b_gain_t0(st, [v_col])[0]
+    if which == "col":
+        return v_col, {"direction": "-d_col", "alpha": 1.0, "target_gain": target, "gain": target, "norm": float(np.linalg.norm(v_col))}
+    grid = [(0.0, 0.0), *zip(REC_GRID, b_gain_t0(st, [a * dq["d_rec"] for a in REC_GRID]))]
+    info = {"direction": "+d_rec", "target_gain": target, "grid": [list(g) for g in grid], "reached": False,
+            "cos_d_col_d_rec": cos(dq["d_col"], dq["d_rec"])}
+    for (a0, g0), (a1, g1) in zip(grid, grid[1:]):
+        if g0 < target <= g1:
+            alpha = a0 + (target - g0) * (a1 - a0) / (g1 - g0)
+            info["reached"] = True
+            break
+    else:
+        alpha, gmax = max(grid[1:], key=lambda g: g[1])
+        if gmax < 0.10:
+            return None, {**info, "alpha": alpha, "gain": gmax, "calibratable": False}
+    v = alpha * dq["d_rec"]
+    return v, {**info, "alpha": float(alpha), "gain": b_gain_t0(st, [v])[0], "calibratable": True, "norm": float(np.linalg.norm(v))}
 
 
 # ------------------------------------------------------------------------------------------------------------- B
@@ -450,6 +512,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--constrained", type=Path, default=None, help="persist, decoder: the agent's run_e7_constrained.py output")
     parser.add_argument("--slot", choices=QUADRANT_ORDER, default=None, help="collect: the quadrant the episodes start in")
     parser.add_argument("--collect", nargs="+", type=Path, default=[], help="coldir: the agent's four collect runs")
+    parser.add_argument("--direction", choices=("col", "rec"), default=None, help="natpersist: -d_col or +alpha * d_rec")
     parser.add_argument("--conditions", nargs="+", default=None, help="coldir: a subset of the conditions (default: all)")
     parser.add_argument("--amplitudes", nargs="+", type=float, default=list(AMPLITUDES))
     parser.add_argument("--random-amplitudes", nargs="+", type=float, default=list(RANDOM_AMPLITUDES))
@@ -467,7 +530,8 @@ def main(argv: list[str] | None = None) -> int:
     require_code_provenance(provenance)
     for agent in fs.load_agents(args.agents, args.runs_root, args.agent_ids):
         setting = best_setting(args.constrained) if args.phase in ("persist", "decoder", "imagine") else None
-        part = {"collect": args.slot, "coldir": None if args.conditions is None else "-".join(args.conditions)}.get(args.phase)
+        part = {"collect": args.slot, "coldir": None if args.conditions is None else "-".join(args.conditions),
+                "natpersist": args.direction}.get(args.phase)
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         out = args.out_dir / EXPERIMENT_ID / (f"e7ctx__{agent['id']}__{args.phase}" + (f"__{part}" if part else "") + f"__{stamp}")
         out.mkdir(parents=True, exist_ok=False)
@@ -483,6 +547,12 @@ def main(argv: list[str] | None = None) -> int:
                 arrays, summary = decoder(st, setting)
             elif args.phase == "imagine":
                 arrays, summary = imagine(st, setting)
+            elif args.phase == "natpersist":
+                vector, calib = natural_vector(st, args.collect, args.direction)
+                if vector is None:
+                    raise RuntimeError(f"d_rec not calibratable: {calib}")
+                arrays, summary = persist(st, None, vector)
+                arrays["vector"], summary["calibration"] = vector, calib
             elif args.phase == "collect":
                 arrays, summary = collect(st, args.slot)
             else:
