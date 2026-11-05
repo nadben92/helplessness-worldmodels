@@ -17,6 +17,16 @@ E5's additions (2026-10-19), every one off by default (E3's and E4's runs unchan
                         ramp stays the planned budget's (E5's immunisation runs past E4's 300,000 steps with E4's ramp);
   save_resumable_at     a copy of the full resume state (checkpoints/resumable_env<NNNNNN>.pt) at these steps, kept;
   branch_from           a new run that starts from such a state (the same planned budget), its own records from there.
+
+E8's addition (2026-11-05, docs/e8/DECISIONS.md (4), (5), (7)), off by default (E3-E7's runs unchanged, tested bit for bit):
+  fresh_start           a new run that starts from a checkpoint's WEIGHTS only (FreshStart: an agent_env<N>.pt): RSSM,
+                        goal head, critic and slow critic loaded; replay empty (filled by the prefill as at any start);
+                        optimisers new; the schedule post-switch from gradient step 0 (switch_step = 0, beta_rep's warm-up
+                        0: straight-through, the post-switch learning rate and the full beta_rep from the first step; the
+                        switch cannot fire again, the collapse guard stays); its own counters from 0; its training streams
+                        the children of FreshStart.stream_root instead of the seed's; a checkpoint at environment step 0
+                        (the start's weights) when the grid holds 0. On resume, the same FreshStart gives the streams'
+                        layout (their states come from resume.pt) and nothing is reloaded.
 """
 
 from __future__ import annotations
@@ -103,6 +113,21 @@ class ClosedLoopHooks:
     checkpoint_record: Callable
     finalize: Callable
     episode_source: Callable | None = None
+
+
+@dataclasses.dataclass
+class FreshStart:
+    """E8's start of a run from a checkpoint's weights (module docstring; docs/e8/DECISIONS.md (4), (5)).
+
+      weights      an agent_env<N>.pt (agent_state(): rssm, goal_head, critic, slow_critic, rssm_config, env_step, step,
+                   switch_step); its rssm_config must be the run's
+      stream_root  the root whose children (streams.worldmodel.STREAM_NAMES order) are the run's training streams
+      sha256       the file's expected SHA-256, checked before loading (None: not checked)
+    """
+
+    weights: Path
+    stream_root: np.random.SeedSequence
+    sha256: str | None = None
 
 
 class Interrupted(RuntimeError):
@@ -376,15 +401,27 @@ def _restore_streams(state: dict, streams: dict, gens: dict) -> None:
 
 def run_one(cfg: dict, seed: int, condition: str, run_dir: Path, device: torch.device, max_env_steps: int | None = None,
             resume: bool = False, interrupt_after: int | None = None, hooks: ClosedLoopHooks | None = None,
-            total_env_steps: int | None = None, save_resumable_at: tuple[int, ...] = (), branch_from: Path | None = None) -> dict:
+            total_env_steps: int | None = None, save_resumable_at: tuple[int, ...] = (), branch_from: Path | None = None,
+            fresh_start: FreshStart | None = None) -> dict:
     """One closed-loop run in run_dir. resume=True continues it from
     checkpoints/resume.pt (the config and the planned length are the run's
     own). interrupt_after (tests): raise Interrupted right after the resume
     point written at that environment step. E5's options (module docstring):
     total_env_steps, save_resumable_at, branch_from (a resumable state file
-    of a run with the same planned budget)."""
+    of a run with the same planned budget). E8's: fresh_start."""
     if resume and branch_from is not None:
         raise ValueError("resume and branch_from are exclusive")
+    if fresh_start is not None and branch_from is not None:
+        raise ValueError("fresh_start and branch_from are exclusive")
+    start_info = None
+    if fresh_start is not None and not resume:
+        from helplessness.probing.theme_probe_measure import sha256
+
+        digest = sha256(fresh_start.weights)
+        if fresh_start.sha256 is not None and digest != fresh_start.sha256:
+            raise ValueError(f"{fresh_start.weights}: SHA-256 {digest}, expected {fresh_start.sha256}")
+        start_info = {"weights": str(fresh_start.weights), "sha256": digest,
+                      "stream_root_entropy": [int(e) for e in np.atleast_1d(fresh_start.stream_root.entropy)]}
     log = RunLog(run_dir / "console.log", f"[agent seed={seed} {condition}]")
     meta = environment_metadata(device)
     require_code_provenance(meta)
@@ -398,7 +435,8 @@ def run_one(cfg: dict, seed: int, condition: str, run_dir: Path, device: torch.d
     else:
         (run_dir / "config.yaml").write_text(yaml.safe_dump(cfg, sort_keys=False), encoding="utf-8")
         e5_meta = {**({"total_env_steps": int(total_env_steps)} if total_env_steps is not None else {}),
-                   **({"branched_from": str(branch_from)} if branch_from is not None else {})}
+                   **({"branched_from": str(branch_from)} if branch_from is not None else {}),
+                   **({"fresh_start": start_info} if start_info is not None else {})}
         write_run_meta(run_dir, seed, status="running", condition=condition, phase="5 closed loop", agent=dataclasses.asdict(acfg),
                        rng_streams=list(e3_rng.STREAM_NAMES), episode=load_episode_config() if hooks is None else hooks.episode, max_env_steps=max_env_steps,
                        **e5_meta, **meta)
@@ -422,7 +460,13 @@ def run_one(cfg: dict, seed: int, condition: str, run_dir: Path, device: torch.d
         replay = ReplayBuffer.for_run(budget=stored_steps_bound(n_env_steps), prefill_steps=0, table=source.table,
                                       background_table=source.background_table, background_of_row=source.background_of_row)
 
-    streams, seqs = e3_rng.spawn_streams(seed, condition), e3_rng.spawn_sequences(seed, condition)
+    if fresh_start is None:
+        streams, seqs = e3_rng.spawn_streams(seed, condition), e3_rng.spawn_sequences(seed, condition)
+    else:  # E8: the children of the fresh start's root (streams.therapy), in the same names
+        from helplessness.streams.therapy import sequences as root_sequences
+
+        seqs = root_sequences(fresh_start.stream_root)
+        streams = {name: np.random.default_rng(seq) for name, seq in seqs.items()}
     gens = {name: e3_rng.torch_generator(seqs[seq], device)
             for name, seq in (("latent", "latent_sample"), ("act", "act_latent"), ("imagination", "imagination"))}
     torch.manual_seed(e3_rng.torch_seed(seqs["network_init"]))  # built on the CPU, then moved: same weights on every device
@@ -532,6 +576,20 @@ def run_one(cfg: dict, seed: int, condition: str, run_dir: Path, device: torch.d
                                                    encoding="utf-8")
         log(f"{'resumed' if resume else f'branched from {branch_from}'} at environment step {progress['env_step']} "
             f"(gradient step {progress['grad_step']}, switch {switch.switch_step})")
+    elif fresh_start is not None:  # E8 (docs/e8/DECISIONS.md (4)): the weights only; replay, optimisers and counters new
+        start = torch.load(fresh_start.weights, map_location="cpu", weights_only=False)
+        if start["rssm_config"] != dataclasses.asdict(rssm.cfg):
+            raise ValueError(f"{fresh_start.weights}: its RSSM config differs from the run's")
+        for module, key in ((rssm, "rssm"), (goal_head, "goal_head"), (critic, "critic"), (slow_critic, "slow_critic")):
+            module.load_state_dict(start[key])
+        # post-switch from gradient step 0: lr_after_switch, straight-through and the full beta_rep from the first step
+        switch.switch_step, switch.switch_rule = 0, "fresh_start"
+        progress.update(rep_warmup=0, switch_env_step=0)
+        start_info.update(origin_env_step=int(start["env_step"]), origin_grad_step=int(start["step"]),
+                          origin_switch_step=None if start["switch_step"] is None else int(start["switch_step"]))
+        write_run_meta(run_dir, seed, fresh_start=start_info)
+        log(f"fresh start from {fresh_start.weights} (sha256 {start_info['sha256']}; its environment step {start['env_step']}, "
+            f"gradient step {start['step']}, switch {start['switch_step']}): replay empty, optimisers new, post-switch schedule from step 0")
     if device.type == "cuda":
         replay.to_device(device)
     log(f"condition {condition}; device {device}; {n_env_steps} environment steps (planned {planned_env_steps}, prefill {prefill} under "
@@ -545,6 +603,50 @@ def run_one(cfg: dict, seed: int, condition: str, run_dir: Path, device: torch.d
     t0 = time.perf_counter() - progress["seconds"]
     last = progress["last"]
     final_measures = None
+
+    def write_checkpoint(env_step: int) -> None:
+        """The checkpoint's record, weights and measures (E8: also called once before the first step, for a fresh
+        start's checkpoint 0)."""
+        nonlocal final_measures
+        stats = collector.stats
+        record = {"env_step": env_step, "grad_step": progress["grad_step"], "switch_step": switch.switch_step,
+                  "batch_pair_js": progress["last_stat"], "episodes": stats.episodes, "successes": stats.successes,
+                  **collector.stats.window(window), "tie_fraction": stats.tied_greedy_steps / max(stats.greedy_steps, 1),
+                  "explored_fraction": stats.explored_steps / max(stats.env_steps, 1), "stored_steps": len(replay),
+                  "train": {k: float(v) for k, v in last.items()}}
+        if same_background_pairs:  # E5: the same-background statistic's evaluations since the previous checkpoint
+            record["switch_pairs"] = switch_pair_summary(progress.pop("switch_pair_evals", []))
+        if hooks is None:
+            record["twin_by_zone"] = twin_at_checkpoint(collector.N, world, P_ref, cfg, acfg, seed, condition, env_step,
+                                                        progress["twin_arrays"] if save_twin else None)
+            record["agent_delta"] = agent_delta_at_checkpoint(rssm, goal_head, critic, world, replay, cfg, acfg, seed, condition,
+                                                              env_step, device)
+        else:
+            record.update(hooks.checkpoint_record({
+                "rssm": rssm, "goal_head": goal_head, "critic": critic, "world": world, "replay": replay, "N": collector.N,
+                "cfg": cfg, "acfg": acfg, "seed": seed, "condition": condition, "env_step": env_step,
+                "grad_step": progress["grad_step"], "n_env_steps": n_env_steps, "device": device, "run_dir": run_dir, "log": log,
+                "episode_source": collector.episode_source, "switch_env_step": progress.get("switch_env_step"),
+                "switch_step": switch.switch_step, "switch_rule": switch.switch_rule}))
+        if cfg["measure"].get("checkpoint_goal_kernel"):
+            record["goal_diagnostics"] = goal_kernel_at_checkpoint(rssm, world, replay, collector.N, cfg, seed, condition, env_step, device,
+                                                                   goal_head=goal_head, critic=critic, acfg=acfg)
+        progress["counts"][f"N_{env_step}"] = collector.N.copy()
+        # the weights at every checkpoint (docs/e3/DECISIONS.md, 2026-10-01 (12)): written, nothing drawn
+        _atomic_torch_save(agent_state(), run_dir / "checkpoints" / f"agent_env{env_step:06d}.pt")
+        if measures_spec and progress.get("switch_env_step") is not None and env_step > progress["switch_env_step"]:
+            fields_c, arrays_c, record["measures"] = full_measures_at_checkpoint(
+                rssm, world, replay, collector.N, cfg, seed, condition, run_dir, log, progress["grad_step"], env_step, device)
+            if env_step == n_env_steps:  # the run's final measures are this checkpoint's
+                final_measures = (fields_c, arrays_c)
+        progress["records"].append(record)
+        with open(run_dir / "checkpoints.jsonl", "a", encoding="utf-8") as f:
+            f.write(json.dumps(_jsonable(record)) + "\n")
+
+    if fresh_start is not None and not resume and 0 in checkpoints:  # E8: checkpoint 0 (the start's weights) before any step
+        write_checkpoint(0)
+        if 0 in save_resumable_at:
+            _atomic_torch_save(resume_state(), run_dir / "checkpoints" / "resumable_env000000.pt")
     env_step = progress["env_step"] + 1
     while env_step <= n_env_steps:
         collector.step(estimator=switch.estimator())
@@ -617,40 +719,7 @@ def run_one(cfg: dict, seed: int, condition: str, run_dir: Path, device: torch.d
                 f"{last.get('recon_patch', float('nan')):.4f} | goal_loss {last.get('goal_loss', float('nan')):.4f} critic_loss "
                 f"{last.get('critic_loss', float('nan')):.4f} | {time.perf_counter() - t0:.0f}s")
         if at_checkpoint:
-            stats = collector.stats
-            record = {"env_step": env_step, "grad_step": progress["grad_step"], "switch_step": switch.switch_step,
-                      "batch_pair_js": progress["last_stat"], "episodes": stats.episodes, "successes": stats.successes,
-                      **collector.stats.window(window), "tie_fraction": stats.tied_greedy_steps / max(stats.greedy_steps, 1),
-                      "explored_fraction": stats.explored_steps / max(stats.env_steps, 1), "stored_steps": len(replay),
-                      "train": {k: float(v) for k, v in last.items()}}
-            if same_background_pairs:  # E5: the same-background statistic's evaluations since the previous checkpoint
-                record["switch_pairs"] = switch_pair_summary(progress.pop("switch_pair_evals", []))
-            if hooks is None:
-                record["twin_by_zone"] = twin_at_checkpoint(collector.N, world, P_ref, cfg, acfg, seed, condition, env_step,
-                                                            progress["twin_arrays"] if save_twin else None)
-                record["agent_delta"] = agent_delta_at_checkpoint(rssm, goal_head, critic, world, replay, cfg, acfg, seed, condition,
-                                                                  env_step, device)
-            else:
-                record.update(hooks.checkpoint_record({
-                    "rssm": rssm, "goal_head": goal_head, "critic": critic, "world": world, "replay": replay, "N": collector.N,
-                    "cfg": cfg, "acfg": acfg, "seed": seed, "condition": condition, "env_step": env_step,
-                    "grad_step": progress["grad_step"], "n_env_steps": n_env_steps, "device": device, "run_dir": run_dir, "log": log,
-                    "episode_source": collector.episode_source, "switch_env_step": progress.get("switch_env_step"),
-                    "switch_step": switch.switch_step, "switch_rule": switch.switch_rule}))
-            if cfg["measure"].get("checkpoint_goal_kernel"):
-                record["goal_diagnostics"] = goal_kernel_at_checkpoint(rssm, world, replay, collector.N, cfg, seed, condition, env_step, device,
-                                                                       goal_head=goal_head, critic=critic, acfg=acfg)
-            progress["counts"][f"N_{env_step}"] = collector.N.copy()
-            # the weights at every checkpoint (docs/e3/DECISIONS.md, 2026-10-01 (12)): written, nothing drawn
-            _atomic_torch_save(agent_state(), run_dir / "checkpoints" / f"agent_env{env_step:06d}.pt")
-            if measures_spec and progress.get("switch_env_step") is not None and env_step > progress["switch_env_step"]:
-                fields_c, arrays_c, record["measures"] = full_measures_at_checkpoint(
-                    rssm, world, replay, collector.N, cfg, seed, condition, run_dir, log, progress["grad_step"], env_step, device)
-                if env_step == n_env_steps:  # the run's final measures are this checkpoint's
-                    final_measures = (fields_c, arrays_c)
-            progress["records"].append(record)
-            with open(run_dir / "checkpoints.jsonl", "a", encoding="utf-8") as f:
-                f.write(json.dumps(_jsonable(record)) + "\n")
+            write_checkpoint(env_step)
         if env_step < n_env_steps and (at_checkpoint or (resume_every and env_step % resume_every == 0)):
             progress["seconds"] = time.perf_counter() - t0
             save_resume()

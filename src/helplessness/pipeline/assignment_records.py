@@ -138,8 +138,17 @@ def real_context_by_assignment(rssm, replay, worlds: dict[int, object], cfg: dic
     return out
 
 
-def walks_by_assignment(rssm, cfg: dict, conf: dict, probe_worlds: dict[int, object], canonical: int, n_walks: int, purpose: str) -> dict[int, dict]:
-    """probe_worlds: assignment -> its probe World (the reference's dynamics, the assignment's image)."""
+def walks_by_assignment(rssm, cfg: dict, conf: dict, probe_worlds: dict[int, object], canonical: int, n_walks: int, purpose: str,
+                        slots_of: dict[int, tuple[str, ...]] | None = None, step1: bool = False) -> dict[int, dict]:
+    """probe_worlds: assignment -> its probe World (the reference's dynamics, the assignment's image).
+
+    E8's options (docs/e8/DECISIONS.md (10); the defaults give E5's records unchanged): slots_of, assignment -> the slots
+    to measure (absent: every slot; each slot has its own measurement seed, so a slot's values do not depend on which
+    others are measured; a type without a measured slot is NaN); step1, each slot also gets probe_validity.step1_summary
+    of its walks ("step1": the mass, ghosts and I at the first step in the zone, by state then zone -- E4's validity
+    criterion reads them)."""
+    from helplessness.probing.probe_validity import step1_summary
+
     w, draws = cfg["e4"]["walks"], cfg["e4"]["probe"]["draws"]
     out = {}
     for k in sorted(probe_worlds):
@@ -147,16 +156,18 @@ def walks_by_assignment(rssm, cfg: dict, conf: dict, probe_worlds: dict[int, obj
         succ = two_zones_setup.successors(pw)
         image_index = 0 if k == canonical else ASSIGNMENT_IMAGE_BASE + k
         slots = {}
-        for slot in QUADRANT_ORDER:
+        for slot in (QUADRANT_ORDER if slots_of is None or k not in slots_of else slots_of[k]):
             res = measure_walks(rssm, pw.templates_np, pw.templates_t, two_zones_setup.walks_for_slot(cfg, slot, n_walks), succ, draws,
                                 cfg["measure"]["kernel_margin_threshold"], two_zones_setup.measurement_seed(cfg, conf, image_index, slot, purpose),
                                 w["m"], w["n_in"], chunk=w["chunk"], max_images=max_images_per_forward(cfg))
             slots[slot] = {"I_entry": res["entry"], "n_states_entry": res["n_states_entry"], "I_curve": res["curve"].tolist(),
                            "n_states_curve": res["n_states_curve"].tolist(), "mass_true_mean": float(np.nanmean(res["mass_true"])),
                            "ghost_fraction_mean": float(np.nanmean(res["ghost_fraction"])), "n_walks": n_walks}
+            if step1:
+                slots[slot]["step1"] = step1_summary(res)
         roles = assignment_roles(k)
-        step1 = {q: slots[q]["I_curve"][0] for q in QUADRANT_ORDER}
-        out[k] = {"slots": slots, "I_step1_by_type": {t: _nanmean([step1[q] for q in QUADRANT_ORDER if roles[q] == t])
+        first = {q: slots[q]["I_curve"][0] for q in QUADRANT_ORDER if q in slots}
+        out[k] = {"slots": slots, "I_step1_by_type": {t: _nanmean([first[q] for q in QUADRANT_ORDER if roles[q] == t and q in first])
                                                      for t in ("ud", "cd", "neutral")}}
     return out
 

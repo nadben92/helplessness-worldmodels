@@ -14,6 +14,15 @@ ClosedLoopHooks.episode_source). Never within an episode: no episode mixes two e
                          `switch_step` transitions are done, the `after` environment from that episode on (the same
                          images, so the same replay table). The step it actually happens (dynamics_switch_step) sets the
                          run's end (+ post_steps) and its checkpoints (+ each grid point below post_steps).
+
+E8's additions (docs/e8/DECISIONS.md (6); new classes, nothing above changed):
+  TreatedAssignments     the shuffle therapy: at each episode an assignment drawn uniformly among those whose UD slot is
+                         the treated quadrant (3 of the 12; "all": the 12), on worlds of the reference's dynamics. Its
+                         draw consumes the generator as ZoneAssignmentShuffle's (u, then an index), so "all" equals E5's
+                         fraction-1 shuffle on the same generator.
+  StartInZone            an environment wrapper: with probability `fraction`, an episode starts uniformly in a zone instead
+                         of at the start the run drew (start_in_zone_frac; its own generator).
+  SingleWorld            one world as an episode source (a baseline therapy with start_in_zone_frac > 0).
 """
 
 from __future__ import annotations
@@ -208,3 +217,87 @@ class DynamicsSwitch:
             return None
         self._pending = False
         return self.dynamics_switch_step + self.post_steps, self.post_checkpoints(self.dynamics_switch_step)
+
+
+def treated_assignments(quadrant: str) -> tuple[int, ...]:
+    """The assignments a therapy on `quadrant` shows: those whose UD slot (T_inc) is the quadrant; "all": the 12."""
+    if quadrant == "all":
+        return tuple(range(len(ASSIGNMENTS)))
+    if quadrant not in QUADRANT_ORDER:
+        raise ValueError(f"treated quadrant must be one of {QUADRANT_ORDER} or 'all', got {quadrant!r}")
+    return tuple(k for k, (ud, _) in enumerate(ASSIGNMENTS) if ud == quadrant)
+
+
+class StartInZone:
+    """Wraps an environment: at each reset, u ~ U[0, 1) is drawn and, when u < fraction, the episode starts at a state
+    drawn uniformly among `states` instead of the start it was given (E8's start_in_zone_frac). Everything else is the
+    wrapped environment's."""
+
+    def __init__(self, env, states: np.ndarray, fraction: float, rng: np.random.Generator):
+        if not 0.0 <= fraction <= 1.0:
+            raise ValueError(f"fraction must be in [0, 1], got {fraction}")
+        self.env, self.states, self.fraction, self.rng = env, np.asarray(states, dtype=np.int64), float(fraction), rng
+
+    def __getstate__(self) -> dict:
+        return dict(self.__dict__)
+
+    def __setstate__(self, state: dict) -> None:
+        self.__dict__.update(state)
+
+    def __getattr__(self, name):
+        if name in ("env", "states", "fraction", "rng"):
+            raise AttributeError(name)
+        return getattr(self.env, name)
+
+    def reset(self, start_state=None, **kwargs):
+        u = float(self.rng.random())
+        k = int(self.rng.integers(len(self.states)))
+        if u < self.fraction:
+            start_state = int(self.states[k])
+        return self.env.reset(start_state=start_state, **kwargs)
+
+    def step(self, action):
+        return self.env.step(action)
+
+
+class TreatedAssignments(ZoneAssignmentShuffle):
+    """worlds: one World per assignment, in ASSIGNMENTS order, of the reference's dynamics; quadrant: the treated slot
+    (or "all"); rng: streams.therapy.assignment_generator. Every episode draws u ~ U[0, 1) (unused, kept so that the
+    stream advances as ZoneAssignmentShuffle's) then j ~ U{0..n-1} over the treated assignments. The replay table holds
+    the 12 blocks (E5's layout); start_in_zone: None, or (fraction, rng): StartInZone on every episode's environment,
+    the zone being the episode's UD slot."""
+
+    def __init__(self, worlds: list, canonical: int, quadrant: str, rng: np.random.Generator, n_states: int = two_zones.N_STATES,
+                 start_in_zone: tuple[float, np.random.Generator] | None = None):
+        super().__init__(worlds, canonical, 1.0, rng, n_states)
+        self.quadrant, self.allowed = quadrant, treated_assignments(quadrant)
+        if start_in_zone is not None and start_in_zone[0] > 0:
+            frac, zrng = start_in_zone
+            regions = two_zones.region_states(two_zones.build_layout(1, "reference"))
+            self.envs = [StartInZone(env, regions[ASSIGNMENTS[k][0]], frac, zrng) for k, env in enumerate(self.envs)]
+
+    def draw(self) -> tuple[int, bool]:
+        float(self.rng.random())
+        j = int(self.rng.integers(len(self.allowed)))
+        return self.allowed[j], True
+
+
+class SingleWorld:
+    """One world as an episode source, its environment optionally wrapped (StartInZone): the replay table is the
+    world's own (one block), every episode in it."""
+
+    background_table = None
+    background_of_row = None
+
+    def __init__(self, world, env=None):
+        self.env = world.env if env is None else env
+        self.table = world.templates_np
+
+    def __getstate__(self) -> dict:
+        return {k: v for k, v in self.__dict__.items() if k != "table"}
+
+    def current_obs_offset(self) -> int:
+        return 0
+
+    def next_episode(self, env_steps_done: int) -> tuple[object, int]:
+        return self.env, 0
