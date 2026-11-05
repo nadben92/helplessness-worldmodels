@@ -1,0 +1,53 @@
+# Matplotlib style of the progress-presentation figures. Colours mirror palette.py (the source of truth);
+# common.apply_style() loads this file and then re-applies the palette tokens, so a drift here is overridden.
+
+figure.facecolor: F7F3EA
+axes.facecolor: F7F3EA
+savefig.facecolor: F7F3EA
+figure.edgecolor: F7F3EA
+
+font.family: sans-serif
+font.sans-serif: Inter, Source Sans 3, DejaVu Sans
+font.size: 13.5
+text.color: 2B2A28
+
+axes.titlesize: 21
+axes.titleweight: bold
+axes.titlelocation: left
+axes.titlepad: 14
+axes.labelsize: 16
+axes.labelcolor: 2B2A28
+axes.labelpad: 8
+axes.edgecolor: 9C9488
+axes.linewidth: 0.9
+axes.spines.top: False
+axes.spines.right: False
+axes.grid: False
+axes.axisbelow: True
+axes.prop_cycle: cycler('color', ['C0583A', '3E6A8A', '5E8C61', 'C99A3B', '7D4E7A', 'B9798A'])
+
+grid.color: E6DFD2
+grid.linewidth: 0.9
+
+xtick.labelsize: 13.5
+ytick.labelsize: 13.5
+xtick.color: 9C9488
+ytick.color: 9C9488
+xtick.labelcolor: 2B2A28
+ytick.labelcolor: 2B2A28
+xtick.major.size: 4
+ytick.major.size: 4
+xtick.major.width: 0.9
+ytick.major.width: 0.9
+xtick.minor.size: 2
+ytick.minor.size: 2
+
+legend.frameon: False
+legend.fontsize: 13
+
+lines.linewidth: 2.4
+lines.markersize: 7
+lines.solid_capstyle: round
+
+svg.fonttype: none
+savefig.dpi: 300

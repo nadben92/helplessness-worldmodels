@@ -1,0 +1,312 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" width="959.76pt" height="540pt" viewBox="0 0 959.76 540" xmlns="http://www.w3.org/2000/svg" version="1.1">
+ <metadata>
+  <rdf:RDF xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+   <cc:Work>
+    <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+    <dc:date>2026-10-28T09:35:12.965032</dc:date>
+    <dc:format>image/svg+xml</dc:format>
+    <dc:creator>
+     <cc:Agent>
+      <dc:title>Matplotlib v3.11.1, https://matplotlib.org/</dc:title>
+     </cc:Agent>
+    </dc:creator>
+   </cc:Work>
+  </rdf:RDF>
+ </metadata>
+ <defs>
+  <style type="text/css">*{stroke-linejoin: round; stroke-linecap: butt}</style>
+ </defs>
+ <g id="figure_1">
+  <g id="patch_1">
+   <path d="M 0 540 
+L 959.76 540 
+L 959.76 0 
+L 0 0 
+z
+" style="fill: #f7f3ea"/>
+  </g>
+  <g id="axes_1">
+   <g id="line2d_1">
+    <path d="M 27.487526 166.32 
+L 359.180582 166.32 
+" clip-path="url(#p0cac511e89)" style="fill: none; stroke: #6e675c; stroke-width: 2; stroke-linecap: round"/>
+   </g>
+   <g id="line2d_2">
+    <path d="M 370.237018 166.32 
+L 587.680243 166.32 
+" clip-path="url(#p0cac511e89)" style="fill: none; stroke: #6e675c; stroke-width: 2; stroke-linecap: round"/>
+   </g>
+   <g id="line2d_3">
+    <path d="M 598.736678 166.32 
+L 816.179904 166.32 
+" clip-path="url(#p0cac511e89)" style="fill: none; stroke: #6e675c; stroke-width: 2; stroke-linecap: round"/>
+   </g>
+   <g id="line2d_4">
+    <path d="M 827.236339 166.32 
+L 930.429734 166.32 
+" clip-path="url(#p0cac511e89)" style="fill: none; stroke: #6e675c; stroke-width: 2; stroke-linecap: round"/>
+   </g>
+   <g id="patch_2">
+    <path d="M 48.835124 455.76 
+Q 479.87901 455.76 909.790819 455.76 
+" clip-path="url(#p0cac511e89)" style="fill: none; stroke: #9c9488; stroke-width: 1.2; stroke-linecap: round"/>
+    <path d="M 901.790819 450.76 
+L 909.790819 455.76 
+L 901.790819 460.76 
+z
+" clip-path="url(#p0cac511e89)" style="fill: #9c9488; stroke: #9c9488; stroke-width: 1.2; stroke-linecap: round"/>
+   </g>
+   <g id="text_1">
+    <text style="font-weight: 700; font-size: 14px; font-family: 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #2b2a28" x="193.334054" y="152.156719" transform="rotate(-0 193.334054 152.156719)">I  Measure</text>
+   </g>
+   <g id="text_2">
+    <text style="font-weight: 700; font-size: 14px; font-family: 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #2b2a28" x="478.95863" y="152.156719" transform="rotate(-0 478.95863 152.156719)">II  Locate</text>
+   </g>
+   <g id="text_3">
+    <text style="font-weight: 700; font-size: 14px; font-family: 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #2b2a28" x="707.458291" y="152.156719" transform="rotate(-0 707.458291 152.156719)">III  Belief → behaviour</text>
+   </g>
+   <g id="text_4">
+    <text style="font-weight: 700; font-size: 14px; font-family: 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #2b2a28" x="878.833037" y="152.156719" transform="rotate(-0 878.833037 152.156719)">IV  Correct</text>
+   </g>
+   <g id="patch_3">
+    <path d="M 38.543962 416.88 
+L 119.624486 416.88 
+Q 130.680922 416.88 130.680922 411.696 
+L 130.680922 206.064 
+Q 130.680922 200.88 119.624486 200.88 
+L 38.543962 200.88 
+Q 27.487526 200.88 27.487526 206.064 
+L 27.487526 411.696 
+Q 27.487526 416.88 38.543962 416.88 
+z
+" clip-path="url(#p0cac511e89)" style="fill: #a9c3d6; stroke: #3e6a8a; stroke-width: 2.2; stroke-linejoin: miter"/>
+   </g>
+   <g id="text_5">
+    <text style="font-weight: 700; font-size: 23px; font-family: 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #2b2a28" x="79.084224" y="232.774609" transform="rotate(-0 79.084224 232.774609)">E1</text>
+   </g>
+   <g id="text_6">
+    <text style="font-size: 11.5px; font-family: 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #6e675c" x="79.084224" y="264.347754" transform="rotate(-0 79.084224 264.347754)">Tabular</text>
+   </g>
+   <g id="text_7">
+    <text style="font-size: 12px; font-family: 'DejaVu Sans', sans-serif; fill: #2b2a28" transform="translate(52.222037 308.13375)">Does the</text>
+    <text style="font-size: 12px; font-family: 'DejaVu Sans', sans-serif; fill: #2b2a28" transform="translate(52.916724 321.934687)">measure</text>
+    <text style="font-size: 12px; font-family: 'DejaVu Sans', sans-serif; fill: #2b2a28" transform="translate(42.157974 337.787812)">recover true</text>
+    <text style="font-size: 12px; font-family: 'DejaVu Sans', sans-serif; fill: #2b2a28" transform="translate(55.102037 353.13375)">control?</text>
+   </g>
+   <g id="text_8">
+    <text style="font-weight: 700; font-size: 13px; font-family: 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #3e6a8a" x="79.084224" y="400.817461" transform="rotate(-0 79.084224 400.817461)">done</text>
+   </g>
+   <g id="patch_4">
+    <path d="M 152.793792 416.88 
+L 233.874317 416.88 
+Q 244.930752 416.88 244.930752 411.696 
+L 244.930752 206.064 
+Q 244.930752 200.88 233.874317 200.88 
+L 152.793792 200.88 
+Q 141.737357 200.88 141.737357 206.064 
+L 141.737357 411.696 
+Q 141.737357 416.88 152.793792 416.88 
+z
+" clip-path="url(#p0cac511e89)" style="fill: #a9c3d6; stroke: #3e6a8a; stroke-width: 2.2; stroke-linejoin: miter"/>
+   </g>
+   <g id="text_9">
+    <text style="font-weight: 700; font-size: 23px; font-family: 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #2b2a28" x="193.334054" y="232.774609" transform="rotate(-0 193.334054 232.774609)">E2</text>
+   </g>
+   <g id="text_10">
+    <text style="font-size: 11.5px; font-family: 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #6e675c" x="193.334054" y="264.347754" transform="rotate(-0 193.334054 264.347754)">Online tabular</text>
+   </g>
+   <g id="text_11">
+    <text style="font-size: 12px; font-family: 'DejaVu Sans', sans-serif; fill: #2b2a28" transform="translate(166.471867 308.13375)">Does the</text>
+    <text style="font-size: 12px; font-family: 'DejaVu Sans', sans-serif; fill: #2b2a28" transform="translate(156.939367 321.786562)">agent's own</text>
+    <text style="font-size: 12px; font-family: 'DejaVu Sans', sans-serif; fill: #2b2a28" transform="translate(159.412492 336.97125)">exploration</text>
+    <text style="font-size: 12px; font-family: 'DejaVu Sans', sans-serif; fill: #2b2a28" transform="translate(172.154992 353.13375)">bias b?</text>
+   </g>
+   <g id="text_12">
+    <text style="font-weight: 700; font-size: 13px; font-family: 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #3e6a8a" x="193.334054" y="400.817461" transform="rotate(-0 193.334054 400.817461)">done</text>
+   </g>
+   <g id="patch_5">
+    <path d="M 267.043622 416.88 
+L 348.124147 416.88 
+Q 359.180582 416.88 359.180582 411.696 
+L 359.180582 206.064 
+Q 359.180582 200.88 348.124147 200.88 
+L 267.043622 200.88 
+Q 255.987187 200.88 255.987187 206.064 
+L 255.987187 411.696 
+Q 255.987187 416.88 267.043622 416.88 
+z
+" clip-path="url(#p0cac511e89)" style="fill: #a9c3d6; stroke: #3e6a8a; stroke-width: 2.2; stroke-linejoin: miter"/>
+   </g>
+   <g id="text_13">
+    <text style="font-weight: 700; font-size: 23px; font-family: 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #2b2a28" x="307.583885" y="232.774609" transform="rotate(-0 307.583885 232.774609)">E3</text>
+   </g>
+   <g id="text_14">
+    <text style="font-size: 11.5px; font-family: 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #6e675c" x="307.583885" y="264.347754" transform="rotate(-0 307.583885 264.347754)">World model</text>
+   </g>
+   <g id="text_15">
+    <text style="font-size: 12px; font-family: 'DejaVu Sans', sans-serif; fill: #2b2a28" transform="translate(268.463885 300.63375)">Does a world</text>
+    <text style="font-size: 12px; font-family: 'DejaVu Sans', sans-serif; fill: #2b2a28" transform="translate(271.793885 315.63375)">model learn</text>
+    <text style="font-size: 12px; font-family: 'DejaVu Sans', sans-serif; fill: #2b2a28" transform="translate(297.737322 330.63375)">the</text>
+    <text style="font-size: 12px; font-family: 'DejaVu Sans', sans-serif; fill: #2b2a28" transform="translate(264.669822 345.63375)">uncontrollable</text>
+    <text style="font-size: 12px; font-family: 'DejaVu Sans', sans-serif; fill: #2b2a28" transform="translate(290.08451 360.527812)">zone?</text>
+   </g>
+   <g id="text_16">
+    <text style="font-weight: 700; font-size: 13px; font-family: 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #3e6a8a" x="307.583885" y="400.817461" transform="rotate(-0 307.583885 400.817461)">done</text>
+   </g>
+   <g id="patch_6">
+    <path d="M 381.293453 416.88 
+L 462.373978 416.88 
+Q 473.430413 416.88 473.430413 411.696 
+L 473.430413 206.064 
+Q 473.430413 200.88 462.373978 200.88 
+L 381.293453 200.88 
+Q 370.237018 200.88 370.237018 206.064 
+L 370.237018 411.696 
+Q 370.237018 416.88 381.293453 416.88 
+z
+" clip-path="url(#p0cac511e89)" style="fill: #a9c3d6; stroke: #3e6a8a; stroke-width: 2.2; stroke-linejoin: miter"/>
+   </g>
+   <g id="text_17">
+    <text style="font-weight: 700; font-size: 23px; font-family: 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #2b2a28" x="421.833715" y="232.774609" transform="rotate(-0 421.833715 232.774609)">E4</text>
+   </g>
+   <g id="text_18">
+    <text style="font-size: 11.5px; font-family: 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #6e675c" x="421.833715" y="264.347754" transform="rotate(-0 421.833715 264.347754)">Generalisation</text>
+   </g>
+   <g id="text_19">
+    <text style="font-size: 12px; font-family: 'DejaVu Sans', sans-serif; fill: #2b2a28" transform="translate(386.639028 308.13375)">Is the belief</text>
+    <text style="font-size: 12px; font-family: 'DejaVu Sans', sans-serif; fill: #2b2a28" transform="translate(402.383403 323.13375)">tied to</text>
+    <text style="font-size: 12px; font-family: 'DejaVu Sans', sans-serif; fill: #2b2a28" transform="translate(390.023403 336.97125)">position or</text>
+    <text style="font-size: 12px; font-family: 'DejaVu Sans', sans-serif; fill: #2b2a28" transform="translate(392.141215 353.13375)">to colour?</text>
+   </g>
+   <g id="text_20">
+    <text style="font-weight: 700; font-size: 13px; font-family: 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #3e6a8a" x="421.833715" y="400.817461" transform="rotate(-0 421.833715 400.817461)">done</text>
+   </g>
+   <g id="patch_7">
+    <path d="M 495.543283 416.88 
+L 576.623808 416.88 
+Q 587.680243 416.88 587.680243 411.696 
+L 587.680243 206.064 
+Q 587.680243 200.88 576.623808 200.88 
+L 495.543283 200.88 
+Q 484.486848 200.88 484.486848 206.064 
+L 484.486848 411.696 
+Q 484.486848 416.88 495.543283 416.88 
+z
+" clip-path="url(#p0cac511e89)" style="fill: #f1ddb0; stroke: #d9a441; stroke-width: 2.2; stroke-linejoin: miter"/>
+   </g>
+   <g id="text_21">
+    <text style="font-weight: 700; font-size: 23px; font-family: 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #2b2a28" x="536.083546" y="232.774609" transform="rotate(-0 536.083546 232.774609)">E5</text>
+   </g>
+   <g id="text_22">
+    <text style="font-size: 11.5px; font-family: 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #6e675c" x="536.083546" y="264.347754" transform="rotate(-0 536.083546 264.347754)">Belief training</text>
+   </g>
+   <g id="text_23">
+    <text style="font-size: 12px; font-family: 'DejaVu Sans', sans-serif; fill: #2b2a28" transform="translate(499.264171 306.97125)">Can training</text>
+    <text style="font-size: 12px; font-family: 'DejaVu Sans', sans-serif; fill: #2b2a28" transform="translate(507.571358 323.13375)">move the</text>
+    <text style="font-size: 12px; font-family: 'DejaVu Sans', sans-serif; fill: #2b2a28" transform="translate(504.040733 338.13375)">belief onto</text>
+    <text style="font-size: 12px; font-family: 'DejaVu Sans', sans-serif; fill: #2b2a28" transform="translate(514.321358 353.13375)">colour?</text>
+   </g>
+   <g id="text_24">
+    <text style="font-weight: 700; font-size: 13px; font-family: 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #d9a441" x="536.083546" y="400.817461" transform="rotate(-0 536.083546 400.817461)">running</text>
+   </g>
+   <g id="patch_8">
+    <path d="M 609.793114 416.88 
+L 690.873638 416.88 
+Q 701.930074 416.88 701.930074 411.696 
+L 701.930074 206.064 
+Q 701.930074 200.88 690.873638 200.88 
+L 609.793114 200.88 
+Q 598.736678 200.88 598.736678 206.064 
+L 598.736678 411.696 
+Q 598.736678 416.88 609.793114 416.88 
+z
+" clip-path="url(#p0cac511e89)" style="fill: #a9c3d6; stroke: #3e6a8a; stroke-width: 2.2; stroke-linejoin: miter"/>
+   </g>
+   <g id="text_25">
+    <text style="font-weight: 700; font-size: 23px; font-family: 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #2b2a28" x="650.333376" y="232.774609" transform="rotate(-0 650.333376 232.774609)">E6</text>
+   </g>
+   <g id="text_26">
+    <text style="font-size: 11.5px; font-family: 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #6e675c" x="650.333376" y="264.347754" transform="rotate(-0 650.333376 264.347754)">Behaviour</text>
+   </g>
+   <g id="text_27">
+    <text style="font-size: 12px; font-family: 'DejaVu Sans', sans-serif; fill: #2b2a28" transform="translate(635.224626 307.949062)">Does</text>
+    <text style="font-size: 12px; font-family: 'DejaVu Sans', sans-serif; fill: #2b2a28" transform="translate(620.194626 323.13375)">behaviour</text>
+    <text style="font-size: 12px; font-family: 'DejaVu Sans', sans-serif; fill: #2b2a28" transform="translate(620.884626 338.13375)">follow the</text>
+    <text style="font-size: 12px; font-family: 'DejaVu Sans', sans-serif; fill: #2b2a28" transform="translate(630.509939 353.13375)">belief?</text>
+   </g>
+   <g id="text_28">
+    <text style="font-weight: 700; font-size: 13px; font-family: 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #3e6a8a" x="650.333376" y="400.817461" transform="rotate(-0 650.333376 400.817461)">done*</text>
+   </g>
+   <g id="patch_9">
+    <path d="M 724.042944 416.88 
+L 805.123469 416.88 
+Q 816.179904 416.88 816.179904 411.696 
+L 816.179904 206.064 
+Q 816.179904 200.88 805.123469 200.88 
+L 724.042944 200.88 
+Q 712.986509 200.88 712.986509 206.064 
+L 712.986509 411.696 
+Q 712.986509 416.88 724.042944 416.88 
+z
+" clip-path="url(#p0cac511e89)" style="fill: #a9c3d6; stroke: #3e6a8a; stroke-width: 2.2; stroke-linejoin: miter"/>
+   </g>
+   <g id="text_29">
+    <text style="font-weight: 700; font-size: 23px; font-family: 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #2b2a28" x="764.583206" y="232.774609" transform="rotate(-0 764.583206 232.774609)">E7</text>
+   </g>
+   <g id="text_30">
+    <text style="font-size: 11.5px; font-family: 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #6e675c" x="764.583206" y="264.347754" transform="rotate(-0 764.583206 264.347754)">Dissociation</text>
+   </g>
+   <g id="text_31">
+    <text style="font-size: 12px; font-family: 'DejaVu Sans', sans-serif; fill: #2b2a28" transform="translate(739.592269 308.13375)">Belief or</text>
+    <text style="font-size: 12px; font-family: 'DejaVu Sans', sans-serif; fill: #2b2a28" transform="translate(728.426644 323.13375)">critic: which</text>
+    <text style="font-size: 12px; font-family: 'DejaVu Sans', sans-serif; fill: #2b2a28" transform="translate(733.199456 338.13375)">one drives</text>
+    <text style="font-size: 12px; font-family: 'DejaVu Sans', sans-serif; fill: #2b2a28" transform="translate(731.259769 353.13375)">behaviour?</text>
+   </g>
+   <g id="text_32">
+    <text style="font-weight: 700; font-size: 13px; font-family: 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #3e6a8a" x="764.583206" y="400.817461" transform="rotate(-0 764.583206 400.817461)">done*</text>
+   </g>
+   <g id="patch_10">
+    <path d="M 838.292774 416.88 
+L 919.373299 416.88 
+Q 930.429734 416.88 930.429734 411.696 
+L 930.429734 206.064 
+Q 930.429734 200.88 919.373299 200.88 
+L 838.292774 200.88 
+Q 827.236339 200.88 827.236339 206.064 
+L 827.236339 411.696 
+Q 827.236339 416.88 838.292774 416.88 
+z
+" clip-path="url(#p0cac511e89)" style="fill: #f7f3ea; stroke-dasharray: 8.14,3.52; stroke-dashoffset: 0; stroke: #b8b0a2; stroke-width: 2.2; stroke-linejoin: miter"/>
+   </g>
+   <g id="text_33">
+    <text style="font-weight: 700; font-size: 23px; font-family: 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #2b2a28" x="878.833037" y="232.774609" transform="rotate(-0 878.833037 232.774609)">E8</text>
+   </g>
+   <g id="text_34">
+    <text style="font-size: 11.5px; font-family: 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #6e675c" x="878.833037" y="264.347754" transform="rotate(-0 878.833037 264.347754)">Immunisation</text>
+   </g>
+   <g id="text_35">
+    <text style="font-size: 12px; font-family: 'DejaVu Sans', sans-serif; fill: #2b2a28" transform="translate(847.737099 306.97125)">Does prior</text>
+    <text style="font-size: 12px; font-family: 'DejaVu Sans', sans-serif; fill: #2b2a28" transform="translate(858.035537 323.13375)">control</text>
+    <text style="font-size: 12px; font-family: 'DejaVu Sans', sans-serif; fill: #2b2a28" transform="translate(845.569599 336.97125)">protect the</text>
+    <text style="font-size: 12px; font-family: 'DejaVu Sans', sans-serif; fill: #2b2a28" transform="translate(859.009599 353.13375)">belief?</text>
+   </g>
+   <g id="text_36">
+    <text style="font-weight: 700; font-size: 13px; font-family: 'DejaVu Sans', sans-serif; text-anchor: middle; fill: #b8b0a2" x="878.833037" y="400.816953" transform="rotate(-0 878.833037 400.816953)">to come</text>
+   </g>
+  </g>
+  <g id="text_37">
+   <text style="font-weight: 700; font-size: 21px; font-family: 'DejaVu Sans', sans-serif; text-anchor: start; fill: #2b2a28" x="43.1892" y="34.856719" transform="rotate(-0 43.1892 34.856719)">Two months: from measuring the belief to testing what it does</text>
+  </g>
+  <g id="text_38">
+   <text style="font-size: 11.5px; font-family: 'DejaVu Sans', sans-serif; text-anchor: start; fill: #6e675c" x="43.1892" y="521.037305" transform="rotate(-0 43.1892 521.037305)">* E6 and E7 developed and run on E4's agents (CPU); to be rerun on E5's agents. E5's figures will slot in at part II.</text>
+  </g>
+ </g>
+ <defs>
+  <clipPath id="p0cac511e89">
+   <rect x="19.1952" y="75.6" width="921.3696" height="432"/>
+  </clipPath>
+ </defs>
+</svg>
