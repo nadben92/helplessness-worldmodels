@@ -1703,6 +1703,20 @@ decoder.csv, coldir.csv, directions.csv, forms.json, figures/context.png). Verdi
 t = 0) a disparu dès t = 1 : r(2) entre −0,10 et +0,06, r(3) entre −0,06 et +0,03 (97 à 141 épisodes encore dans la
 zone à t = 3). C3 et la masse sur le vrai successeur reviennent de même dès t = 1 ou t = 2.
 
+Par agent (`persist.csv`), r(t) de b, ρ_h(t) = ‖Δh_t‖ / ‖Δh_0‖ et cos(Δh_t, Δh_0) de la correction optimisée
+(épisodes encore dans leur premier séjour dans la zone ; n = 180 à t = 1) :
+
+| Agent | t = 1 : r_b / ρ_h / cos | t = 2 : r_b / ρ_h / cos | t = 3 : r_b / ρ_h / cos (n) |
+|---|---|---|---|
+| p1-a_e4 | −0,01 / 0,59 / 0,53 | −0,01 / 0,38 / 0,36 | −0,02 / 0,27 / 0,25 (140) |
+| base_A | +0,05 / 0,52 / 0,60 | −0,10 / 0,26 / 0,33 | −0,01 / 0,15 / 0,19 (137) |
+| p2-a_e4 | +0,05 / 0,54 / 0,63 | +0,03 / 0,33 / 0,42 | +0,01 / 0,25 / 0,32 (141) |
+| p2-b_e4 | −0,10 / 0,64 / 0,61 | −0,05 / 0,41 / 0,36 | −0,01 / 0,30 / 0,27 (141) |
+| base_B | +0,05 / 0,63 / 0,61 | +0,01 / 0,38 / 0,35 | +0,02 / 0,24 / 0,24 (115) |
+| f1_A | −0,02 / 0,68 / 0,41 | −0,09 / 0,42 / 0,24 | −0,06 / 0,30 / 0,14 (111) |
+| f1_E | +0,15 / 0,67 / 0,42 | +0,06 / 0,40 / 0,26 | +0,03 / 0,25 / 0,15 (97) |
+| f1_F | +0,04 / 0,58 / 0,54 | −0,00 / 0,30 / 0,30 | −0,03 / 0,19 / 0,23 (103) |
+
 **Lecture Δh (807fcdc) : « (i) perturbation transmise mais ignorée » pour les 8 agents, sur pas réels et en
 imagination.** t* = 1 partout. Sur pas réels, ‖Δh_1‖ / ‖Δh_0‖ = 0,52 à 0,68 (cos(Δh_1, Δh_0) 0,41 à 0,63), puis la
 perturbation décroît (≈ 0,3 à t = 2, ≈ 0,12 à t = 5) en tournant (cos ≈ 0,1). En imagination, le rapport au premier pas
@@ -1716,6 +1730,14 @@ décodée est le vrai successeur) ne tient pas : cette part **monte** de 0,16–
 shuffle compris. Ce que la correction change dans la prédiction, c'est la case où l'agent arrive (le vrai successeur au
 lieu du tapis roulant), pas la couleur de la zone. Image reconstruite (descriptif) : D_inc passe de < 1 à 13,6–16,0 unités
 RGB chez base_A, base_B et F, à 3,7–5,3 chez A, E et p2-b, et reste < 1 chez p1-a et p2-a (s ≤ 0,08).
+
+**Remarque (5 novembre) : la forme B des baselines a été mal traduite.** L'hypothèse était que, chez les baselines, la
+correction déplace la case de l'agent prédite sans toucher à la couleur. La traduction écrite en a pris la mauvaise
+direction : elle attendait une **baisse** de la part des images prédites dont la case décodée est le vrai successeur,
+alors que « déplacer » la case, ici, c'est l'amener du tapis roulant vers le vrai successeur, ce qui fait **monter**
+cette part. Le verdict reste tel que calculé (non tenue pour les 5 baselines), parce que la forme est celle qui a été
+commitée avant le calcul. Avec la direction corrigée, la mesure montrerait la case déplacée et la couleur inchangée chez
+les 5 baselines, mais ce verdict, lu après les chiffres, n'a pas valeur de forme.
 
 **C. Direction naturelle de la couleur : partielle pour A, E et F.** d_col est fiable (cosinus entre moitiés 0,99 à
 1,00 ; ‖d_col‖ 2,2 à 2,8, contre ‖d‖ 2,6 à 4,5 pour la correction optimisée).
@@ -1805,3 +1827,53 @@ commune. Forme non tenue avec des gains de transfert proches des gains d'origine
 les faibles cosinus entre quadrants. Limite : d_col(Q1) est appliqué avec sa norme propre, et une direction quelconque
 de même norme fait aussi bouger b (C, condition 4) ; seule la part dirigée porte le verdict, parce qu'elle ne monte
 pas sous les directions aléatoires (C : variations de signe mixte, médiane des |Δ| 0,09 à 0,11).
+
+### Résultats de D et E (5 novembre)
+
+Runs : `scratch/ctx_650k/E7_context/` (`natpersist__col`, `natpersist__rec`, `transfer__<Q2>`, non versionnés).
+Analyse : `analyse_e7_context.py` → `natpersist.csv`, `transfer.csv`, `forms.json` (clés D et E) ; les sorties de A, B
+et C sont inchangées. Verdicts tels que calculés, seuils inchangés. Écart au texte des formes : dans le calibrage de
+d_rec, le gain moyen de b ne garde que les contextes où les deux b sont finis (b est NaN sur quelques contextes aux
+grandes amplitudes), comme la moyenne par pas du rejeu ; fixé après un run réduit, avant les runs complets.
+
+**D. −d_col (a = 1) : « réévaluation à chaque pas » (3 agents sur 3).** Écart de b à t = 0 : +1,11 (A), +0,77 (E),
++0,57 (F) bit ; r_b(2) = −0,22, −0,06, −0,62 ; r_b(3) = −0,17, −0,05, −0,38 (138 à 148 épisodes à t = 3). La perturbation
+reste dans h plus longtemps que celle de la correction optimisée (ρ_h(1) 0,61 à 0,95, cos 0,78 à 0,82 ; ρ_h(3) 0,26 à
+0,42), et b revient quand même dès t = 1–2 (r_b(1) −0,11 à +0,32), en passant sous l'exposé chez A et F. Description :
+chez A et F, l'effet sur C3 et la part dirigée tient plus longtemps que celui sur b (part dirigée : r(2) = 0,70 chez A,
+1,15 chez F ; r(3) 0,11 et 0,42) ; chez E, l'effet sur C3 et sur la part dirigée à t = 0 est négatif (−0,13 / −0,26 ;
+appliquée une seule fois, −d_col fait baisser la part greedy dirigée de E, alors qu'à chaque pas, en C, elle la fait
+monter).
+
+**D. +α·d_rec : « indéterminé » (1 agent sur 3 en persistance, aucun en réévaluation).**
+
+| Agent | α (‖α·d_rec‖) | gain de b à t = 0 / cible | r_b(1) | r_b(2) | r_b(3) (n) | ρ_h(1) / ρ_h(3) |
+|---|---|---|---|---|---|---|
+| f1_A | 2,0 (7,9), cible non atteinte (maximum de la grille) | +1,07 / +1,11 | +0,96 | +0,47 | **+0,50** (144) | 0,55 / 0,35 |
+| f1_E | 1,55 (6,3) | +0,80 / +0,77 | +0,45 | +0,31 | +0,03 (122) | 0,44 / 0,15 |
+| f1_F | 1,5 (6,6), cible non atteinte (maximum de la grille) | +0,27 / +0,57 | +1,78 | +0,97 | +0,40 (101) | 0,43 / 0,13 |
+
+A dépasse le seuil de persistance tout juste (0,502). E et F ne remplissent aucune des deux conditions. Chez F, le gain
+de b à t = 0 n'est que la moitié de la cible : son r(t) part d'un écart de 0,27 bit et il est moins précis. Description :
+l'effet de d_rec sur b décroît nettement moins vite que celui de −d_col (r_b(2) 0,31 à 0,97 contre −0,62 à −0,06), alors
+que la perturbation de h, elle, s'efface plus vite (ρ_h(3) 0,13 à 0,35 contre 0,26 à 0,42). Le gain de b ne croît pas de
+façon monotone avec α (il retombe à α = 3–4 chez A et F, à α = 4 chez E) ; d_rec a une norme 2,9 à 3,2 fois celle de d_col
+à α = 1,5–2.
+
+**E. Transfert de d_col : « pas d'axe global » (3 agents sur 3).** Gain de part dirigée dans le quadrant d'origine
+(Q1 = Q2) : A 0,44 / 0,17 / 0,39 / 0,11 (nw / ne / se / sw) ; E 0,05 / 0,45 / 0,15 / 0,00 ; F 0,17 / 0,40 / 0,02 / 0,38.
+Sur les couples dont l'origine est ≥ 0,10 (12 chez A, 6 chez E, 9 chez F), la médiane des gains de transfert est
+−0,06 (A), −0,11 (E), −0,12 (F) : appliqué hors de son quadrant, d_col fait plutôt **baisser** la part dirigée. Quelques
+couples transfèrent un peu (A nw → ne +0,13 ; E se → ne +0,20 ; F se → sw +0,17). Description : en transfert, b monte
+quand même (médianes +0,39 à +0,64, de +0,12 à +0,95), mais C3 ne monte pas (médianes −0,06 à +0,03) et la
+localisation en zone s'effondre (médianes −0,33 à −0,36) ; à l'origine, la localisation tient chez A et E (médiane
+−0,02 à −0,01), pas chez F (−0,27). C'est le profil des directions aléatoires de C (b monte, localisation dégradée, pas
+le planificateur), ce qui va avec les cosinus quasi nuls ou négatifs entre les d_col des quadrants.
+
+**Lecture (celle écrite avant, appliquée aux verdicts).** D, −d_col : même une perturbation naturelle de h, appliquée une
+fois, n'est pas transportée pour b ; la non-persistance de A ne tient pas seulement au caractère hors distribution de la
+correction optimisée. D, +d_rec : non conclusif ; la direction de la récupération naturelle tient plus longtemps sur b
+(jusqu'à la moitié de l'effet à t = 3 chez A) sans atteindre le seuil chez 2 agents sur 3. E : la direction qui fait
+monter le comportement dans un quadrant ne le fait pas monter ailleurs ; h code le contexte T_inc par quadrant (avec la
+position), pas une variable « couleur incontrôlable » commune. Limite (écrite avant) : −d_col et d_rec restent hors de
+la distribution des h produits sur une trajectoire donnée, moins loin que h + d mais pas dedans.

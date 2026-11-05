@@ -11,8 +11,16 @@ direction) with the thresholds committed before the computation (c790003), from 
      agent cell's share drops by >= 0.10. The reconstruction, described.
   C  shuffle: split-half cos of d_col >= 0.80 else not interpretable; conditions 1-5 of the section; all five: holds; none
      or only condition 4: does not hold; otherwise partial. Described: cos of d_col between slots, with d_ctrl and d_rec.
+  D  (bf35c9c) natpersist, -d_col (a = 1) and +alpha * d_rec, shuffle: r(t) of b, C3 and the directed share (the latter
+     two only if their gap at t = 0 >= 0.05); an agent counts for neither condition if n(3) < 20 or b's gap at t = 0
+     < 0.10; per direction, natural persistence if r_b(3) >= 0.50 for >= 2 of 3 agents, re-evaluation at every step
+     if r_b(2) <= 0.25 for >= 2 of 3, else (or both) undetermined.
+  E  (b20ed47) transfer, shuffle: gains (condition - exposed, each the mean over the 3 assignments) of -d_col(Q1) applied
+     with the zone in Q2; an agent has no global axis if, over the ordered pairs Q1 != Q2 whose origin gain G(Q1 -> Q1)
+     on the directed share is >= 0.10, the median transfer gain G(Q1 -> Q2) is <= 0.05 (not counted if no origin gain
+     >= 0.10); no global axis if >= 2 of 3 agents.
 
-Writes <out>/persist.csv, imagine.csv, decoder.csv, coldir.csv, directions.csv, forms.json and figures/context.png. Usage:
+Writes <out>/persist.csv, imagine.csv, decoder.csv, coldir.csv, directions.csv, natpersist.csv, transfer.csv, forms.json and figures/context.png. Usage:
   python experiments/E7_latent_manipulation/analyse_e7_context.py --runs scratch/ctx_650k/E7_context --out results/E6_phenotypes_latent/all_agents_650k/context
 """
 
@@ -32,8 +40,11 @@ import numpy as np  # noqa: E402
 import yaml  # noqa: E402
 from scipy.stats import spearmanr  # noqa: E402
 
+from helplessness.envs.layouts.four_zones import QUADRANT_ORDER  # noqa: E402
+
 AGENTS = ["p1-a_e4", "base_A", "p2-a_e4", "p2-b_e4", "base_B", "f1_A", "f1_E", "f1_F"]
 SHUFFLE = ("f1_A", "f1_E", "f1_F")
+QUADRANTS = QUADRANT_ORDER
 AMPS = (0.25, 0.5, 0.75, 1.0, 1.5)
 N_BOOT, N_NULL, SEED = 2000, 1000, 2208
 
@@ -178,6 +189,59 @@ def part_c(root: Path) -> tuple[list[dict], list[dict], dict]:
     return rows, drows, forms
 
 
+def part_d(root: Path) -> tuple[list[dict], dict]:
+    rows, forms = [], {}
+    for direction in ("col", "rec"):
+        per = {}
+        for a in SHUFFLE:
+            s = json.loads((one(root, a, f"natpersist__{direction}") / "summary.json").read_text(encoding="utf-8"))
+            by = {r["t"]: r for r in s["by_t"]}
+            d0 = {k: by[0][f"{k}_corr"] - by[0][f"{k}_raw"] for k in ("b", "C3", "dir")}
+            r = {k: {t: (by[t][f"{k}_corr"] - by[t][f"{k}_raw"]) / d0[k] if (k == "b" or abs(d0[k]) >= 0.05) else np.nan for t in by} for k in d0}
+            for t in by:
+                rows.append({"direction": direction, "agent": a, "t": t, "n_in_zone": by[t]["n_in_zone"],
+                             **{f"{k}_{f}": by[t][f"{k}_{f}"] for k in d0 for f in ("corr", "raw")}, **{f"r_{k}": r[k][t] for k in d0},
+                             "dh_norm": by[t]["dh_norm"], "dh_ratio": by[t]["dh_ratio"], "dh_cos0": by[t]["dh_cos0"]})
+            n3 = by[3]["n_in_zone"] if 3 in by else 0
+            counts = n3 >= 20 and d0["b"] >= 0.10
+            per[a] = {"gap0": d0, "r_b2": r["b"].get(2), "r_b3": r["b"].get(3), "n3": n3, "counts": bool(counts),
+                      "persist": bool(counts and r["b"].get(3, np.nan) >= 0.50), "reeval": bool(counts and r["b"].get(2, np.nan) <= 0.25),
+                      "calibration": {k: v for k, v in s["calibration"].items() if k != "grid"}, "grid": s["calibration"].get("grid")}
+        n_p, n_r = sum(v["persist"] for v in per.values()), sum(v["reeval"] for v in per.values())
+        p_, r_ = n_p >= 2, n_r >= 2
+        verdict = "natural persistence" if p_ and not r_ else "re-evaluation at every step" if r_ and not p_ else "undetermined"
+        forms[direction] = {"agents": per, "n_persist": n_p, "n_reeval": n_r, "verdict": verdict}
+    return rows, forms
+
+
+def part_e(root: Path) -> tuple[list[dict], dict]:
+    rows, forms = [], {}
+    keys = ("directed_share", "b_step1", "C3", "loc_template_zone")
+    for a in SHUFFLE:
+        mean = {}  # (q1 or None, q2) -> {key: mean over the 3 assignments}
+        for q2 in QUADRANTS:
+            rr = json.loads((one(root, a, f"transfer__{q2}") / "summary.json").read_text(encoding="utf-8"))["rows"]
+            for q1 in (None, *QUADRANTS):
+                sel = [r for r in rr if r["q1"] == q1]
+                if len(sel) != 3:
+                    raise SystemExit(f"{a} {q2} {q1}: {len(sel)} assignments")
+                mean[(q1, q2)] = {k: float(np.mean([r[k] for r in sel])) for k in keys}
+        gain = {(q1, q2): {k: mean[(q1, q2)][k] - mean[(None, q2)][k] for k in keys} for q1 in QUADRANTS for q2 in QUADRANTS}
+        for (q1, q2), g in gain.items():
+            rows.append({"agent": a, "q1": q1, "q2": q2, "origin": q1 == q2, **{f"exposed_{k}": mean[(None, q2)][k] for k in keys},
+                         **{f"cond_{k}": mean[(q1, q2)][k] for k in keys}, **{f"gain_{k}": v for k, v in g.items()}})
+        pairs = [(q1, q2) for q1 in QUADRANTS for q2 in QUADRANTS if q1 != q2 and gain[(q1, q1)]["directed_share"] >= 0.10]
+        med = float(np.median([gain[p_]["directed_share"] for p_ in pairs])) if pairs else np.nan
+        counted = bool(pairs)
+        forms[a] = {"origin_gain_directed": {q: gain[(q, q)]["directed_share"] for q in QUADRANTS}, "n_pairs": len(pairs),
+                    "median_transfer_gain_directed": med, "counted": counted, "no_global_axis": bool(counted and med <= 0.05),
+                    "median_transfer_over_origin": float(np.median([gain[p_]["directed_share"] / gain[(p_[0], p_[0])]["directed_share"] for p_ in pairs])) if pairs else np.nan}
+    n = sum(f["no_global_axis"] for f in forms.values())
+    forms["verdict"] = "no global axis" if n >= 2 else "not held"
+    forms["n_no_global_axis"] = n
+    return rows, forms
+
+
 def figure(a_rows: list[dict], c_rows: list[dict], out: Path) -> None:
     fig, axes = plt.subplots(1, 4, figsize=(16, 4.5))
     for a in AGENTS:
@@ -213,14 +277,18 @@ def main(argv: list[str] | None = None) -> int:
     write_csv(args.out / "imagine.csv", i_rows)
     b_rows, b_forms = part_b(args.runs)
     c_rows, d_rows, c_forms = part_c(args.runs)
+    n_rows, n_forms = part_d(args.runs)
+    e_rows, e_forms = part_e(args.runs)
+    write_csv(args.out / "transfer.csv", e_rows)
+    write_csv(args.out / "natpersist.csv", n_rows)
     write_csv(args.out / "persist.csv", a_rows)
     write_csv(args.out / "decoder.csv", b_rows)
     write_csv(args.out / "coldir.csv", c_rows)
     write_csv(args.out / "directions.csv", d_rows)
-    forms = {"A": a_forms, "A_imagine": i_forms, "B": b_forms, "C": c_forms}
+    forms = {"A": a_forms, "A_imagine": i_forms, "B": b_forms, "C": c_forms, "D": n_forms, "E": e_forms}
     (args.out / "forms.json").write_text(json.dumps(forms, indent=1, default=float), encoding="utf-8")
     figure(a_rows, c_rows, args.out / "figures" / "context.png")
-    print(json.dumps({p: {a: f.get("verdict", f.get("holds")) for a, f in forms[p].items()} for p in forms}, indent=1))
+    print(json.dumps({p: {a: f.get("verdict", f.get("holds")) if isinstance(f, dict) else f for a, f in forms[p].items()} for p in forms}, indent=1))
     return 0
 
 
