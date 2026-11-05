@@ -43,31 +43,16 @@ from helplessness.agents.worldmodel.policy import q_values
 from helplessness.config import REPO_ROOT
 from helplessness.pipeline import frozen_setup as fs
 from helplessness.pipeline.runtime import configure_runtime
+from helplessness.probing.critic_readout import READOUT_KEYS as KEYS  # noqa: F401  (moved 2026-11-05, docs/e8/DECISIONS.md (11))
+from helplessness.probing.critic_readout import assemble, readout_q_fn
+from helplessness.probing.critic_readout import clone_generator as clone
 from helplessness.probing.fixed_trajectory import step_controllability
 from helplessness.probing.lookahead import channel_q
 from helplessness.runs import code_provenance, require_code_provenance
 
 EXPERIMENT_ID = "E7_dissociation"
 DEFAULT_CONFIG = REPO_ROOT / "configs" / "e7" / "e7.yaml"
-KEYS = ("V_zbar", "V_zbar_mean", "Q_hbar")
 SAVE = ("states", "actions", "length", "terminated", "Q", "I", "loc_template", "p_goal", "explored", "tied")
-
-
-def clone(g: torch.Generator, device) -> torch.Generator:
-    c = torch.Generator(device=device)
-    c.set_state(g.get_state())
-    return c
-
-
-def assemble(buffer: list[dict], length: np.ndarray, shape: tuple, prefix: str) -> dict:
-    """The per-call buffers (one per step, the active rows in order) as (n, H, A) arrays."""
-    out = {}
-    for k in buffer[0]:
-        full = np.full(shape, np.nan)
-        for t, b in enumerate(buffer):
-            full[np.flatnonzero(length > t), t] = b[k]
-        out[f"{prefix}{k}"] = full
-    return out
 
 
 def natural(st, directions: Path | None) -> tuple[dict, list[dict]]:
@@ -82,14 +67,7 @@ def natural(st, directions: Path | None) -> tuple[dict, list[dict]]:
         hook = None if it["vector"] is None else ra.fixed_hook(it["vector"], it["alpha"], st.e7["apply_in"])
         zgen = torch.Generator(device=st.device).manual_seed(rdis.seed_of(st.d["seed"], "rollout", it["alpha"], 7 + len(it["mode"])))  # D6's
         buffer: list[dict] = []
-
-        def q_fn(h, z, s, g, model=model, zgen=zgen, buffer=buffer):
-            ch = channel_q(model, h, z, clone(g, st.device), zgen, mean_zbar=True)
-            q = q_values(model.rssm, model.goal_head, model.critic, h, z, model.cfg.k_act, model.cfg, g)
-            if not torch.equal(q, ch["Q_normal"]):
-                raise RuntimeError("the counterfactual's Q differs from the policy's")
-            buffer.append({k: ch[k].cpu().numpy() for k in KEYS})
-            return q
+        q_fn = readout_q_fn(model, st.device, zgen, buffer)
         ep = fs.run_model(model, st.tw, st.image, e6, st.eps[it["role"]], hook=hook, q_fn=q_fn)
         row = rdiag.episode_row(st, ep, ref_plain, ref_fresh, it["role"], mode=it["mode"], alpha=it["alpha"], tau=None, k=1)
         row["seconds"] = time.perf_counter() - t0

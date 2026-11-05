@@ -40,12 +40,8 @@ from helplessness.runs import code_provenance, require_code_provenance
 
 EXPERIMENT_ID = "E7_dissociation"
 DEFAULT_CONFIG = REPO_ROOT / "configs" / "e7" / "e7.yaml"
-PURPOSE = {"alt": 10, "kernel": 11, "rollout": 12}
-
-
-def seed_of(base: int, purpose: str, *extra) -> int:
-    return int(np.random.SeedSequence([int(base), PURPOSE[purpose], *[int(round(1000 * x)) for x in extra]])
-               .generate_state(1, dtype=np.uint64)[0] % (2**63 - 1))
+from helplessness.probing.critic_readout import DISSOCIATION_PURPOSE as PURPOSE  # noqa: E402,F401  (moved 2026-11-05, docs/e8/DECISIONS.md (11))
+from helplessness.probing.critic_readout import dissociation_seed as seed_of  # noqa: E402
 
 
 def step1_contexts(st, model) -> tuple[torch.Tensor, torch.Tensor, np.ndarray]:

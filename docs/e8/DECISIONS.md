@@ -219,3 +219,25 @@ the user. One 3-CPU pod; `--dry-run` first; `nadim-launcher` stopped during the 
 `--phase probes` on the local CPU is chained like `experiments/E6_phenotypes_latent/chain_all_cpu.py` (scheduled task,
 heartbeat in `STATUS.txt`, `KeyboardInterrupt` and every exception written as FAILED with its cause, phases already done
 skipped on a restart); a first short job must finish before the full chain is launched.
+
+## 2026-11-05 (17) -- amendments to (9) and (11), written while coding, before any E8 run (implementer)
+
+- **(9), measurement streams of the health record.** E4's `real_context_record` and E5's `real_context_by_assignment`
+  draw from their own measurement slots of the RUN SEED's measure stream (E4's slot 20, E5's slot 22, keyed by the
+  checkpoint), not from new slots of the therapy root as (9) wrote. They are reused unchanged rather than given a stream
+  option: a measurement stream never touches a training stream, so the therapy's trajectory does not depend on it either
+  way (tested by the resume test). The health record is skipped at checkpoint 0 (empty replay: no real context).
+- **(11), one more function moved**: `apply_e5_procedure` (E5's changes to E4's procedure: the same-background switch
+  statistic, which also drives the collapse guard, the later separation deadline, the late threshold) moves from
+  `experiments/E5_belief_training/run_e5.py` to `pipeline/two_zones_setup.py`, body unchanged; `run_e5.py` imports it
+  back. The other moves landed as listed: `probing/critic_readout.py` (readout and oracle q_fns, `assemble`, the generator
+  clone, the E7 seed derivations), `measures.decision_rule.critic_readouts` (D7's C1/C2/C3) and
+  `measures.zone_phenotypes.localisation_split` (the decoder / true-cell split of `free_offsets_650k.py`).
+  Verified on 2026-11-05, same machine, CPU: `run_e7_d7.py --phase natural --no-overlay --image training` and
+  `run_e7_diagnostics.py --phase lookahead`, base_A, `--n-reps 1`, before (main) and after the move: the 29 and 52
+  arrays of `episodes.npz` equal (`np.array_equal`, NaN equal) and the summary rows equal (durations aside); the array
+  functions against verbatim copies of their old bodies (`tests/e8/test_e8_library_moves.py`).
+- **Reference measured with its partner's seeds.** E4's walk seeds depend on the pair's seed (`measurement_seed` reads
+  `conf["seed"]`), so reference B is measured by the walks once per exposed partner, with that partner's seed (common
+  random numbers within the pair, as E5 (39)); E6's episode seeds do not depend on the agent, so its episodes are run
+  once per checkpoint and image. Cost: wave 2's walks count 3 + 3 models x 12 images per checkpoint (12): about +20 %.

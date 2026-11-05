@@ -46,13 +46,8 @@ NATURAL = ("exposed", "references, no intervention")
 
 
 def c_measures(V: np.ndarray, Qh: np.ndarray, s: np.ndarray, w) -> dict[str, np.ndarray]:
-    dirs = w.directed[s]
-    rv = rankdata(V, axis=1)
-    rd = rankdata(-w.dist[w.succ[s]], axis=1)
-    rv, rd = rv - rv.mean(1, keepdims=True), rd - rd.mean(1, keepdims=True)
-    with np.errstate(invalid="ignore", divide="ignore"):
-        rho = (rv * rd).sum(1) / np.sqrt((rv ** 2).sum(1) * (rd ** 2).sum(1))
-    return {"C1": dr.argmax_directed(V, dirs).astype(float), "C2": rho, "C3": dr.greedy_directed_share(Qh, dirs, ad.TIE_TOL)}
+    """C1, C2, C3 of zone steps at states s (moved to measures.decision_rule.critic_readouts on 2026-11-05)."""
+    return dr.critic_readouts(V, Qh, w.directed[s], w.dist[w.succ[s]], ad.TIE_TOL)
 
 
 def collect_natural(runs: list[dict], worlds: dict) -> dict:

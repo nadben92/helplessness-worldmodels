@@ -51,7 +51,9 @@ from helplessness.runs import code_provenance, require_code_provenance
 EXPERIMENT_ID = "E7_latent_manipulation"
 DEFAULT_CONFIG = REPO_ROOT / "configs" / "e7" / "e7.yaml"
 PHASES = ("values", "induction", "softmax", "lookahead")
-PURPOSE = {"values": 0, "contexts": 1, "oracle": 2, "model": 3, "model_corrected": 4, "trace": 5, "lookahead": 6}
+from helplessness.probing.critic_readout import DIAGNOSTICS_PURPOSE as PURPOSE  # noqa: E402,F401  (moved 2026-11-05, docs/e8/DECISIONS.md (11))
+from helplessness.probing.critic_readout import diagnostics_seed as torch_seed  # noqa: E402
+from helplessness.probing.critic_readout import oracle_q_fn  # noqa: E402
 
 
 def weights_hash(models: dict) -> dict:
@@ -64,10 +66,6 @@ def weights_hash(models: dict) -> dict:
                 h.update(k.encode()), h.update(v.detach().cpu().contiguous().numpy().tobytes())
         out[role] = h.hexdigest()
     return out
-
-
-def torch_seed(seed: int, purpose: str, extra: int = 0) -> int:
-    return int(np.random.SeedSequence([int(seed), PURPOSE[purpose], int(extra)]).generate_state(1, dtype=np.uint64)[0] % (2**63 - 1))
 
 
 class Setting:
@@ -218,8 +216,7 @@ def phase_episodes(st: Setting, phase: str, directions: Path | None, taus: list[
             emb = embeddings(model, st.tw)
             gen = torch.Generator(device=st.device).manual_seed(torch_seed(st.d["seed"], "lookahead", it["k"]))
 
-            def q_fn(h, z, s, _act_gen, model=model, emb=emb, gen=gen, k=it["k"]):
-                return k_step_q(model, st.tw, h, z, s, k, "oracle", int(st.d["n_particles"]), int(st.d["k_inner"]), gen, embeds=emb)["Q"][..., k - 1]
+            q_fn = oracle_q_fn(model, st.tw, it["k"], int(st.d["n_particles"]), int(st.d["k_inner"]), gen, emb)
         ep = fs.run_model(model, st.tw, st.image, e6, st.eps[it["role"]], hook=hook, tau=it["tau"], q_fn=q_fn)
         rows.append({**episode_row(st, ep, ref_plain, ref_fresh, it["role"], mode=it["mode"], alpha=it["alpha"], tau=it["tau"], k=it["k"]),
                      "seconds": time.perf_counter() - t0})
