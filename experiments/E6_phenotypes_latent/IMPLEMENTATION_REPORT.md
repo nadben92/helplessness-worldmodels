@@ -1780,3 +1780,28 @@ Persistance pour l'une d'elles ⇒ h peut transporter une perturbation de cette 
 non-persistance de A est propre à la correction optimisée. Limite : −d_col et d_rec sont des différences de h moyens
 entre conditions ; h + v reste hors de la distribution des h que le modèle produit sur une trajectoire donnée, moins
 loin que h + d mais pas dedans.
+
+### E. Transfert de d_col entre quadrants (`transfer`) : forme attendue (écrite et commitée avant le calcul, 5 novembre)
+
+Question : d_col est-il un axe global « T_inc » de h, ou une direction propre à chaque quadrant (C : cosinus entre
+quadrants −0,31 à 0,00) ? Agents shuffle A, E, F. Pour chaque quadrant Q2, les épisodes du protocole d'E6 partent de Q2
+dans le monde de test dessiné avec chacune des 3 dispositions d'entraînement où Q2 porte T_inc (mêmes images et mêmes
+graines que les runs `collect` de C ; zone = Q2). Conditions, pour chaque Q2 : exposé (sans perturbation), et
+h ← h − d_col(Q1) à chaque pas de zone (`fixed_hook`, a = 1, sans optimisation) pour chacun des 4 quadrants Q1, d_col(Q1)
+étant celui de C (runs `collect`, à case égale dans Q1). Q1 = Q2 : **quadrant d'origine** ; Q1 ≠ Q2 : **transfert**.
+Mesures, chacune moyennée sur les 3 dispositions : b au pas 1, C3 (pas de zone bien localisés, convention de D7, z̄ de
+D7), part dirigée ; gain = condition − exposé, sur les mêmes images.
+
+- Pour chaque couple ordonné (Q1, Q2), Q1 ≠ Q2 (12 couples) : gain d'origine G(Q1 → Q1) et gain de transfert
+  G(Q1 → Q2), sur la part dirigée.
+- Un agent est **sans axe global** si, sur les couples dont le gain d'origine est ≥ 0,10, la médiane des gains de
+  transfert est ≤ 0,05. Il ne compte pas (ni pour ni contre) si aucun quadrant n'a un gain d'origine ≥ 0,10.
+- **Pas d'axe global** si au moins 2 agents sur 3 sont sans axe global ; sinon la forme n'est pas tenue.
+- Rapportés sans verdict : les mêmes gains sur b et sur C3, le rapport transfert / origine, la localisation en zone.
+
+Lecture (écrite avant) : forme tenue ⇒ la direction qui fait monter le comportement dans un quadrant ne le fait pas
+monter ailleurs : h code le contexte T_inc par quadrant (avec la position), pas une variable « couleur incontrôlable »
+commune. Forme non tenue avec des gains de transfert proches des gains d'origine ⇒ une composante commune existe malgré
+les faibles cosinus entre quadrants. Limite : d_col(Q1) est appliqué avec sa norme propre, et une direction quelconque
+de même norme fait aussi bouger b (C, condition 4) ; seule la part dirigée porte le verdict, parce qu'elle ne répond
+pas aux directions aléatoires.
