@@ -1,0 +1,25 @@
+# E8 -- therapy and relapse (docs/E8_therapy_relapse.md, docs/e8/DECISIONS.md). `base` is E5's config, read whole and
+# unchanged (E4's blocks + e5: E5's training procedure, pipeline.two_zones_setup.apply_e5_procedure); `e8` adds the
+# therapy. e8_setup.load_config refuses any other key.
+base: configs/e5/e5.yaml
+e8:
+  seed: 8008                   # the shuffle therapy's assignment stream, SeedSequence([seed, 4]) (DECISIONS (5))
+  agents: configs/e8/agents.yaml
+  max_env_steps: 150000        # wave 1 (the pilot); wave 2's set after wave 1
+  start_in_zone_frac: 0.0      # DECISIONS (6): not used in this campaign
+  # therapy checkpoints (environment steps since the start; 0 = the start file), cut at max_env_steps; each keeps the
+  # weights and the full resume state (DECISIONS (7))
+  checkpoints: [0, 500, 1000, 2000, 3500, 5000, 7500, 10000, 15000, 25000, 40000, 60000, 100000, 150000]
+  # the health record (DECISIONS (9)): E4's real-context settings at the checkpoints (e4.checkpoint)
+  health: {real_context_max_per_state: 20, real_context_draws: 64}
+  probes:
+    # E6's episodes, D7's readout and E7's oracle: the e6 and e7 blocks of this config (E4's blocks + e6 + e7)
+    config: configs/e7/e7_all.yaml
+    # b at step 1 by E5's 12-assignment protocol (pipeline.assignment_records.walks_by_assignment): E4's checkpoint walks
+    n_walks: 100
+    purpose: checkpoint
+    # E4's probe of the training image (frozen_setup.probe_validity_pair), as E6: e6.validity.n_walks walks
+    e4_probe: true
+    # the oracle at k = 1 (training image, exposed model): at these checkpoints and the run's last one
+    oracle_checkpoints: [0, 2000, 10000, 40000]
+    oracle_k: 1

@@ -241,3 +241,24 @@ skipped on a restart); a first short job must finish before the full chain is la
   `conf["seed"]`), so reference B is measured by the walks once per exposed partner, with that partner's seed (common
   random numbers within the pair, as E5 (39)); E6's episode seeds do not depend on the agent, so its episodes are run
   once per checkpoint and image. Cost: wave 2's walks count 3 + 3 models x 12 images per checkpoint (12): about +20 %.
+
+## 2026-11-05 (18) -- the probe jobs and the images' seeds (implementer, before any probe)
+
+- **One E6 run per (model, image, checkpoint)** with E6's `measure: all` and D7's readout q_fn
+  (`probing.critic_readout.readout_q_fn`, which returns the policy's own Q, checked): its episodes are E6's, its I and
+  localisation E6's (the readout draws from clones of the act generator and from its own z_bar generator, never from the
+  measurement generator), so at checkpoint 0 it reproduces both the campaign's `e6_<agent>_training` rows and its
+  `c12_<agent>_training` C1/C3. The oracle reuses that run's reference episodes and fresh I (as E7's lookahead phase:
+  reference with `measure: all`, the oracle's episodes with `measure: first`, its generator `diagnostics_seed(e7
+  diagnostics seed, "lookahead", k)`). E6's place / history split (`fresh_split`) is not computed (not an E8 measure).
+- **Image indices** (E6's episode seeds read the image index and the zone's slot): the canonical assignment is the
+  training image, with E4's index (so checkpoint 0 is the campaign's); the 11 others use 3000 + k, E7's convention for the
+  12 assignment images (`run_e7_context.py`'s collect). The walks' seeds are E5's (image index 0 for the canonical
+  assignment, 1000 + k otherwise; `assignment_records`).
+- **Job unit**: (the pairs sharing a reference, one checkpoint): the reference's episodes and fresh I are computed once
+  per image and checkpoint and serve its three shuffle partners; its walks once per partner seed ((17)); E4's 150-walk
+  probe of the training image once per pair (its seeds are the pair's). Outputs per job:
+  `probes__<reference model>__k<NNNNNN>__<UTC>/` (rows.csv / rows.json: one row per pair, image and role; episodes.npz;
+  meta.yaml with the weights' SHA-256 and their hash before / after; status.json).
+- C1 / C3 use the model's own tie tolerance (`agent_config.tie_tol_abs`, 0.0751 for every E4/E5 run: E7's
+  `analyse_e7_diagnostics.TIE_TOL`).
