@@ -1,0 +1,55 @@
+{
+ "measurements": {
+  "baseline_A_k300000": "probes__p1-b-d1__base__seed02__k300000__20261028T125628Z",
+  "baseline_B_k300000": "probes__p1-b-d1__base__seed102__k300000__20261028T125628Z",
+  "baseline_A_k100000": "probes__p1-b-d1__base__seed02__k100000__20261101T185641Z",
+  "baseline_B_k100000": "probes__p1-b-d1__base__seed102__k100000__20261101T185013Z",
+  "shuffle_A_k650000": "probes__p1-b-d1__sh100__seed02__k650000__20261101T183552Z",
+  "shuffle_E_k650000": "probes__p1-b-d1__sh100__seed402__k650000__20261101T175710Z",
+  "shuffle_F_k650000": "probes__p1-b-d1__sh100__seed502__k650000__20261101T175710Z",
+  "shuffle_E_k475000": "probes__p1-b-d1__sh100__seed402__k475000__20261028T115218Z",
+  "shuffle_F_k475000": "probes__p1-b-d1__sh100__seed502__k475000__20261028T115218Z"
+ },
+ "comparisons": [
+  {
+   "kind": "matched",
+   "comparison": "shuffle_f1:2@650000=baseline:2@100000"
+  },
+  {
+   "kind": "300k",
+   "comparison": "shuffle_f1:2@650000=baseline:2@300000"
+  },
+  {
+   "kind": "matched",
+   "comparison": "shuffle_f1:402@650000=baseline:102@100000"
+  },
+  {
+   "kind": "300k",
+   "comparison": "shuffle_f1:402@650000=baseline:102@300000"
+  },
+  {
+   "kind": "vs_k475000",
+   "comparison": "shuffle_f1:402@650000=shuffle_f1:402@475000"
+  },
+  {
+   "kind": "matched",
+   "comparison": "shuffle_f1:502@650000=baseline:102@100000"
+  },
+  {
+   "kind": "300k",
+   "comparison": "shuffle_f1:502@650000=baseline:102@300000"
+  },
+  {
+   "kind": "vs_k475000",
+   "comparison": "shuffle_f1:502@650000=shuffle_f1:502@475000"
+  }
+ ],
+ "e4_replication": {
+  "probes_valid_both": 48,
+  "mean_abs_difference": 0.007311445080597935,
+  "max_abs_difference": 0.04773598114190314,
+  "n_above_0.05": 0,
+  "validity_agreement": 99,
+  "probes": 100
+ }
+}

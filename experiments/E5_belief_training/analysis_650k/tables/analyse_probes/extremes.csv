@@ -1,0 +1,16 @@
+condition,k_checkpoint,seed,probe,b_step1,valid
+baseline,300000,2,training_image_ud,-2.3123137382817904,
+baseline,300000,2,theme_only,-0.019987307717870273,True
+baseline,300000,2,position_only,-2.300547629676484,True
+baseline,300000,102,training_image_ud,-2.3061591032113777,
+baseline,300000,102,theme_only,-0.004305746542290212,True
+baseline,300000,102,position_only,-2.2742842330923803,True
+shuffle_f1,650000,2,training_image_ud,-2.1543818639710226,
+shuffle_f1,650000,2,theme_only,-0.4862211242701213,False
+shuffle_f1,650000,2,position_only,-0.45680663518234677,True
+shuffle_f1,650000,402,training_image_ud,-2.132280270913666,
+shuffle_f1,650000,402,theme_only,-0.9843885676950603,False
+shuffle_f1,650000,402,position_only,-0.48384926479130375,True
+shuffle_f1,650000,502,training_image_ud,-2.0271642171357755,
+shuffle_f1,650000,502,theme_only,-0.7100523060402326,False
+shuffle_f1,650000,502,position_only,-0.8921291728016911,True

@@ -1,0 +1,47 @@
+{
+ "seeds": {
+  "baseline": [
+   [
+    2,
+    300000
+   ],
+   [
+    102,
+    300000
+   ]
+  ],
+  "shuffle_f1": [
+   [
+    2,
+    650000
+   ],
+   [
+    402,
+    650000
+   ],
+   [
+    502,
+    650000
+   ]
+  ]
+ },
+ "measures": [
+  "probes__p1-b-d1__base__seed02__k300000__20261028T125628Z",
+  "probes__p1-b-d1__base__seed102__k300000__20261028T125628Z",
+  "probes__p1-b-d1__sh100__seed02__k650000__20261101T183552Z",
+  "probes__p1-b-d1__sh100__seed402__k650000__20261101T175710Z",
+  "probes__p1-b-d1__sh100__seed502__k650000__20261101T175710Z"
+ ],
+ "matched": [
+  "shuffle_f1:2@650000=baseline:2@100000",
+  "shuffle_f1:402@650000=baseline:102@100000",
+  "shuffle_f1:502@650000=baseline:102@100000"
+ ],
+ "matched_measures": [
+  "probes__p1-b-d1__base__seed02__k100000__20261101T185641Z",
+  "probes__p1-b-d1__base__seed102__k100000__20261101T185013Z",
+  "probes__p1-b-d1__sh100__seed02__k650000__20261101T183552Z",
+  "probes__p1-b-d1__sh100__seed402__k650000__20261101T175710Z",
+  "probes__p1-b-d1__sh100__seed502__k650000__20261101T175710Z"
+ ]
+}

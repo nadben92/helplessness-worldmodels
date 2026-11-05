@@ -13,6 +13,11 @@ C = 202 and D = 302 are defined but unused since the plan of 2026-10-23).
   e5_probes_baselines  no training (docs/e5/DECISIONS.md (36)): the baselines A (E4's own pair) and B at 300,000
             (PROBES_CHECKPOINT), and baseline B again at each checkpoint given (--checkpoint k ...: its checkpoints matched
             to the shuffle pairs' level of learning, matched_checkpoint.py)
+  e5_probes_swap  no training (docs/e5/DECISIONS.md (38)): the theme-swap probe set (measure_probes.py --probe-set swap,
+            --diagnose-walks 150) of the shuffle pairs A, E, F at --checkpoint (650,000; E and F against B's reference) and
+            of the baselines A (E4's own pair) and B at FIXED_BASELINE_CHECKPOINTS (100,000 and 300,000)
+  e5_probes_swap_A_refB  no training (docs/e5/DECISIONS.md (39)): the theme-swap set of seed A's shuffle pair at
+            --checkpoint (650,000) against seed B's reference (BATCH_REFERENCE_SEED_OF), its output named __refB__
 
 Two waves only (2026-10-23): no wave 3. DEFERRED (defined, never submitted): shuffle f = 0.5 (abandoned for E5, (31))
 and the immunisation (moved to E8). Every run trains E4's full planned budget (300,000 steps) with E5's procedure
@@ -39,6 +44,8 @@ WAVES: dict[str, dict[str, tuple]] = {
     "e5_probes_a": {},
     "e5_probes_b": {},
     "e5_probes_baselines": {},  # docs/e5/DECISIONS.md (36)
+    "e5_probes_swap": {},  # docs/e5/DECISIONS.md (38)
+    "e5_probes_swap_A_refB": {},  # docs/e5/DECISIONS.md (39)
     # docs/e5/DECISIONS.md (33): the healthy shuffle runs continued from their resume point to EXTEND_TO steps, in two
     # batches (one pod at a time): seed A's pair first, then seed B's reference with the replacements E and F
     "e5_extend_a": {"A_sh100_experimental": ("A", "shuffle", 1.0, "experimental"), "A_sh100_reference": ("A", "shuffle", 1.0, "reference")},
@@ -54,6 +61,9 @@ EXTEND_TO = 650000  # environment steps, a ceiling: the user stops the pod once 
 # an experimental run measured against the reference of ANOTHER seed (docs/e5/DECISIONS.md (32)): the replacements of seed
 # B's experimental run (locked in) are paired with seed B's f = 1 reference. Absent: the run's own seed.
 REFERENCE_SEED_OF: dict[tuple[str, str], str] = {("E", "shuffle"): "B", ("F", "shuffle"): "B"}
+# a reference of ANOTHER seed for one batch only, over REFERENCE_SEED_OF (docs/e5/DECISIONS.md (39): seed A's swap probes
+# against seed B's reference, its own reference being invalid at ne); its output is named after the reference
+BATCH_REFERENCE_SEED_OF: dict[str, dict[tuple[str, str], str]] = {"e5_probes_swap_A_refB": {("A", "shuffle"): "B"}}
 PROBES_CHECKPOINT = 300000  # the baselines' probe checkpoint (converged from 100,000 on); the shuffle pairs' is --checkpoint
 DEFERRED: dict[str, dict[str, tuple]] = {
     # f = 0.5: abandoned for E5 (docs/e5/DECISIONS.md (31)), kept defined
@@ -79,7 +89,17 @@ PROBE_PAIRS: dict[str, list[tuple]] = {
     # docs/e5/DECISIONS.md (36): the baselines at PROBES_CHECKPOINT (the secondary comparison) and baseline B at its
     # checkpoints matched to the level of the preliminary shuffle pairs E and F (the primary comparison)
     "e5_probes_baselines": [("A", "baseline", None), ("B", "baseline", None)],
+    # docs/e5/DECISIONS.md (38): the theme-swap set, the shuffle pairs at --checkpoint, the baselines at their fixed checkpoints
+    "e5_probes_swap": [("A", "shuffle", 1.0), ("E", "shuffle", 1.0), ("F", "shuffle", 1.0), ("A", "baseline", None), ("B", "baseline", None)],
+    # docs/e5/DECISIONS.md (39): seed A's shuffle pair alone, against B's reference
+    "e5_probes_swap_A_refB": [("A", "shuffle", 1.0)],
 }
+# batches whose baselines are probed at these checkpoints, whatever --checkpoint is (docs/e5/DECISIONS.md (38): the matched
+# 100,000 of (37) and the converged 300,000)
+FIXED_BASELINE_CHECKPOINTS: dict[str, tuple[int, ...]] = {"e5_probes_swap": (100000, PROBES_CHECKPOINT)}
+# a batch's probe set and its extra measure_probes.py arguments (absent: E4's probe set, measure_probes.py's defaults)
+PROBE_SET_ARGS: dict[str, list[str]] = {"e5_probes_swap": ["--probe-set", "swap", "--diagnose-walks", "150"],
+                                         "e5_probes_swap_A_refB": ["--probe-set", "swap", "--diagnose-walks", "150"]}
 # the baselines probed at PROBES_CHECKPOINT whatever --checkpoint is; in e5_probes_baselines the seeds whose baseline is
 # ALSO probed at every --checkpoint (the level-matched checkpoints, docs/e5/DECISIONS.md (36))
 BASELINES_AT_PROBES_CHECKPOINT = ("e5_probes_all", "e5_probes_a", "e5_probes_baselines")
@@ -119,14 +139,30 @@ def train_args(batch: str, job: str, configuration: str, switch_step: int | None
     return args
 
 
+def reference_seed_of(batch: str, seed_label: str, training: str) -> str | None:
+    """The seed label of the reference a probe pair is measured against when it is not its own: the batch's
+    (BATCH_REFERENCE_SEED_OF), else REFERENCE_SEED_OF; None: the run's own seed."""
+    own = BATCH_REFERENCE_SEED_OF.get(batch, {})
+    return own[(seed_label, training)] if (seed_label, training) in own else REFERENCE_SEED_OF.get((seed_label, training))
+
+
+def output_reference_label(batch: str, seed_label: str, training: str) -> str | None:
+    """The reference label written in the output's name (measure_probes.py --name-reference): the batch's own
+    reference choice only (BATCH_REFERENCE_SEED_OF); None otherwise, so every other output keeps its name."""
+    return BATCH_REFERENCE_SEED_OF.get(batch, {}).get((seed_label, training))
+
+
 def probe_specs(batch: str, checkpoints) -> list[tuple]:
     """(seed label, training, fraction, k) of every probe job of the batch: each pair at each checkpoint given (one int or
     several), except the baselines of BASELINES_AT_PROBES_CHECKPOINT, at PROBES_CHECKPOINT -- and, in
-    MATCHED_BASELINE_SEEDS' batches, ALSO at each checkpoint given (docs/e5/DECISIONS.md (33), (36)). No duplicate."""
+    MATCHED_BASELINE_SEEDS' batches, ALSO at each checkpoint given (docs/e5/DECISIONS.md (33), (36)); the baselines of
+    FIXED_BASELINE_CHECKPOINTS' batches at those checkpoints only ((38)). No duplicate."""
     ks = [int(checkpoints)] if isinstance(checkpoints, int) else [int(k) for k in checkpoints]
     out = []
     for seed_label, training, fraction in PROBE_PAIRS[batch]:
-        if batch in BASELINES_AT_PROBES_CHECKPOINT and training == "baseline":
+        if batch in FIXED_BASELINE_CHECKPOINTS and training == "baseline":
+            own = list(FIXED_BASELINE_CHECKPOINTS[batch])
+        elif batch in BASELINES_AT_PROBES_CHECKPOINT and training == "baseline":
             own = [PROBES_CHECKPOINT] + (ks if seed_label in MATCHED_BASELINE_SEEDS.get(batch, ()) else [])
         else:
             own = ks
@@ -143,15 +179,18 @@ def probe_args(batch: str, configuration: str, checkpoint, e4_results: str | Non
     for seed_label, training, fraction, k in probe_specs(batch, checkpoint):
         args = ["--config", CONFIG, "--configuration", configuration, "--checkpoint", str(k), "--find-runs", "results",
                 "--training", training, "--seed-label", seed_label]
-        ref_label = REFERENCE_SEED_OF.get((seed_label, training))
+        ref_label = reference_seed_of(batch, seed_label, training)
         if ref_label is not None:
             args += ["--reference-seed-label", ref_label]
+        if output_reference_label(batch, seed_label, training) is not None:
+            args += ["--name-reference"]
         if fraction is not None:
             args += ["--fraction", str(fraction)]
         if training in ("immunisation", "baseline") and seed_label == "A":
             if not e4_results:
                 raise ValueError(f"the {training} of seed A is (or is measured against) E4's own runs: --e4-results <E4 results root>")
             args += ["--e4-results", e4_results]
+        args += PROBE_SET_ARGS.get(batch, [])
         tag = {"baseline": "base", "immunisation": "imm"}.get(training) or f"sh{int(round(fraction * 100)):03d}"
-        out.append((f"probes_{seed_label}_{tag}_k{k:06d}", args))
+        out.append((f"{'swap' if batch in PROBE_SET_ARGS else 'probes'}_{seed_label}_{tag}_k{k:06d}", args))
     return out

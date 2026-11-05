@@ -1,0 +1,45 @@
+# The models of the robustness diagnostic (README.md). One entry per model (a pair's two models are two entries).
+#   probes  the cluster's swap-probe measurement that holds this model's localisation: the directory glob (under a
+#           --probes-root, results/E5_belief_training/) and the model's name in its reconstruction.csv.
+#   run     the run directory glob (under a --runs-root); weights: <run>/checkpoints/agent_env<checkpoint>.pt.
+# Seed B's f = 1 reference (ref_B) is measured in three pairs (E, F, A-refB): its localisation is read from E's.
+models:
+  - {id: baseA_exp_k100k, agent: base_A, role: experimental, seed: 2, checkpoint: 100000,
+     probes: {dir: "probes-swap__p1-b-d1__base__seed02__k100000__*", model: experimental},
+     run: "E4_generalization_gradient/grid12x12__2zones-p1-b-d1__pair-experimental__worldmodel-agent-e4__seed02__*"}
+  - {id: baseA_ref_k100k, agent: base_A, role: reference, seed: 2, checkpoint: 100000,
+     probes: {dir: "probes-swap__p1-b-d1__base__seed02__k100000__*", model: reference},
+     run: "E4_generalization_gradient/grid12x12__2zones-p1-b-d1__pair-control__worldmodel-agent-e4__seed02__*"}
+  - {id: baseA_exp_k300k, agent: base_A, role: experimental, seed: 2, checkpoint: 300000,
+     probes: {dir: "probes-swap__p1-b-d1__base__seed02__k300000__*", model: experimental},
+     run: "E4_generalization_gradient/grid12x12__2zones-p1-b-d1__pair-experimental__worldmodel-agent-e4__seed02__*"}
+  - {id: baseA_ref_k300k, agent: base_A, role: reference, seed: 2, checkpoint: 300000,
+     probes: {dir: "probes-swap__p1-b-d1__base__seed02__k300000__*", model: reference},
+     run: "E4_generalization_gradient/grid12x12__2zones-p1-b-d1__pair-control__worldmodel-agent-e4__seed02__*"}
+  - {id: baseB_exp_k100k, agent: base_B, role: experimental, seed: 102, checkpoint: 100000,
+     probes: {dir: "probes-swap__p1-b-d1__base__seed102__k100000__*", model: experimental},
+     run: "E5_belief_training/grid12x12__2zones-p1-b-d1-base__pair-experimental__worldmodel-agent-e5__seed102__*"}
+  - {id: baseB_ref_k100k, agent: base_B, role: reference, seed: 102, checkpoint: 100000,
+     probes: {dir: "probes-swap__p1-b-d1__base__seed102__k100000__*", model: reference},
+     run: "E5_belief_training/grid12x12__2zones-p1-b-d1-base__pair-control__worldmodel-agent-e5__seed102__*"}
+  - {id: baseB_exp_k300k, agent: base_B, role: experimental, seed: 102, checkpoint: 300000,
+     probes: {dir: "probes-swap__p1-b-d1__base__seed102__k300000__*", model: experimental},
+     run: "E5_belief_training/grid12x12__2zones-p1-b-d1-base__pair-experimental__worldmodel-agent-e5__seed102__*"}
+  - {id: baseB_ref_k300k, agent: base_B, role: reference, seed: 102, checkpoint: 300000,
+     probes: {dir: "probes-swap__p1-b-d1__base__seed102__k300000__*", model: reference},
+     run: "E5_belief_training/grid12x12__2zones-p1-b-d1-base__pair-control__worldmodel-agent-e5__seed102__*"}
+  - {id: A, agent: f1_A, role: experimental, seed: 2, checkpoint: 650000,
+     probes: {dir: "probes-swap__p1-b-d1__sh100__seed02__k650000__*", model: experimental},
+     run: "E5_belief_training/grid12x12__2zones-p1-b-d1-sh100__pair-experimental__worldmodel-agent-e5__seed02__*"}
+  - {id: ref_A, agent: f1_A, role: reference, seed: 2, checkpoint: 650000,
+     probes: {dir: "probes-swap__p1-b-d1__sh100__seed02__k650000__*", model: reference},
+     run: "E5_belief_training/grid12x12__2zones-p1-b-d1-sh100__pair-control__worldmodel-agent-e5__seed02__*"}
+  - {id: E, agent: f1_E, role: experimental, seed: 402, checkpoint: 650000,
+     probes: {dir: "probes-swap__p1-b-d1__sh100__seed402__k650000__*", model: experimental},
+     run: "E5_belief_training/grid12x12__2zones-p1-b-d1-sh100__pair-experimental__worldmodel-agent-e5__seed402__*"}
+  - {id: F, agent: f1_F, role: experimental, seed: 502, checkpoint: 650000,
+     probes: {dir: "probes-swap__p1-b-d1__sh100__seed502__k650000__*", model: experimental},
+     run: "E5_belief_training/grid12x12__2zones-p1-b-d1-sh100__pair-experimental__worldmodel-agent-e5__seed502__*"}
+  - {id: ref_B, agent: f1_E, role: reference, seed: 102, checkpoint: 650000,
+     probes: {dir: "probes-swap__p1-b-d1__sh100__seed402__k650000__*", model: reference},
+     run: "E5_belief_training/grid12x12__2zones-p1-b-d1-sh100__pair-control__worldmodel-agent-e5__seed102__*"}

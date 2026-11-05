@@ -1,0 +1,765 @@
+label,axis,t,class,mean,n_swaps,swaps,counts,near_duplicate
+baseline_A_k100000,arc_ctrl,0.0,delta,0.20223515133858205,1,sw,False,False
+baseline_A_k100000,arc_ctrl,0.0,moved,0.0689401113667194,1,sw,False,False
+baseline_A_k100000,arc_ctrl,0.0,neutral,-0.13329503997186265,1,sw,False,False
+baseline_A_k100000,arc_ctrl,0.0,old_ud,-2.0913661463458197,1,sw,False,False
+baseline_A_k100000,arc_ctrl,0.1,cd,-0.07983724097124711,2,ne sw,True,False
+baseline_A_k100000,arc_ctrl,0.1,neutral,-0.09704710098492386,1,sw,False,False
+baseline_A_k100000,arc_ctrl,0.1,old_ud,-2.1157845994555244,1,sw,False,False
+baseline_A_k100000,arc_ctrl,0.2,cd,-0.0952543112155455,2,ne sw,True,False
+baseline_A_k100000,arc_ctrl,0.2,neutral,-0.029150030843833274,2,ne sw,True,False
+baseline_A_k100000,arc_ctrl,0.2,old_ud,-2.1183418550588433,1,sw,False,False
+baseline_A_k100000,arc_ctrl,0.3,cd,-0.18440170670896538,1,ne,False,False
+baseline_A_k100000,arc_ctrl,0.3,old_ud,-2.1439378219656615,1,sw,False,False
+baseline_A_k100000,arc_ctrl,0.4,cd,-0.2676020572646225,1,ne,False,False
+baseline_A_k100000,arc_ctrl,0.4,old_ud,-2.058066135522089,1,sw,False,False
+baseline_A_k100000,arc_inc,0.1,cd,-0.010603288254143806,1,sw,False,True
+baseline_A_k100000,arc_inc,0.2,cd,-0.05629927661928802,1,sw,False,True
+baseline_A_k100000,arc_inc,0.2,neutral,-0.19123734877657483,1,sw,False,True
+baseline_A_k100000,arc_inc,0.2,old_ud,-2.045102883259914,1,sw,False,True
+baseline_A_k100000,arc_inc,0.3,cd,-0.08089162266368488,1,sw,False,False
+baseline_A_k100000,arc_inc,0.3,neutral,-0.21930117171155517,1,sw,False,False
+baseline_A_k100000,arc_inc,0.4,cd,-0.1518419361362464,1,sw,False,False
+baseline_A_k100000,segment,0.0,delta,0.20223515133858205,1,sw,False,False
+baseline_A_k100000,segment,0.0,moved,0.0689401113667194,1,sw,False,False
+baseline_A_k100000,segment,0.0,neutral,-0.13329503997186265,1,sw,False,False
+baseline_A_k100000,segment,0.0,old_ud,-2.0913661463458197,1,sw,False,False
+baseline_A_k100000,segment,0.1,cd,-0.1042819607878227,2,ne sw,True,False
+baseline_A_k100000,segment,0.1,delta,0.21229359752236343,1,sw,False,False
+baseline_A_k100000,segment,0.1,moved,0.014369609275671547,1,sw,False,False
+baseline_A_k100000,segment,0.1,neutral,-0.11305342309861643,2,ne sw,True,False
+baseline_A_k100000,segment,0.1,old_ud,-2.1087329681904783,1,sw,False,False
+baseline_A_k100000,segment,0.2,cd,-0.08145764836113512,2,ne sw,True,False
+baseline_A_k100000,segment,0.2,delta,0.16564511458510145,1,sw,False,False
+baseline_A_k100000,segment,0.2,moved,-0.0004294901952399677,1,sw,False,False
+baseline_A_k100000,segment,0.2,neutral,-0.09772147435408174,2,ne sw,True,False
+baseline_A_k100000,segment,0.2,old_ud,-2.103384177659983,1,sw,False,False
+baseline_A_k100000,segment,0.3,cd,-0.11568688658546056,2,ne sw,True,False
+baseline_A_k100000,segment,0.3,delta,0.12917057672308596,1,sw,False,False
+baseline_A_k100000,segment,0.3,moved,-0.035189393913270806,1,sw,False,False
+baseline_A_k100000,segment,0.3,neutral,-0.16435997063635677,1,sw,False,False
+baseline_A_k100000,segment,0.3,old_ud,-2.098773511523783,1,sw,False,False
+baseline_A_k100000,segment,0.4,cd,-0.10945924578582478,2,ne sw,True,False
+baseline_A_k100000,segment,0.4,neutral,-0.16622381971431888,2,ne sw,True,False
+baseline_A_k100000,segment,0.4,old_ud,-2.0739964695127533,1,sw,False,False
+baseline_A_k100000,segment,0.5,cd,-0.13568691387225518,2,ne sw,True,False
+baseline_A_k100000,segment,0.5,neutral,-0.26978089985170994,1,sw,False,False
+baseline_A_k100000,segment,0.5,old_ud,-2.091436295377369,1,sw,False,False
+baseline_A_k100000,segment,0.6,cd,-0.10670918633255688,1,sw,False,False
+baseline_A_k100000,segment,0.7,cd,-0.11750700464387043,1,sw,False,False
+baseline_A_k100000,segment,0.7,old_ud,-2.0478879027707397,1,sw,False,False
+baseline_A_k100000,segment,0.8,cd,-0.10831160667803008,1,sw,False,True
+baseline_A_k100000,segment,0.8,old_ud,-2.135627253229586,1,sw,False,True
+baseline_A_k100000,segment,0.9,cd,-0.057863811850548785,1,sw,False,True
+baseline_A_k100000,segment,0.9,neutral,-0.12596590750758185,1,sw,False,True
+baseline_A_k100000,segment,0.9,old_ud,-2.1146813645441256,1,sw,False,True
+baseline_A_k300000,arc_ctrl,0.0,cd,-0.05527459663788514,1,sw,False,False
+baseline_A_k300000,arc_ctrl,0.0,delta,-0.004274590548766444,2,ne sw,True,False
+baseline_A_k300000,arc_ctrl,0.0,moved,0.0018049927331245108,2,ne sw,True,False
+baseline_A_k300000,arc_ctrl,0.0,neutral,0.0060795832818909545,2,ne sw,True,False
+baseline_A_k300000,arc_ctrl,0.0,old_ud,-2.310713504226184,2,ne sw,True,False
+baseline_A_k300000,arc_ctrl,0.1,cd,0.00808499802367768,2,ne sw,True,False
+baseline_A_k300000,arc_ctrl,0.1,delta,-0.014084155942015064,2,ne sw,True,False
+baseline_A_k300000,arc_ctrl,0.1,moved,-0.005560954600235091,2,ne sw,True,False
+baseline_A_k300000,arc_ctrl,0.1,neutral,0.008523201341779973,2,ne sw,True,False
+baseline_A_k300000,arc_ctrl,0.1,old_ud,-2.308702055088809,2,ne sw,True,False
+baseline_A_k300000,arc_ctrl,0.2,cd,0.0017526834952610315,2,ne sw,True,False
+baseline_A_k300000,arc_ctrl,0.2,delta,-0.00955715626273812,2,ne sw,True,False
+baseline_A_k300000,arc_ctrl,0.2,moved,0.0007960086957015111,2,ne sw,True,False
+baseline_A_k300000,arc_ctrl,0.2,neutral,0.010353164958439631,2,ne sw,True,False
+baseline_A_k300000,arc_ctrl,0.2,old_ud,-2.3062127160869244,2,ne sw,True,False
+baseline_A_k300000,arc_ctrl,0.3,cd,0.0019486876796064312,2,ne sw,True,False
+baseline_A_k300000,arc_ctrl,0.3,delta,-0.0060219140854522735,2,ne sw,True,False
+baseline_A_k300000,arc_ctrl,0.3,moved,0.004029340686634741,2,ne sw,True,False
+baseline_A_k300000,arc_ctrl,0.3,neutral,0.010051254772087015,2,ne sw,True,False
+baseline_A_k300000,arc_ctrl,0.3,old_ud,-2.3087172595325307,2,ne sw,True,False
+baseline_A_k300000,arc_ctrl,0.4,cd,-0.002871959991260553,2,ne sw,True,False
+baseline_A_k300000,arc_ctrl,0.4,delta,0.014681436887005406,2,ne sw,True,False
+baseline_A_k300000,arc_ctrl,0.4,moved,0.018955400511718512,2,ne sw,True,False
+baseline_A_k300000,arc_ctrl,0.4,neutral,0.004273963624713106,2,ne sw,True,False
+baseline_A_k300000,arc_ctrl,0.4,old_ud,-2.286727171787099,2,ne sw,True,False
+baseline_A_k300000,arc_ctrl,0.5,cd,-0.0026782909407443434,2,ne sw,True,False
+baseline_A_k300000,arc_ctrl,0.5,delta,0.016164359514914572,2,ne sw,True,False
+baseline_A_k300000,arc_ctrl,0.5,moved,0.029731671315293084,2,ne sw,True,False
+baseline_A_k300000,arc_ctrl,0.5,neutral,0.013567311800378512,2,ne sw,True,False
+baseline_A_k300000,arc_ctrl,0.5,old_ud,-2.2674961108483833,2,ne sw,True,False
+baseline_A_k300000,arc_ctrl,0.6,cd,-0.04959292960114858,2,ne sw,True,False
+baseline_A_k300000,arc_ctrl,0.6,delta,0.0692590187969584,1,sw,False,False
+baseline_A_k300000,arc_ctrl,0.6,moved,0.03600871419647289,1,sw,False,False
+baseline_A_k300000,arc_ctrl,0.6,neutral,-0.035403444401595374,2,ne sw,True,False
+baseline_A_k300000,arc_ctrl,0.6,old_ud,-2.222340651074568,1,sw,False,False
+baseline_A_k300000,arc_inc,0.0,cd,0.005549291345883223,1,sw,False,True
+baseline_A_k300000,arc_inc,0.0,neutral,-0.004371956923538534,1,sw,False,True
+baseline_A_k300000,arc_inc,0.0,old_ud,-2.3127114744032395,1,sw,False,True
+baseline_A_k300000,arc_inc,0.1,cd,0.0025312074253061034,1,sw,False,True
+baseline_A_k300000,arc_inc,0.1,neutral,0.005166457704280258,1,sw,False,True
+baseline_A_k300000,arc_inc,0.1,old_ud,-2.3123307751201096,1,sw,False,True
+baseline_A_k300000,arc_inc,0.2,cd,-0.0077499080123972774,1,sw,False,True
+baseline_A_k300000,arc_inc,0.2,neutral,0.0027592196769035127,1,sw,False,True
+baseline_A_k300000,arc_inc,0.2,old_ud,-2.3061614870324605,1,sw,False,True
+baseline_A_k300000,arc_inc,0.3,cd,0.016008800776467158,2,ne sw,True,False
+baseline_A_k300000,arc_inc,0.3,neutral,0.030089633262633253,2,ne sw,True,False
+baseline_A_k300000,arc_inc,0.3,old_ud,-2.2672611556929625,2,ne sw,True,False
+baseline_A_k300000,arc_inc,0.4,cd,0.004662966224924681,2,ne sw,True,False
+baseline_A_k300000,arc_inc,0.4,delta,0.0006867089318789432,2,ne sw,True,False
+baseline_A_k300000,arc_inc,0.4,moved,-0.002151531616277458,2,ne sw,True,False
+baseline_A_k300000,arc_inc,0.4,neutral,-0.002838240548156401,2,ne sw,True,False
+baseline_A_k300000,arc_inc,0.4,old_ud,-2.297007198691674,2,ne sw,True,False
+baseline_A_k300000,arc_inc,0.5,cd,-0.012530886517098994,2,ne sw,True,False
+baseline_A_k300000,arc_inc,0.5,delta,-0.029591391723955418,2,ne sw,True,False
+baseline_A_k300000,arc_inc,0.5,moved,-0.03742416400070869,2,ne sw,True,False
+baseline_A_k300000,arc_inc,0.5,neutral,-0.007832772276753275,2,ne sw,True,False
+baseline_A_k300000,arc_inc,0.5,old_ud,-2.2662234624102986,2,ne sw,True,False
+baseline_A_k300000,arc_inc,0.6,cd,-0.0021584620682539857,1,sw,False,False
+baseline_A_k300000,arc_inc,0.6,delta,0.02774557362884922,1,sw,False,False
+baseline_A_k300000,arc_inc,0.6,moved,0.015731915257968687,1,sw,False,False
+baseline_A_k300000,arc_inc,0.6,neutral,-0.012013658370880531,1,sw,False,False
+baseline_A_k300000,arc_inc,0.6,old_ud,-2.295889042948747,1,sw,False,False
+baseline_A_k300000,arc_inc,0.7,cd,0.013510504509648413,1,sw,False,False
+baseline_A_k300000,arc_inc,0.7,delta,0.029006237147521485,1,sw,False,False
+baseline_A_k300000,arc_inc,0.7,moved,0.01847075994855185,1,sw,False,False
+baseline_A_k300000,arc_inc,0.7,neutral,-0.010535477198969634,1,sw,False,False
+baseline_A_k300000,arc_inc,0.7,old_ud,-2.269321659074028,1,sw,False,False
+baseline_A_k300000,arc_inc,0.8,cd,0.04473430862870398,1,sw,False,False
+baseline_A_k300000,arc_inc,0.8,delta,0.039170079144999814,1,sw,False,False
+baseline_A_k300000,arc_inc,0.8,moved,0.06140358927566103,1,sw,False,False
+baseline_A_k300000,arc_inc,0.8,neutral,0.022233510130661216,1,sw,False,False
+baseline_A_k300000,arc_inc,0.8,old_ud,-2.273844628233903,1,sw,False,False
+baseline_A_k300000,segment,0.0,cd,-0.05527459663788514,1,sw,False,False
+baseline_A_k300000,segment,0.0,delta,-0.004274590548766444,2,ne sw,True,False
+baseline_A_k300000,segment,0.0,moved,0.0018049927331245108,2,ne sw,True,False
+baseline_A_k300000,segment,0.0,neutral,0.0060795832818909545,2,ne sw,True,False
+baseline_A_k300000,segment,0.0,old_ud,-2.310713504226184,2,ne sw,True,False
+baseline_A_k300000,segment,0.1,cd,-0.0014369287167599332,2,ne sw,True,False
+baseline_A_k300000,segment,0.1,delta,-0.008409697215500556,2,ne sw,True,False
+baseline_A_k300000,segment,0.1,moved,0.0006754259733936507,2,ne sw,True,False
+baseline_A_k300000,segment,0.1,neutral,0.009085123188894206,2,ne sw,True,False
+baseline_A_k300000,segment,0.1,old_ud,-2.3014852555676293,2,ne sw,True,False
+baseline_A_k300000,segment,0.2,cd,0.0030317319082926453,2,ne sw,True,False
+baseline_A_k300000,segment,0.2,delta,0.005666056064860259,2,ne sw,True,False
+baseline_A_k300000,segment,0.2,moved,0.005998195641174764,2,ne sw,True,False
+baseline_A_k300000,segment,0.2,neutral,0.0003321395763145052,2,ne sw,True,False
+baseline_A_k300000,segment,0.2,old_ud,-2.3008211745955713,2,ne sw,True,False
+baseline_A_k300000,segment,0.3,cd,0.0001563587919402032,2,ne sw,True,False
+baseline_A_k300000,segment,0.3,delta,-0.009360299723933707,2,ne sw,True,False
+baseline_A_k300000,segment,0.3,moved,-0.006317206576827106,2,ne sw,True,False
+baseline_A_k300000,segment,0.3,neutral,0.0030430931471066014,2,ne sw,True,False
+baseline_A_k300000,segment,0.3,old_ud,-2.296497925405609,2,ne sw,True,False
+baseline_A_k300000,segment,0.4,cd,0.0045417644180214545,2,ne sw,True,False
+baseline_A_k300000,segment,0.4,delta,0.006643118102624523,2,ne sw,True,False
+baseline_A_k300000,segment,0.4,moved,0.005194719933263592,2,ne sw,True,False
+baseline_A_k300000,segment,0.4,neutral,-0.0014483981693609316,2,ne sw,True,False
+baseline_A_k300000,segment,0.4,old_ud,-2.3066340416062223,2,ne sw,True,False
+baseline_A_k300000,segment,0.5,cd,-0.003866740572285865,2,ne sw,True,False
+baseline_A_k300000,segment,0.5,delta,0.0071711452018443644,2,ne sw,True,False
+baseline_A_k300000,segment,0.5,moved,0.015889214303699495,2,ne sw,True,False
+baseline_A_k300000,segment,0.5,neutral,0.00871806910185513,2,ne sw,True,False
+baseline_A_k300000,segment,0.5,old_ud,-2.306839609784558,2,ne sw,True,False
+baseline_A_k300000,segment,0.6,cd,0.00018833572341181437,2,ne sw,True,False
+baseline_A_k300000,segment,0.6,delta,0.08604637895132772,1,ne,False,False
+baseline_A_k300000,segment,0.6,moved,0.08383644135956025,1,ne,False,False
+baseline_A_k300000,segment,0.6,neutral,0.005353199338222758,2,ne sw,True,False
+baseline_A_k300000,segment,0.6,old_ud,-2.298630657308391,2,ne sw,True,False
+baseline_A_k300000,segment,0.7,cd,0.0038832191448563425,2,ne sw,True,False
+baseline_A_k300000,segment,0.7,neutral,0.028655655150431114,2,ne sw,True,False
+baseline_A_k300000,segment,0.7,old_ud,-2.294764506633258,2,ne sw,True,False
+baseline_A_k300000,segment,0.8,cd,0.004694853491789441,1,sw,False,True
+baseline_A_k300000,segment,0.8,neutral,-0.005787531844314131,1,sw,False,True
+baseline_A_k300000,segment,0.8,old_ud,-2.310885248897814,1,sw,False,True
+baseline_A_k300000,segment,0.9,cd,-0.006229600303224281,1,sw,False,True
+baseline_A_k300000,segment,0.9,neutral,-0.001382646932460485,1,sw,False,True
+baseline_A_k300000,segment,0.9,old_ud,-2.3039670387776687,1,sw,False,True
+baseline_A_k300000,segment,1.0,cd,0.005549291345883223,1,sw,False,True
+baseline_A_k300000,segment,1.0,neutral,-0.004371956923538534,1,sw,False,True
+baseline_A_k300000,segment,1.0,old_ud,-2.3127114744032395,1,sw,False,True
+baseline_B_k100000,arc_ctrl,0.0,delta,0.019302175520369058,2,ne sw,True,False
+baseline_B_k100000,arc_ctrl,0.0,moved,0.03749888603440832,2,ne sw,True,False
+baseline_B_k100000,arc_ctrl,0.0,neutral,0.01819671051403926,2,ne sw,True,False
+baseline_B_k100000,arc_ctrl,0.0,old_ud,-2.1625526714904026,2,ne sw,True,False
+baseline_B_k100000,arc_ctrl,0.1,cd,0.04305167458857673,2,ne sw,True,False
+baseline_B_k100000,arc_ctrl,0.1,delta,0.005091942289233042,2,ne sw,True,False
+baseline_B_k100000,arc_ctrl,0.1,moved,0.03149850122322295,2,ne sw,True,False
+baseline_B_k100000,arc_ctrl,0.1,neutral,0.02640655893398991,2,ne sw,True,False
+baseline_B_k100000,arc_ctrl,0.1,old_ud,-2.1322411149553107,2,ne sw,True,False
+baseline_B_k100000,arc_ctrl,0.2,cd,0.044437649196509055,2,ne sw,True,False
+baseline_B_k100000,arc_ctrl,0.2,delta,-0.005467736219027186,2,ne sw,True,False
+baseline_B_k100000,arc_ctrl,0.2,moved,0.022529879492164895,2,ne sw,True,False
+baseline_B_k100000,arc_ctrl,0.2,neutral,0.02799761571119208,2,ne sw,True,False
+baseline_B_k100000,arc_ctrl,0.2,old_ud,-2.143689939424969,2,ne sw,True,False
+baseline_B_k100000,arc_ctrl,0.3,cd,0.03659654927227862,2,ne sw,True,False
+baseline_B_k100000,arc_ctrl,0.3,delta,0.01432669393738406,2,ne sw,True,False
+baseline_B_k100000,arc_ctrl,0.3,moved,0.010052183555117722,2,ne sw,True,False
+baseline_B_k100000,arc_ctrl,0.3,neutral,-0.004274510382266339,2,ne sw,True,False
+baseline_B_k100000,arc_ctrl,0.3,old_ud,-2.0599140386727184,2,ne sw,True,False
+baseline_B_k100000,arc_ctrl,0.4,cd,0.01673556474272897,2,ne sw,True,False
+baseline_B_k100000,arc_ctrl,0.4,delta,-0.029693689217188846,2,ne sw,True,False
+baseline_B_k100000,arc_ctrl,0.4,moved,-0.05374178624450221,2,ne sw,True,False
+baseline_B_k100000,arc_ctrl,0.4,neutral,-0.024048097027313364,2,ne sw,True,False
+baseline_B_k100000,arc_ctrl,0.4,old_ud,-1.9616667420903606,2,ne sw,True,False
+baseline_B_k100000,arc_ctrl,0.5,cd,-0.01323464235173999,2,ne sw,True,False
+baseline_B_k100000,arc_ctrl,0.5,delta,-0.07535668370248971,2,ne sw,True,False
+baseline_B_k100000,arc_ctrl,0.5,moved,-0.1264586522222222,2,ne sw,True,False
+baseline_B_k100000,arc_ctrl,0.5,neutral,-0.05110196851973248,2,ne sw,True,False
+baseline_B_k100000,arc_ctrl,0.5,old_ud,-1.9903257617183,1,ne,False,False
+baseline_B_k100000,arc_ctrl,0.6,cd,-0.06466731846878959,2,ne sw,True,False
+baseline_B_k100000,arc_ctrl,0.6,neutral,-0.0064020745845159155,1,ne,False,False
+baseline_B_k100000,arc_ctrl,0.6,old_ud,-2.0126808315179394,1,ne,False,False
+baseline_B_k100000,arc_ctrl,0.7,cd,-0.08716391335266671,1,ne,False,False
+baseline_B_k100000,arc_ctrl,0.7,neutral,-0.07099271563963239,1,ne,False,False
+baseline_B_k100000,arc_ctrl,0.7,old_ud,-2.0049946836839747,1,ne,False,False
+baseline_B_k100000,arc_ctrl,0.8,cd,-0.14996601824152878,1,ne,False,False
+baseline_B_k100000,arc_ctrl,0.8,neutral,-0.15013353947094954,1,ne,False,False
+baseline_B_k100000,arc_inc,0.6,cd,-0.22657048502413302,1,sw,False,False
+baseline_B_k100000,segment,0.0,delta,0.019302175520369058,2,ne sw,True,False
+baseline_B_k100000,segment,0.0,moved,0.03749888603440832,2,ne sw,True,False
+baseline_B_k100000,segment,0.0,neutral,0.01819671051403926,2,ne sw,True,False
+baseline_B_k100000,segment,0.0,old_ud,-2.1625526714904026,2,ne sw,True,False
+baseline_B_k100000,segment,0.1,cd,0.04689352471928787,2,ne sw,True,False
+baseline_B_k100000,segment,0.1,delta,0.0016934501074949981,2,ne sw,True,False
+baseline_B_k100000,segment,0.1,moved,0.027499867947271106,2,ne sw,True,False
+baseline_B_k100000,segment,0.1,neutral,0.025806417839776108,2,ne sw,True,False
+baseline_B_k100000,segment,0.1,old_ud,-2.1800148125316525,2,ne sw,True,False
+baseline_B_k100000,segment,0.2,cd,0.05783197991821076,2,ne sw,True,False
+baseline_B_k100000,segment,0.2,delta,0.01957578890785272,2,ne sw,True,False
+baseline_B_k100000,segment,0.2,moved,0.04489556621291935,2,ne sw,True,False
+baseline_B_k100000,segment,0.2,neutral,0.025319777305066626,2,ne sw,True,False
+baseline_B_k100000,segment,0.2,old_ud,-2.1943840308087053,2,ne sw,True,False
+baseline_B_k100000,segment,0.3,cd,0.05913555021775929,2,ne sw,True,False
+baseline_B_k100000,segment,0.3,delta,0.028231144445048484,2,ne sw,True,False
+baseline_B_k100000,segment,0.3,moved,0.052428878178139016,2,ne sw,True,False
+baseline_B_k100000,segment,0.3,neutral,0.024197733733090532,2,ne sw,True,False
+baseline_B_k100000,segment,0.3,old_ud,-2.1949273575866086,2,ne sw,True,False
+baseline_B_k100000,segment,0.4,cd,0.08215609157386172,1,ne,False,False
+baseline_B_k100000,segment,0.4,delta,0.02326455702031982,1,ne,False,False
+baseline_B_k100000,segment,0.4,moved,0.04556903789096456,1,ne,False,False
+baseline_B_k100000,segment,0.4,neutral,0.04205857311574235,2,ne sw,True,False
+baseline_B_k100000,segment,0.4,old_ud,-2.171675306797521,2,ne sw,True,False
+baseline_B_k300000,arc_ctrl,0.0,delta,0.018723146127545665,2,ne sw,True,False
+baseline_B_k300000,arc_ctrl,0.0,moved,0.017557718977947445,2,ne sw,True,False
+baseline_B_k300000,arc_ctrl,0.0,neutral,-0.0011654271495982194,2,ne sw,True,False
+baseline_B_k300000,arc_ctrl,0.0,old_ud,-2.262276492223214,2,ne sw,True,False
+baseline_B_k300000,arc_ctrl,0.1,cd,0.008695285755439874,2,ne sw,True,False
+baseline_B_k300000,arc_ctrl,0.1,delta,0.00678339482274537,2,ne sw,True,False
+baseline_B_k300000,arc_ctrl,0.1,moved,0.009884163179961325,2,ne sw,True,False
+baseline_B_k300000,arc_ctrl,0.1,neutral,0.003100768357215955,2,ne sw,True,False
+baseline_B_k300000,arc_ctrl,0.1,old_ud,-2.26480860143952,2,ne sw,True,False
+baseline_B_k300000,arc_ctrl,0.2,cd,0.006788490525108104,2,ne sw,True,False
+baseline_B_k300000,arc_ctrl,0.2,delta,0.0017832487755486959,2,ne sw,True,False
+baseline_B_k300000,arc_ctrl,0.2,moved,0.0036566041931567206,2,ne sw,True,False
+baseline_B_k300000,arc_ctrl,0.2,neutral,0.0018733554176080247,2,ne sw,True,False
+baseline_B_k300000,arc_ctrl,0.2,old_ud,-2.2929047895065517,2,ne sw,True,False
+baseline_B_k300000,arc_ctrl,0.3,cd,0.012218246858763937,2,ne sw,True,False
+baseline_B_k300000,arc_ctrl,0.3,delta,0.00695460801337533,2,ne sw,True,False
+baseline_B_k300000,arc_ctrl,0.3,moved,0.008665530996470938,2,ne sw,True,False
+baseline_B_k300000,arc_ctrl,0.3,neutral,0.0017109229830956085,2,ne sw,True,False
+baseline_B_k300000,arc_ctrl,0.3,old_ud,-2.2444295475724996,2,ne sw,True,False
+baseline_B_k300000,arc_ctrl,0.4,cd,0.0069317135380055905,2,ne sw,True,False
+baseline_B_k300000,arc_ctrl,0.4,delta,-0.016927164535466277,2,ne sw,True,False
+baseline_B_k300000,arc_ctrl,0.4,moved,-0.01721340974275498,2,ne sw,True,False
+baseline_B_k300000,arc_ctrl,0.4,neutral,-0.0002862452072887045,2,ne sw,True,False
+baseline_B_k300000,arc_ctrl,0.4,old_ud,-2.2612534465211276,2,ne sw,True,False
+baseline_B_k300000,arc_ctrl,0.5,cd,-0.001030148855681201,2,ne sw,True,False
+baseline_B_k300000,arc_ctrl,0.5,delta,-0.06686131086653968,2,ne sw,True,False
+baseline_B_k300000,arc_ctrl,0.5,moved,-0.06683400957933872,2,ne sw,True,False
+baseline_B_k300000,arc_ctrl,0.5,neutral,2.7301287200964808e-05,2,ne sw,True,False
+baseline_B_k300000,arc_ctrl,0.5,old_ud,-2.2512810202778573,2,ne sw,True,False
+baseline_B_k300000,arc_ctrl,0.6,cd,-0.002134328607330316,2,ne sw,True,False
+baseline_B_k300000,arc_ctrl,0.6,delta,-0.10504029951568694,2,ne sw,True,False
+baseline_B_k300000,arc_ctrl,0.6,moved,-0.10937639974243862,2,ne sw,True,False
+baseline_B_k300000,arc_ctrl,0.6,neutral,-0.004336100226751682,2,ne sw,True,False
+baseline_B_k300000,arc_ctrl,0.6,old_ud,-2.170798490150932,2,ne sw,True,False
+baseline_B_k300000,arc_ctrl,0.7,cd,-0.0020338423798704763,2,ne sw,True,False
+baseline_B_k300000,arc_ctrl,0.7,neutral,-0.006293583139354908,2,ne sw,True,False
+baseline_B_k300000,arc_ctrl,0.7,old_ud,-2.1600283194178984,2,ne sw,True,False
+baseline_B_k300000,arc_ctrl,0.8,cd,-0.0370845526092769,2,ne sw,True,False
+baseline_B_k300000,arc_ctrl,0.8,neutral,-0.02756313446135361,2,ne sw,True,False
+baseline_B_k300000,arc_ctrl,0.8,old_ud,-2.1412541350288388,2,ne sw,True,False
+baseline_B_k300000,arc_ctrl,0.9,cd,-0.026260589979326454,1,ne,False,False
+baseline_B_k300000,arc_ctrl,0.9,neutral,-0.03444589929830677,1,ne,False,False
+baseline_B_k300000,arc_ctrl,1.0,cd,-0.08274655042003243,1,ne,False,False
+baseline_B_k300000,arc_ctrl,1.0,neutral,-0.07181930017406168,1,ne,False,False
+baseline_B_k300000,arc_inc,0.0,cd,-0.15224163609252628,1,ne,False,True
+baseline_B_k300000,arc_inc,0.1,cd,-0.08204646228692791,1,ne,False,True
+baseline_B_k300000,arc_inc,0.2,cd,-0.0667274820586563,1,ne,False,True
+baseline_B_k300000,arc_inc,0.2,neutral,-0.10408244191380378,1,ne,False,True
+baseline_B_k300000,arc_inc,0.3,cd,-0.01618546145511557,1,ne,False,False
+baseline_B_k300000,arc_inc,0.3,neutral,-0.05335989969891752,1,ne,False,False
+baseline_B_k300000,arc_inc,0.3,old_ud,-2.1285874197361676,1,ne,False,False
+baseline_B_k300000,arc_inc,0.4,cd,0.06100971868593352,2,ne sw,True,False
+baseline_B_k300000,arc_inc,0.4,delta,0.015660938295331217,1,ne,False,False
+baseline_B_k300000,arc_inc,0.4,moved,0.035840221720979226,1,ne,False,False
+baseline_B_k300000,arc_inc,0.4,neutral,0.05461747710066067,2,ne sw,True,False
+baseline_B_k300000,arc_inc,0.4,old_ud,-2.215830439225757,1,ne,False,False
+baseline_B_k300000,arc_inc,0.5,cd,0.03769948751237728,2,ne sw,True,False
+baseline_B_k300000,arc_inc,0.5,delta,-0.014443251769890253,1,ne,False,False
+baseline_B_k300000,arc_inc,0.5,moved,-0.002122497540066881,1,ne,False,False
+baseline_B_k300000,arc_inc,0.5,neutral,0.03473587143331258,2,ne sw,True,False
+baseline_B_k300000,arc_inc,0.5,old_ud,-2.2351751717390878,2,ne sw,True,False
+baseline_B_k300000,arc_inc,0.6,cd,0.003609902782300445,2,ne sw,True,False
+baseline_B_k300000,arc_inc,0.6,delta,0.001253157677688188,2,ne sw,True,False
+baseline_B_k300000,arc_inc,0.6,moved,0.003026592199824485,2,ne sw,True,False
+baseline_B_k300000,arc_inc,0.6,neutral,0.0017734345221362968,2,ne sw,True,False
+baseline_B_k300000,arc_inc,0.6,old_ud,-2.2612614098929917,2,ne sw,True,False
+baseline_B_k300000,arc_inc,0.7,cd,0.005652983362127495,2,ne sw,True,False
+baseline_B_k300000,arc_inc,0.7,delta,0.007268801406206338,2,ne sw,True,False
+baseline_B_k300000,arc_inc,0.7,moved,0.0076989967353990885,2,ne sw,True,False
+baseline_B_k300000,arc_inc,0.7,neutral,0.0004301953291927507,2,ne sw,True,False
+baseline_B_k300000,arc_inc,0.7,old_ud,-2.220524608079394,2,ne sw,True,False
+baseline_B_k300000,arc_inc,0.8,cd,0.00035569614206409916,2,ne sw,True,False
+baseline_B_k300000,arc_inc,0.8,delta,0.007775833838192581,2,ne sw,True,False
+baseline_B_k300000,arc_inc,0.8,moved,0.0010089042199750153,2,ne sw,True,False
+baseline_B_k300000,arc_inc,0.8,neutral,-0.006766929618217565,2,ne sw,True,False
+baseline_B_k300000,arc_inc,0.8,old_ud,-2.2082061886869244,2,ne sw,True,False
+baseline_B_k300000,arc_inc,0.9,cd,-0.014260749376140858,2,ne sw,True,False
+baseline_B_k300000,arc_inc,0.9,delta,0.046341874787881876,2,ne sw,True,False
+baseline_B_k300000,arc_inc,0.9,moved,-0.01786322568745824,2,ne sw,True,False
+baseline_B_k300000,arc_inc,0.9,neutral,-0.06420510047534012,2,ne sw,True,False
+baseline_B_k300000,arc_inc,0.9,old_ud,-2.0673024513226714,2,ne sw,True,False
+baseline_B_k300000,arc_inc,1.0,cd,-0.06309829494418295,2,ne sw,True,False
+baseline_B_k300000,arc_inc,1.0,delta,-0.020698099537145964,1,ne,False,False
+baseline_B_k300000,arc_inc,1.0,moved,-0.05887881093775427,1,ne,False,False
+baseline_B_k300000,arc_inc,1.0,neutral,-0.0381807114006083,1,ne,False,False
+baseline_B_k300000,arc_inc,1.0,old_ud,-1.9967913026752684,1,ne,False,False
+baseline_B_k300000,segment,0.0,delta,0.018723146127545665,2,ne sw,True,False
+baseline_B_k300000,segment,0.0,moved,0.017557718977947445,2,ne sw,True,False
+baseline_B_k300000,segment,0.0,neutral,-0.0011654271495982194,2,ne sw,True,False
+baseline_B_k300000,segment,0.0,old_ud,-2.262276492223214,2,ne sw,True,False
+baseline_B_k300000,segment,0.1,cd,0.006793811814402195,2,ne sw,True,False
+baseline_B_k300000,segment,0.1,delta,0.0018082244648967016,2,ne sw,True,False
+baseline_B_k300000,segment,0.1,moved,0.004034628232043369,2,ne sw,True,False
+baseline_B_k300000,segment,0.1,neutral,0.0022264037671466674,2,ne sw,True,False
+baseline_B_k300000,segment,0.1,old_ud,-2.270571384279192,2,ne sw,True,False
+baseline_B_k300000,segment,0.2,cd,0.005009616584874532,2,ne sw,True,False
+baseline_B_k300000,segment,0.2,delta,0.005064170880209051,2,ne sw,True,False
+baseline_B_k300000,segment,0.2,moved,0.007134194206411593,2,ne sw,True,False
+baseline_B_k300000,segment,0.2,neutral,0.0020700233262025414,2,ne sw,True,False
+baseline_B_k300000,segment,0.2,old_ud,-2.2807716393529125,2,ne sw,True,False
+baseline_B_k300000,segment,0.3,cd,0.009396321906339322,2,ne sw,True,False
+baseline_B_k300000,segment,0.3,delta,0.00038116566658108475,2,ne sw,True,False
+baseline_B_k300000,segment,0.3,moved,0.011164583134909645,2,ne sw,True,False
+baseline_B_k300000,segment,0.3,neutral,0.01078341746832856,2,ne sw,True,False
+baseline_B_k300000,segment,0.3,old_ud,-2.2847345786059163,2,ne sw,True,False
+baseline_B_k300000,segment,0.4,cd,0.008096270767828928,2,ne sw,True,False
+baseline_B_k300000,segment,0.4,delta,0.013199482402056484,2,ne sw,True,False
+baseline_B_k300000,segment,0.4,moved,0.014433770112502797,2,ne sw,True,False
+baseline_B_k300000,segment,0.4,neutral,0.0012342877104463135,2,ne sw,True,False
+baseline_B_k300000,segment,0.4,old_ud,-2.292292258838433,2,ne sw,True,False
+baseline_B_k300000,segment,0.5,cd,0.020752068449517935,1,ne,False,False
+baseline_B_k300000,segment,0.5,delta,0.011106654746721123,1,ne,False,False
+baseline_B_k300000,segment,0.5,moved,0.022995698037828305,1,ne,False,False
+baseline_B_k300000,segment,0.5,neutral,0.011889043291107182,1,ne,False,False
+baseline_B_k300000,segment,0.5,old_ud,-2.284084022602289,1,ne,False,False
+baseline_B_k300000,segment,0.6,cd,0.03773529590786051,1,ne,False,False
+baseline_B_k300000,segment,0.6,neutral,0.06316819443150878,1,ne,False,False
+baseline_B_k300000,segment,0.6,old_ud,-2.2575043317842756,1,ne,False,False
+baseline_B_k300000,segment,0.7,cd,0.05650355978685084,1,ne,False,False
+baseline_B_k300000,segment,0.7,neutral,0.05577873032137548,1,ne,False,False
+baseline_B_k300000,segment,0.7,old_ud,-2.225994607639366,1,ne,False,False
+baseline_B_k300000,segment,0.8,cd,0.041596024803673526,1,ne,False,True
+baseline_B_k300000,segment,0.8,neutral,0.044221224646586066,1,ne,False,True
+baseline_B_k300000,segment,0.8,old_ud,-2.1992056688888613,1,ne,False,True
+baseline_B_k300000,segment,0.9,cd,-0.008723699423268894,1,ne,False,True
+baseline_B_k300000,segment,0.9,neutral,-0.01659070566919585,1,ne,False,True
+baseline_B_k300000,segment,1.0,cd,-0.15224163609252628,1,ne,False,True
+shuffle_A-refB_k650000,arc_ctrl,0.0,cd,-0.04683361249068718,2,ne sw,True,False
+shuffle_A-refB_k650000,arc_ctrl,0.0,delta,-2.00846998922836,3,ne se sw,True,False
+shuffle_A-refB_k650000,arc_ctrl,0.0,moved,-2.0612491160827746,3,ne se sw,True,False
+shuffle_A-refB_k650000,arc_ctrl,0.0,neutral,-0.05277912685441429,3,ne se sw,True,False
+shuffle_A-refB_k650000,arc_ctrl,0.0,old_ud,0.0164287588202144,3,ne se sw,True,False
+shuffle_A-refB_k650000,arc_ctrl,0.1,cd,-0.0349194682915519,2,ne sw,True,False
+shuffle_A-refB_k650000,arc_ctrl,0.1,delta,-2.0076278947506925,3,ne se sw,True,False
+shuffle_A-refB_k650000,arc_ctrl,0.1,moved,-2.051253480780561,3,ne se sw,True,False
+shuffle_A-refB_k650000,arc_ctrl,0.1,neutral,-0.04362558602986873,3,ne se sw,True,False
+shuffle_A-refB_k650000,arc_ctrl,0.1,old_ud,0.006335836715695671,3,ne se sw,True,False
+shuffle_A-refB_k650000,arc_ctrl,0.2,cd,-0.04827216291162939,2,ne sw,True,False
+shuffle_A-refB_k650000,arc_ctrl,0.2,delta,-1.729089007629309,3,ne se sw,True,False
+shuffle_A-refB_k650000,arc_ctrl,0.2,moved,-1.855876368971017,3,ne se sw,True,False
+shuffle_A-refB_k650000,arc_ctrl,0.2,neutral,-0.1267873613417078,3,ne se sw,True,False
+shuffle_A-refB_k650000,arc_ctrl,0.2,old_ud,-0.019793617971323396,3,ne se sw,True,False
+shuffle_A-refB_k650000,arc_ctrl,0.3,cd,-0.08862587165664815,2,ne sw,True,False
+shuffle_A-refB_k650000,arc_ctrl,0.3,delta,-0.5359613676447016,3,ne se sw,True,False
+shuffle_A-refB_k650000,arc_ctrl,0.3,moved,-1.0513099151465477,3,ne se sw,True,False
+shuffle_A-refB_k650000,arc_ctrl,0.3,neutral,-0.5153485475018461,3,ne se sw,True,False
+shuffle_A-refB_k650000,arc_ctrl,0.3,old_ud,-0.2683297890403303,3,ne se sw,True,False
+shuffle_A-refB_k650000,arc_ctrl,0.4,cd,-0.10803547369558175,2,ne sw,True,False
+shuffle_A-refB_k650000,arc_ctrl,0.4,delta,-0.41362550663776476,3,ne se sw,True,False
+shuffle_A-refB_k650000,arc_ctrl,0.4,moved,-0.980562407970912,3,ne se sw,True,False
+shuffle_A-refB_k650000,arc_ctrl,0.4,neutral,-0.5669369013331472,3,ne se sw,True,False
+shuffle_A-refB_k650000,arc_ctrl,0.4,old_ud,-0.3181270318980754,3,ne se sw,True,False
+shuffle_A-refB_k650000,arc_ctrl,0.5,cd,-0.09484000423731853,2,ne sw,True,False
+shuffle_A-refB_k650000,arc_ctrl,0.5,delta,-0.34500932625306474,3,ne se sw,True,False
+shuffle_A-refB_k650000,arc_ctrl,0.5,moved,-0.9312624429756817,3,ne se sw,True,False
+shuffle_A-refB_k650000,arc_ctrl,0.5,neutral,-0.586253116722617,3,ne se sw,True,False
+shuffle_A-refB_k650000,arc_ctrl,0.5,old_ud,-0.34101890247204497,3,ne se sw,True,False
+shuffle_A-refB_k650000,arc_ctrl,0.6,cd,-0.10436868937145394,2,ne sw,True,False
+shuffle_A-refB_k650000,arc_ctrl,0.6,delta,-0.23350574141441105,3,ne se sw,True,False
+shuffle_A-refB_k650000,arc_ctrl,0.6,moved,-0.8629494803840759,3,ne se sw,True,False
+shuffle_A-refB_k650000,arc_ctrl,0.6,neutral,-0.6294437389696649,3,ne se sw,True,False
+shuffle_A-refB_k650000,arc_ctrl,0.6,old_ud,-0.3434592526815295,3,ne se sw,True,False
+shuffle_A-refB_k650000,arc_inc,0.0,cd,-0.3908706713921801,1,sw,False,True
+shuffle_A-refB_k650000,arc_inc,0.0,delta,0.5898530362566436,1,sw,False,True
+shuffle_A-refB_k650000,arc_inc,0.0,moved,-0.505769178425973,1,sw,False,True
+shuffle_A-refB_k650000,arc_inc,0.0,neutral,-0.8807549213350031,2,se sw,True,True
+shuffle_A-refB_k650000,arc_inc,0.1,cd,-0.309647925764458,1,sw,False,True
+shuffle_A-refB_k650000,arc_inc,0.1,delta,0.6639841226876071,1,sw,False,True
+shuffle_A-refB_k650000,arc_inc,0.1,moved,-0.3917146702281531,1,sw,False,True
+shuffle_A-refB_k650000,arc_inc,0.1,neutral,-1.0345346902255053,2,se sw,True,True
+shuffle_A-refB_k650000,arc_inc,0.2,delta,0.549607759908414,2,se sw,True,True
+shuffle_A-refB_k650000,arc_inc,0.2,moved,-0.41945220612087697,2,se sw,True,True
+shuffle_A-refB_k650000,arc_inc,0.2,neutral,-0.969059966029291,2,se sw,True,True
+shuffle_A-refB_k650000,arc_inc,0.3,cd,-0.05495643492535196,1,sw,False,False
+shuffle_A-refB_k650000,arc_inc,0.3,delta,0.829469584310357,1,sw,False,False
+shuffle_A-refB_k650000,arc_inc,0.3,moved,-0.32676080184795975,1,sw,False,False
+shuffle_A-refB_k650000,arc_inc,0.3,neutral,-1.1562303861583167,1,sw,False,False
+shuffle_A-refB_k650000,arc_inc,0.4,cd,-0.09968188232869357,1,sw,False,False
+shuffle_A-refB_k650000,arc_inc,0.4,delta,0.7240820250731486,1,sw,False,False
+shuffle_A-refB_k650000,arc_inc,0.4,moved,-0.6454231985924513,2,ne sw,True,False
+shuffle_A-refB_k650000,arc_inc,0.4,neutral,-1.1080197232858762,1,sw,False,False
+shuffle_A-refB_k650000,arc_inc,0.4,old_ud,-0.5291733176318631,1,sw,False,False
+shuffle_A-refB_k650000,arc_inc,0.5,cd,-0.0627447704704931,1,sw,False,False
+shuffle_A-refB_k650000,arc_inc,0.5,delta,0.7689080249788942,1,sw,False,False
+shuffle_A-refB_k650000,arc_inc,0.5,moved,-0.6839822361328214,2,ne sw,True,False
+shuffle_A-refB_k650000,arc_inc,0.5,neutral,-1.1380926896305925,1,sw,False,False
+shuffle_A-refB_k650000,arc_inc,0.6,cd,-0.08791985151870563,1,sw,False,False
+shuffle_A-refB_k650000,arc_inc,0.6,moved,-0.29937504458072106,1,sw,False,False
+shuffle_A-refB_k650000,arc_inc,0.7,moved,-0.31203745186659093,1,sw,False,False
+shuffle_A-refB_k650000,arc_inc,0.8,moved,-0.2500799207525932,1,sw,False,False
+shuffle_A-refB_k650000,segment,0.0,cd,-0.04683361249068718,2,ne sw,True,False
+shuffle_A-refB_k650000,segment,0.0,delta,-2.00846998922836,3,ne se sw,True,False
+shuffle_A-refB_k650000,segment,0.0,moved,-2.0612491160827746,3,ne se sw,True,False
+shuffle_A-refB_k650000,segment,0.0,neutral,-0.05277912685441429,3,ne se sw,True,False
+shuffle_A-refB_k650000,segment,0.0,old_ud,0.0164287588202144,3,ne se sw,True,False
+shuffle_A-refB_k650000,segment,0.1,cd,-0.04244221198011111,2,ne sw,True,False
+shuffle_A-refB_k650000,segment,0.1,delta,-2.0207333422070612,3,ne se sw,True,False
+shuffle_A-refB_k650000,segment,0.1,moved,-2.058163444134791,3,ne se sw,True,False
+shuffle_A-refB_k650000,segment,0.1,neutral,-0.03743010192772981,3,ne se sw,True,False
+shuffle_A-refB_k650000,segment,0.1,old_ud,0.01713383140116509,3,ne se sw,True,False
+shuffle_A-refB_k650000,segment,0.2,cd,-0.04523513031526383,2,ne sw,True,False
+shuffle_A-refB_k650000,segment,0.2,delta,-2.0197327018531332,3,ne se sw,True,False
+shuffle_A-refB_k650000,segment,0.2,moved,-2.065825597343443,3,ne se sw,True,False
+shuffle_A-refB_k650000,segment,0.2,neutral,-0.04609289549030956,3,ne se sw,True,False
+shuffle_A-refB_k650000,segment,0.2,old_ud,0.006255356793697449,3,ne se sw,True,False
+shuffle_A-refB_k650000,segment,0.3,cd,-0.03783280495369401,2,ne sw,True,False
+shuffle_A-refB_k650000,segment,0.3,delta,-2.0154275349929702,3,ne se sw,True,False
+shuffle_A-refB_k650000,segment,0.3,moved,-2.055675457620613,3,ne se sw,True,False
+shuffle_A-refB_k650000,segment,0.3,neutral,-0.0402479226276428,3,ne se sw,True,False
+shuffle_A-refB_k650000,segment,0.3,old_ud,0.007701283457220913,3,ne se sw,True,False
+shuffle_A-refB_k650000,segment,0.4,cd,-0.042150303349780316,2,ne sw,True,False
+shuffle_A-refB_k650000,segment,0.4,delta,-1.9480893163642428,3,ne se sw,True,False
+shuffle_A-refB_k650000,segment,0.4,moved,-1.9904681536346294,3,ne se sw,True,False
+shuffle_A-refB_k650000,segment,0.4,neutral,-0.042378837270386605,3,ne se sw,True,False
+shuffle_A-refB_k650000,segment,0.4,old_ud,0.03165144132120323,3,ne se sw,True,False
+shuffle_A-refB_k650000,segment,0.5,cd,-0.03633768743739885,2,ne sw,True,False
+shuffle_A-refB_k650000,segment,0.5,delta,-1.8279246023065667,3,ne se sw,True,False
+shuffle_A-refB_k650000,segment,0.5,moved,-1.887534981259102,3,ne se sw,True,False
+shuffle_A-refB_k650000,segment,0.5,neutral,-0.05961037895253544,3,ne se sw,True,False
+shuffle_A-refB_k650000,segment,0.5,old_ud,0.039424782514122736,3,ne se sw,True,False
+shuffle_A-refB_k650000,segment,0.6,cd,-0.2313777937901964,2,ne sw,True,False
+shuffle_A-refB_k650000,segment,0.6,delta,-0.6099111891628197,1,se,False,False
+shuffle_A-refB_k650000,segment,0.6,moved,-1.0413298564649882,1,se,False,False
+shuffle_A-refB_k650000,segment,0.6,neutral,-0.5321826433240581,3,ne se sw,True,False
+shuffle_A-refB_k650000,segment,0.6,old_ud,-0.3691183264590585,2,se sw,True,False
+shuffle_A-refB_k650000,segment,0.7,cd,-0.6370742486931111,1,ne,False,False
+shuffle_A-refB_k650000,segment,0.7,delta,-0.054218157635520736,2,ne se,True,False
+shuffle_A-refB_k650000,segment,0.7,moved,-0.7109886745985325,2,ne se,True,False
+shuffle_A-refB_k650000,segment,0.7,neutral,-0.7779776662336761,3,ne se sw,True,False
+shuffle_A-refB_k650000,segment,0.8,cd,-0.3584017226001974,1,sw,False,True
+shuffle_A-refB_k650000,segment,0.8,delta,0.2776705960303345,1,se,False,True
+shuffle_A-refB_k650000,segment,0.8,moved,-0.3949539677906868,1,se,False,True
+shuffle_A-refB_k650000,segment,0.8,neutral,-0.8321590050447837,3,ne se sw,True,True
+shuffle_A-refB_k650000,segment,0.9,cd,-0.3638037004135979,1,sw,False,True
+shuffle_A-refB_k650000,segment,0.9,delta,0.596496849434913,2,se sw,True,True
+shuffle_A-refB_k650000,segment,0.9,moved,-0.42763613158604896,2,se sw,True,True
+shuffle_A-refB_k650000,segment,0.9,neutral,-1.024132981020962,2,se sw,True,True
+shuffle_A-refB_k650000,segment,1.0,cd,-0.3908706713921801,1,sw,False,True
+shuffle_A-refB_k650000,segment,1.0,delta,0.5898530362566436,1,sw,False,True
+shuffle_A-refB_k650000,segment,1.0,moved,-0.505769178425973,1,sw,False,True
+shuffle_A-refB_k650000,segment,1.0,neutral,-0.8807549213350031,2,se sw,True,True
+shuffle_A_k650000,arc_ctrl,0.0,cd,0.04632293809490107,2,ne sw,True,False
+shuffle_A_k650000,arc_ctrl,0.0,delta,-2.02445952010726,1,se,False,False
+shuffle_A_k650000,arc_ctrl,0.0,moved,-1.968495576719735,2,se sw,True,False
+shuffle_A_k650000,arc_ctrl,0.0,neutral,0.0049996525457634,2,ne se,True,False
+shuffle_A_k650000,arc_ctrl,0.0,old_ud,0.05870847200883341,3,ne se sw,True,False
+shuffle_A_k650000,arc_ctrl,0.1,cd,0.06059156206883376,2,ne sw,True,False
+shuffle_A_k650000,arc_ctrl,0.1,delta,-1.983673367132504,1,se,False,False
+shuffle_A_k650000,arc_ctrl,0.1,moved,-1.9627691198860502,2,se sw,True,False
+shuffle_A_k650000,arc_ctrl,0.1,neutral,0.011194394808187846,2,ne se,True,False
+shuffle_A_k650000,arc_ctrl,0.1,old_ud,0.05886449928414006,3,ne se sw,True,False
+shuffle_A_k650000,arc_ctrl,0.2,cd,0.06271576661007949,2,ne sw,True,False
+shuffle_A_k650000,arc_ctrl,0.2,delta,-1.8747174526952355,1,se,False,False
+shuffle_A_k650000,arc_ctrl,0.2,moved,-1.719620557864313,2,se sw,True,False
+shuffle_A_k650000,arc_ctrl,0.2,neutral,-0.01017497698115677,2,ne se,True,False
+shuffle_A_k650000,arc_ctrl,0.2,old_ud,0.017388636445508403,3,ne se sw,True,False
+shuffle_A_k650000,arc_ctrl,0.3,cd,-0.003020261224860654,2,ne sw,True,False
+shuffle_A_k650000,arc_ctrl,0.3,delta,-0.8854784280604715,1,se,False,False
+shuffle_A_k650000,arc_ctrl,0.3,moved,-0.8181365043216456,2,se sw,True,False
+shuffle_A_k650000,arc_ctrl,0.3,neutral,-0.2382057200029999,2,ne se,True,False
+shuffle_A_k650000,arc_ctrl,0.3,old_ud,-0.23233721726721868,3,ne se sw,True,False
+shuffle_A_k650000,arc_ctrl,0.4,cd,-0.027549553220941103,1,sw,False,False
+shuffle_A_k650000,arc_ctrl,0.4,delta,-0.9980618425044843,1,se,False,False
+shuffle_A_k650000,arc_ctrl,0.4,moved,-0.7677879382772101,2,se sw,True,False
+shuffle_A_k650000,arc_ctrl,0.4,neutral,-0.22415716568744104,2,ne se,True,False
+shuffle_A_k650000,arc_ctrl,0.4,old_ud,-0.2727910263284978,3,ne se sw,True,False
+shuffle_A_k650000,arc_ctrl,0.5,cd,-0.0177335671799268,1,sw,False,False
+shuffle_A_k650000,arc_ctrl,0.5,delta,-0.9123416696674054,1,se,False,False
+shuffle_A_k650000,arc_ctrl,0.5,moved,-0.7457730685598701,2,se sw,True,False
+shuffle_A_k650000,arc_ctrl,0.5,neutral,-0.2612249629339116,2,ne se,True,False
+shuffle_A_k650000,arc_ctrl,0.5,old_ud,-0.2963114873427551,3,ne se sw,True,False
+shuffle_A_k650000,arc_ctrl,0.6,delta,-0.8071052243439363,1,se,False,False
+shuffle_A_k650000,arc_ctrl,0.6,moved,-0.618187425338808,2,se sw,True,False
+shuffle_A_k650000,arc_ctrl,0.6,neutral,-0.2171750012223288,2,ne se,True,False
+shuffle_A_k650000,arc_ctrl,0.6,old_ud,-0.4629498221439543,2,ne sw,True,False
+shuffle_A_k650000,segment,0.0,cd,0.04632293809490107,2,ne sw,True,False
+shuffle_A_k650000,segment,0.0,delta,-2.02445952010726,1,se,False,False
+shuffle_A_k650000,segment,0.0,moved,-1.968495576719735,2,se sw,True,False
+shuffle_A_k650000,segment,0.0,neutral,0.0049996525457634,2,ne se,True,False
+shuffle_A_k650000,segment,0.0,old_ud,0.05870847200883341,3,ne se sw,True,False
+shuffle_A_k650000,segment,0.1,cd,0.05610844141695415,2,ne sw,True,False
+shuffle_A_k650000,segment,0.1,delta,-1.9972752131249223,1,se,False,False
+shuffle_A_k650000,segment,0.1,moved,-1.9565245139584782,2,se sw,True,False
+shuffle_A_k650000,segment,0.1,neutral,0.018915074758099282,2,ne se,True,False
+shuffle_A_k650000,segment,0.1,old_ud,0.050664817041069586,3,ne se sw,True,False
+shuffle_A_k650000,segment,0.2,cd,0.028573559157103467,1,sw,False,False
+shuffle_A_k650000,segment,0.2,delta,-1.960687317343064,1,se,False,False
+shuffle_A_k650000,segment,0.2,moved,-1.9632054563752424,2,se sw,True,False
+shuffle_A_k650000,segment,0.2,neutral,-0.019762614250127042,2,ne se,True,False
+shuffle_A_k650000,segment,0.2,old_ud,0.05260528299457675,3,ne se sw,True,False
+shuffle_A_k650000,segment,0.3,cd,0.031426253121871195,1,sw,False,False
+shuffle_A_k650000,segment,0.3,delta,-1.9812451109413167,1,se,False,False
+shuffle_A_k650000,segment,0.3,moved,-1.962456312138364,2,se sw,True,False
+shuffle_A_k650000,segment,0.3,neutral,0.010864807291750656,2,ne se,True,False
+shuffle_A_k650000,segment,0.3,old_ud,0.05601528482153487,3,ne se sw,True,False
+shuffle_A_k650000,segment,0.4,cd,0.02131923470479702,1,sw,False,False
+shuffle_A_k650000,segment,0.4,delta,-1.9808126760157532,1,se,False,False
+shuffle_A_k650000,segment,0.4,moved,-1.9060073974183287,2,se sw,True,False
+shuffle_A_k650000,segment,0.4,neutral,0.022306942794779516,2,ne se,True,False
+shuffle_A_k650000,segment,0.4,old_ud,0.056008358252971714,3,ne se sw,True,False
+shuffle_A_k650000,segment,0.5,cd,0.0335100166898723,1,sw,False,False
+shuffle_A_k650000,segment,0.5,neutral,-0.01055694288294462,2,ne se,True,False
+shuffle_A_k650000,segment,0.5,old_ud,0.03261363676263166,3,ne se sw,True,False
+shuffle_A_k650000,segment,0.6,cd,-0.2032966060851331,2,ne sw,True,False
+shuffle_A_k650000,segment,0.6,neutral,-0.17411799274990258,1,se,False,False
+shuffle_A_k650000,segment,0.6,old_ud,-0.31468939866792417,3,ne se sw,True,False
+shuffle_A_k650000,segment,0.7,neutral,-0.4289803829016009,2,ne se,True,False
+shuffle_A_k650000,segment,0.7,old_ud,-0.6627481824474485,2,ne sw,True,False
+shuffle_A_k650000,segment,0.8,neutral,-0.31911355749719483,1,se,False,True
+shuffle_A_k650000,segment,0.8,old_ud,-0.5367058711157116,1,sw,False,True
+shuffle_E_k650000,arc_ctrl,0.0,cd,-0.09565097938387357,2,ne sw,True,False
+shuffle_E_k650000,arc_ctrl,0.0,delta,-1.8944753967434929,3,ne se sw,True,False
+shuffle_E_k650000,arc_ctrl,0.0,moved,-1.981100955686559,3,ne se sw,True,False
+shuffle_E_k650000,arc_ctrl,0.0,neutral,-0.0866255589430663,3,ne se sw,True,False
+shuffle_E_k650000,arc_ctrl,0.0,old_ud,-0.015543516551633552,3,ne se sw,True,False
+shuffle_E_k650000,arc_ctrl,0.1,cd,-0.08109943896589566,2,ne sw,True,False
+shuffle_E_k650000,arc_ctrl,0.1,delta,-1.8573100225097365,3,ne se sw,True,False
+shuffle_E_k650000,arc_ctrl,0.1,moved,-1.9419030978056648,3,ne se sw,True,False
+shuffle_E_k650000,arc_ctrl,0.1,neutral,-0.08459307529592815,3,ne se sw,True,False
+shuffle_E_k650000,arc_ctrl,0.1,old_ud,-0.015871067967581382,3,ne se sw,True,False
+shuffle_E_k650000,arc_ctrl,0.2,cd,-0.09724531869800912,2,ne sw,True,False
+shuffle_E_k650000,arc_ctrl,0.2,delta,-1.8752271660207702,3,ne se sw,True,False
+shuffle_E_k650000,arc_ctrl,0.2,moved,-1.959094010555166,3,ne se sw,True,False
+shuffle_E_k650000,arc_ctrl,0.2,neutral,-0.08386684453439552,3,ne se sw,True,False
+shuffle_E_k650000,arc_ctrl,0.2,old_ud,-0.02254358538321292,3,ne se sw,True,False
+shuffle_E_k650000,arc_ctrl,0.3,cd,-0.11322368879353673,2,ne sw,True,False
+shuffle_E_k650000,arc_ctrl,0.3,delta,-1.8230621579868094,3,ne se sw,True,False
+shuffle_E_k650000,arc_ctrl,0.3,moved,-1.9123703029577168,3,ne se sw,True,False
+shuffle_E_k650000,arc_ctrl,0.3,neutral,-0.08930814497090774,3,ne se sw,True,False
+shuffle_E_k650000,arc_ctrl,0.3,old_ud,-0.022587140951062512,3,ne se sw,True,False
+shuffle_E_k650000,arc_ctrl,0.4,cd,-0.3549379504878286,2,ne sw,True,False
+shuffle_E_k650000,arc_ctrl,0.4,delta,-1.2884435562997747,2,ne sw,True,False
+shuffle_E_k650000,arc_ctrl,0.4,moved,-1.548090099477493,2,ne sw,True,False
+shuffle_E_k650000,arc_ctrl,0.4,neutral,-0.296980021005714,3,ne se sw,True,False
+shuffle_E_k650000,arc_ctrl,0.4,old_ud,-0.21650599405927232,3,ne se sw,True,False
+shuffle_E_k650000,arc_inc,0.0,cd,-0.9163382062049388,1,sw,False,True
+shuffle_E_k650000,arc_inc,0.0,neutral,-0.6308011078011073,2,se sw,True,True
+shuffle_E_k650000,arc_inc,0.1,cd,-0.9758119488395844,1,sw,False,True
+shuffle_E_k650000,arc_inc,0.1,neutral,-0.59726865435342,2,se sw,True,True
+shuffle_E_k650000,arc_inc,0.2,delta,0.09157469074248525,1,se,False,True
+shuffle_E_k650000,arc_inc,0.2,moved,-0.4097225886683118,1,se,False,True
+shuffle_E_k650000,arc_inc,0.2,neutral,-0.6364714583924328,2,se sw,True,True
+shuffle_E_k650000,arc_inc,0.3,cd,-0.762963703425265,1,sw,False,False
+shuffle_E_k650000,arc_inc,0.3,delta,-0.3026378342866063,1,sw,False,False
+shuffle_E_k650000,arc_inc,0.3,moved,-0.6699836491572194,2,se sw,True,False
+shuffle_E_k650000,arc_inc,0.3,neutral,-0.5481722031361314,1,sw,False,False
+shuffle_E_k650000,arc_inc,0.4,cd,-0.43860665069756877,1,sw,False,False
+shuffle_E_k650000,arc_inc,0.4,delta,-0.14402080507233683,1,sw,False,False
+shuffle_E_k650000,arc_inc,0.4,moved,-0.43493072045604064,2,ne sw,True,False
+shuffle_E_k650000,arc_inc,0.4,neutral,-0.4019610891765517,1,sw,False,False
+shuffle_E_k650000,arc_inc,0.5,cd,-0.35460752829813247,1,sw,False,False
+shuffle_E_k650000,arc_inc,0.5,delta,-0.10821867734945623,1,sw,False,False
+shuffle_E_k650000,arc_inc,0.5,moved,-0.39980654116680414,2,ne sw,True,False
+shuffle_E_k650000,arc_inc,0.5,neutral,-0.3959553573013608,1,sw,False,False
+shuffle_E_k650000,arc_inc,0.6,moved,-0.43294878986617324,1,sw,False,False
+shuffle_E_k650000,arc_inc,0.7,moved,-0.5160376613466724,1,sw,False,False
+shuffle_E_k650000,segment,0.0,cd,-0.09565097938387357,2,ne sw,True,False
+shuffle_E_k650000,segment,0.0,delta,-1.8944753967434929,3,ne se sw,True,False
+shuffle_E_k650000,segment,0.0,moved,-1.981100955686559,3,ne se sw,True,False
+shuffle_E_k650000,segment,0.0,neutral,-0.0866255589430663,3,ne se sw,True,False
+shuffle_E_k650000,segment,0.0,old_ud,-0.015543516551633552,3,ne se sw,True,False
+shuffle_E_k650000,segment,0.1,cd,-0.09844795901885162,2,ne sw,True,False
+shuffle_E_k650000,segment,0.1,delta,-1.8932330530609223,3,ne se sw,True,False
+shuffle_E_k650000,segment,0.1,moved,-1.9599092336737602,3,ne se sw,True,False
+shuffle_E_k650000,segment,0.1,neutral,-0.06667618061283791,3,ne se sw,True,False
+shuffle_E_k650000,segment,0.1,old_ud,-0.02729390933877592,3,ne se sw,True,False
+shuffle_E_k650000,segment,0.2,cd,-0.09974083915209442,2,ne sw,True,False
+shuffle_E_k650000,segment,0.2,delta,-1.8968797781186513,3,ne se sw,True,False
+shuffle_E_k650000,segment,0.2,moved,-1.9769303926546253,3,ne se sw,True,False
+shuffle_E_k650000,segment,0.2,neutral,-0.08005061453597435,3,ne se sw,True,False
+shuffle_E_k650000,segment,0.2,old_ud,-0.023338083468743182,3,ne se sw,True,False
+shuffle_E_k650000,segment,0.3,cd,-0.07414893470287787,2,ne sw,True,False
+shuffle_E_k650000,segment,0.3,delta,-1.798095106191748,3,ne se sw,True,False
+shuffle_E_k650000,segment,0.3,moved,-1.8726490016189368,3,ne se sw,True,False
+shuffle_E_k650000,segment,0.3,neutral,-0.07455389542718864,3,ne se sw,True,False
+shuffle_E_k650000,segment,0.3,old_ud,-0.008679519374615788,3,ne se sw,True,False
+shuffle_E_k650000,segment,0.4,cd,-0.11527019245142567,2,ne sw,True,False
+shuffle_E_k650000,segment,0.4,delta,-1.431847360735384,3,ne se sw,True,False
+shuffle_E_k650000,segment,0.4,moved,-1.5367795924279328,3,ne se sw,True,False
+shuffle_E_k650000,segment,0.4,neutral,-0.10493223169254873,3,ne se sw,True,False
+shuffle_E_k650000,segment,0.4,old_ud,-0.07679785931792067,3,ne se sw,True,False
+shuffle_E_k650000,segment,0.5,cd,-0.33862636285238334,2,ne sw,True,False
+shuffle_E_k650000,segment,0.5,delta,-0.4458502130002165,3,ne se sw,True,False
+shuffle_E_k650000,segment,0.5,moved,-0.8012241286194804,3,ne se sw,True,False
+shuffle_E_k650000,segment,0.5,neutral,-0.35537391561926396,3,ne se sw,True,False
+shuffle_E_k650000,segment,0.5,old_ud,-0.1934600854818911,2,se sw,True,False
+shuffle_E_k650000,segment,0.6,cd,-0.4355215724828546,2,ne sw,True,False
+shuffle_E_k650000,segment,0.6,delta,0.05729078943776478,2,ne se,True,False
+shuffle_E_k650000,segment,0.6,moved,-0.4253165147999468,2,ne se,True,False
+shuffle_E_k650000,segment,0.6,neutral,-0.4065703432034807,3,ne se sw,True,False
+shuffle_E_k650000,segment,0.6,old_ud,-0.5233517730554451,1,se,False,False
+shuffle_E_k650000,segment,0.7,delta,0.09054089663444742,1,se,False,False
+shuffle_E_k650000,segment,0.7,moved,-0.38719525365140184,1,se,False,False
+shuffle_E_k650000,segment,0.7,neutral,-0.4223116850334004,3,ne se sw,True,False
+shuffle_E_k650000,segment,0.8,cd,-0.29559830190265757,1,sw,False,True
+shuffle_E_k650000,segment,0.8,delta,-0.024910664016223993,1,se,False,True
+shuffle_E_k650000,segment,0.8,moved,-0.4190344220355593,1,se,False,True
+shuffle_E_k650000,segment,0.8,neutral,-0.3904209599202147,3,ne se sw,True,True
+shuffle_E_k650000,segment,0.9,delta,0.017867727402688827,1,se,False,True
+shuffle_E_k650000,segment,0.9,moved,-0.4173646241161393,1,se,False,True
+shuffle_E_k650000,segment,0.9,neutral,-0.3752414580351097,3,ne se sw,True,True
+shuffle_E_k650000,segment,1.0,cd,-0.9163382062049388,1,sw,False,True
+shuffle_E_k650000,segment,1.0,neutral,-0.6308011078011073,2,se sw,True,True
+shuffle_F_k650000,arc_ctrl,0.0,cd,-0.05537067432821252,2,ne sw,True,False
+shuffle_F_k650000,arc_ctrl,0.0,delta,-2.0423169468240387,3,ne se sw,True,False
+shuffle_F_k650000,arc_ctrl,0.0,moved,-2.1380356365192332,3,ne se sw,True,False
+shuffle_F_k650000,arc_ctrl,0.0,neutral,-0.09571868969519448,3,ne se sw,True,False
+shuffle_F_k650000,arc_ctrl,0.0,old_ud,-0.12377005017806446,3,ne se sw,True,False
+shuffle_F_k650000,arc_ctrl,0.1,cd,-0.053279751413123355,2,ne sw,True,False
+shuffle_F_k650000,arc_ctrl,0.1,delta,-2.0251912658309363,3,ne se sw,True,False
+shuffle_F_k650000,arc_ctrl,0.1,moved,-2.115931929210058,3,ne se sw,True,False
+shuffle_F_k650000,arc_ctrl,0.1,neutral,-0.09074066337912197,3,ne se sw,True,False
+shuffle_F_k650000,arc_ctrl,0.1,old_ud,-0.11262300037028956,3,ne se sw,True,False
+shuffle_F_k650000,arc_ctrl,0.2,cd,-0.048735881154720495,2,ne sw,True,False
+shuffle_F_k650000,arc_ctrl,0.2,delta,-1.6376030068785123,3,ne se sw,True,False
+shuffle_F_k650000,arc_ctrl,0.2,moved,-1.7734870475006066,3,ne se sw,True,False
+shuffle_F_k650000,arc_ctrl,0.2,neutral,-0.1358840406220944,3,ne se sw,True,False
+shuffle_F_k650000,arc_ctrl,0.2,old_ud,-0.15197737367138645,3,ne se sw,True,False
+shuffle_F_k650000,arc_ctrl,0.3,cd,-0.09017496548976434,2,ne sw,True,False
+shuffle_F_k650000,arc_ctrl,0.3,delta,-0.4318465605974213,3,ne se sw,True,False
+shuffle_F_k650000,arc_ctrl,0.3,moved,-0.7115675530381317,3,ne se sw,True,False
+shuffle_F_k650000,arc_ctrl,0.3,neutral,-0.2797209924407103,3,ne se sw,True,False
+shuffle_F_k650000,arc_ctrl,0.3,old_ud,-0.7707086178984381,3,ne se sw,True,False
+shuffle_F_k650000,arc_ctrl,0.4,cd,-0.08794005730922527,2,ne sw,True,False
+shuffle_F_k650000,arc_ctrl,0.4,delta,8.50007441036323e-05,3,ne se sw,True,False
+shuffle_F_k650000,arc_ctrl,0.4,moved,-0.4213644189401358,3,ne se sw,True,False
+shuffle_F_k650000,arc_ctrl,0.4,neutral,-0.4214494196842395,3,ne se sw,True,False
+shuffle_F_k650000,arc_ctrl,0.4,old_ud,-0.9060305602895772,3,ne se sw,True,False
+shuffle_F_k650000,arc_ctrl,0.5,cd,-0.0907644149357898,2,ne sw,True,False
+shuffle_F_k650000,arc_ctrl,0.5,delta,0.10615196182818713,3,ne se sw,True,False
+shuffle_F_k650000,arc_ctrl,0.5,moved,-0.37386588036326523,3,ne se sw,True,False
+shuffle_F_k650000,arc_ctrl,0.5,neutral,-0.4800178421914523,3,ne se sw,True,False
+shuffle_F_k650000,arc_ctrl,0.5,old_ud,-0.8724557506753838,2,ne sw,True,False
+shuffle_F_k650000,arc_ctrl,0.6,cd,-0.08676077037818253,2,ne sw,True,False
+shuffle_F_k650000,arc_ctrl,0.6,delta,0.10765951065513146,3,ne se sw,True,False
+shuffle_F_k650000,arc_ctrl,0.6,moved,-0.3657388513383996,3,ne se sw,True,False
+shuffle_F_k650000,arc_ctrl,0.6,neutral,-0.4733983619935311,3,ne se sw,True,False
+shuffle_F_k650000,arc_ctrl,0.6,old_ud,-0.9425437319678373,3,ne se sw,True,False
+shuffle_F_k650000,arc_ctrl,0.7,cd,-0.11897515991421082,2,ne sw,True,False
+shuffle_F_k650000,arc_ctrl,0.7,delta,0.1261471067136091,3,ne se sw,True,False
+shuffle_F_k650000,arc_ctrl,0.7,moved,-0.3529977486077433,3,ne se sw,True,False
+shuffle_F_k650000,arc_ctrl,0.7,neutral,-0.47914485532135237,3,ne se sw,True,False
+shuffle_F_k650000,arc_ctrl,0.7,old_ud,-0.8679532870153868,2,ne sw,True,False
+shuffle_F_k650000,arc_ctrl,0.8,cd,-0.12453214066551088,2,ne sw,True,False
+shuffle_F_k650000,arc_ctrl,0.8,delta,0.15901244189588332,2,ne se,True,False
+shuffle_F_k650000,arc_ctrl,0.8,moved,-0.2941138425129445,2,ne se,True,False
+shuffle_F_k650000,arc_ctrl,0.8,neutral,-0.4960928015554577,3,ne se sw,True,False
+shuffle_F_k650000,arc_ctrl,0.8,old_ud,-0.8237663336786916,2,ne sw,True,False
+shuffle_F_k650000,arc_ctrl,0.9,cd,-0.268673506218575,2,ne sw,True,False
+shuffle_F_k650000,arc_ctrl,0.9,neutral,-0.515034647660312,3,ne se sw,True,False
+shuffle_F_k650000,arc_ctrl,0.9,old_ud,-0.9488529835220981,2,ne se,True,False
+shuffle_F_k650000,arc_ctrl,1.0,cd,-0.1365189791083279,1,sw,False,False
+shuffle_F_k650000,arc_ctrl,1.0,neutral,-0.6563812469112493,1,sw,False,False
+shuffle_F_k650000,arc_inc,0.0,cd,-0.4071160777787317,1,sw,False,True
+shuffle_F_k650000,arc_inc,0.0,delta,0.12159174186464838,1,sw,False,True
+shuffle_F_k650000,arc_inc,0.0,moved,-0.504409834895791,1,sw,False,True
+shuffle_F_k650000,arc_inc,0.0,neutral,-0.8933889426573924,2,se sw,True,True
+shuffle_F_k650000,arc_inc,0.1,cd,-0.4057386801355829,1,sw,False,True
+shuffle_F_k650000,arc_inc,0.1,delta,0.2740814565734653,1,sw,False,True
+shuffle_F_k650000,arc_inc,0.1,moved,-0.3644744827678139,1,sw,False,True
+shuffle_F_k650000,arc_inc,0.1,neutral,-0.8958641233219812,2,se sw,True,True
+shuffle_F_k650000,arc_inc,0.2,delta,0.322330129760971,2,se sw,True,True
+shuffle_F_k650000,arc_inc,0.2,moved,-0.55653034826555,2,se sw,True,True
+shuffle_F_k650000,arc_inc,0.2,neutral,-0.878860478026521,2,se sw,True,True
+shuffle_F_k650000,arc_inc,0.3,cd,-0.13435099595504196,1,sw,False,False
+shuffle_F_k650000,arc_inc,0.3,delta,0.2154622503491952,1,sw,False,False
+shuffle_F_k650000,arc_inc,0.3,moved,-0.2907964536344658,1,sw,False,False
+shuffle_F_k650000,arc_inc,0.3,neutral,-0.5864705130783547,2,se sw,True,False
+shuffle_F_k650000,arc_inc,0.4,cd,-0.1002363200890839,1,sw,False,False
+shuffle_F_k650000,arc_inc,0.4,delta,0.07950247413944522,1,sw,False,False
+shuffle_F_k650000,arc_inc,0.4,moved,-0.4287748298280327,2,ne sw,True,False
+shuffle_F_k650000,arc_inc,0.4,neutral,-0.45978308785026867,1,sw,False,False
+shuffle_F_k650000,arc_inc,0.4,old_ud,-0.8507214960730154,1,sw,False,False
+shuffle_F_k650000,arc_inc,0.5,cd,-0.09444709754577385,1,sw,False,False
+shuffle_F_k650000,arc_inc,0.5,delta,0.1004617881388965,1,sw,False,False
+shuffle_F_k650000,arc_inc,0.5,moved,-0.36914103083587513,1,sw,False,False
+shuffle_F_k650000,arc_inc,0.5,neutral,-0.46960281897477163,1,sw,False,False
+shuffle_F_k650000,arc_inc,0.6,moved,-0.32814106769132767,1,sw,False,False
+shuffle_F_k650000,arc_inc,0.7,moved,-0.260165175881083,1,sw,False,False
+shuffle_F_k650000,segment,0.0,cd,-0.05537067432821252,2,ne sw,True,False
+shuffle_F_k650000,segment,0.0,delta,-2.0423169468240387,3,ne se sw,True,False
+shuffle_F_k650000,segment,0.0,moved,-2.1380356365192332,3,ne se sw,True,False
+shuffle_F_k650000,segment,0.0,neutral,-0.09571868969519448,3,ne se sw,True,False
+shuffle_F_k650000,segment,0.0,old_ud,-0.12377005017806446,3,ne se sw,True,False
+shuffle_F_k650000,segment,0.1,cd,-0.03841119722601927,2,ne sw,True,False
+shuffle_F_k650000,segment,0.1,delta,-2.027681557777299,3,ne se sw,True,False
+shuffle_F_k650000,segment,0.1,moved,-2.1169174865648284,3,ne se sw,True,False
+shuffle_F_k650000,segment,0.1,neutral,-0.08923592878752995,3,ne se sw,True,False
+shuffle_F_k650000,segment,0.1,old_ud,-0.12445804709971586,3,ne se sw,True,False
+shuffle_F_k650000,segment,0.2,cd,-0.06034543496990441,2,ne sw,True,False
+shuffle_F_k650000,segment,0.2,delta,-2.015728779469136,3,ne se sw,True,False
+shuffle_F_k650000,segment,0.2,moved,-2.1014291948568578,3,ne se sw,True,False
+shuffle_F_k650000,segment,0.2,neutral,-0.08570041538772122,3,ne se sw,True,False
+shuffle_F_k650000,segment,0.2,old_ud,-0.12570383692459122,3,ne se sw,True,False
+shuffle_F_k650000,segment,0.3,cd,-0.050520987127553374,2,ne sw,True,False
+shuffle_F_k650000,segment,0.3,delta,-1.9903676921303664,3,ne se sw,True,False
+shuffle_F_k650000,segment,0.3,moved,-2.0811254247758897,3,ne se sw,True,False
+shuffle_F_k650000,segment,0.3,neutral,-0.0907577326455234,3,ne se sw,True,False
+shuffle_F_k650000,segment,0.3,old_ud,-0.12626766465901337,3,ne se sw,True,False
+shuffle_F_k650000,segment,0.4,cd,-0.036215545666054894,2,ne sw,True,False
+shuffle_F_k650000,segment,0.4,delta,-1.9005953718846682,3,ne se sw,True,False
+shuffle_F_k650000,segment,0.4,moved,-1.9743643734916694,3,ne se sw,True,False
+shuffle_F_k650000,segment,0.4,neutral,-0.0737690016070011,3,ne se sw,True,False
+shuffle_F_k650000,segment,0.4,old_ud,-0.11998400161280094,3,ne se sw,True,False
+shuffle_F_k650000,segment,0.5,cd,-0.027001555990653126,2,ne sw,True,False
+shuffle_F_k650000,segment,0.5,delta,-1.413799330300625,3,ne se sw,True,False
+shuffle_F_k650000,segment,0.5,moved,-1.5563069173465298,3,ne se sw,True,False
+shuffle_F_k650000,segment,0.5,neutral,-0.14250758704590472,3,ne se sw,True,False
+shuffle_F_k650000,segment,0.5,old_ud,-0.18593103690264323,3,ne se sw,True,False
+shuffle_F_k650000,segment,0.6,cd,-0.08685363699464044,2,ne sw,True,False
+shuffle_F_k650000,segment,0.6,delta,-0.5213545179567292,3,ne se sw,True,False
+shuffle_F_k650000,segment,0.6,moved,-0.8110767025620885,3,ne se sw,True,False
+shuffle_F_k650000,segment,0.6,neutral,-0.28972218460535937,3,ne se sw,True,False
+shuffle_F_k650000,segment,0.6,old_ud,-0.5976363643984604,1,se,False,False
+shuffle_F_k650000,segment,0.7,cd,-0.33461935308408286,1,ne,False,False
+shuffle_F_k650000,segment,0.7,delta,-0.24219887102860727,2,ne se,True,False
+shuffle_F_k650000,segment,0.7,moved,-0.9383000218584432,2,ne se,True,False
+shuffle_F_k650000,segment,0.7,neutral,-0.5841658868457076,3,ne se sw,True,False
+shuffle_F_k650000,segment,0.7,old_ud,-1.0158116199171179,1,se,False,False
+shuffle_F_k650000,segment,0.8,cd,-0.23744152700372712,1,sw,False,True
+shuffle_F_k650000,segment,0.8,neutral,-0.6617629539099098,3,ne se sw,True,True
+shuffle_F_k650000,segment,0.9,cd,-0.3324843110250777,1,sw,False,True
+shuffle_F_k650000,segment,0.9,delta,0.13135987896605972,1,se,False,True
+shuffle_F_k650000,segment,0.9,moved,-1.0289453796956582,1,se,False,True
+shuffle_F_k650000,segment,0.9,neutral,-0.7150372602324812,3,ne se sw,True,True
+shuffle_F_k650000,segment,1.0,cd,-0.4071160777787317,1,sw,False,True
+shuffle_F_k650000,segment,1.0,delta,0.12159174186464838,1,sw,False,True
+shuffle_F_k650000,segment,1.0,moved,-0.504409834895791,1,sw,False,True
+shuffle_F_k650000,segment,1.0,neutral,-0.8933889426573924,2,se sw,True,True

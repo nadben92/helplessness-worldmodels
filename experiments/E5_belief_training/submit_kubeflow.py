@@ -171,7 +171,7 @@ def probe_plan(repo: Path, batch: str, configuration: str, checkpoint: int | lis
             except FileNotFoundError as err:
                 excluded[name] = str(err)
             continue
-        ref_label = batches.REFERENCE_SEED_OF.get((label, training), label)
+        ref_label = batches.reference_seed_of(batch, label, training) or label
         dirs = {"experimental": check_wave.newest(repo, label, training, "experimental", fraction),
                 "reference": check_wave.newest(repo, ref_label, training, "reference", fraction)}
         reasons = []

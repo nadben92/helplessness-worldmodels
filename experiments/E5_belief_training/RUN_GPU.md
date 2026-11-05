@@ -470,6 +470,34 @@ two at a time. Locally, both archives `verify`'d and extracted into one director
 python experiments/E5_belief_training/analyse_probes.py --root <extracted>/results --pair-k baseline:102=300000     --matched shuffle_f1:402@475000=baseline:102@$K_E shuffle_f1:502@475000=baseline:102@$K_F --out <dir>
 ```
 
+### 7 ter -- the theme-swap probes (docs/e5/DECISIONS.md (38))
+
+No training: the theme-swap set (`measure_probes.py --probe-set swap --diagnose-walks 150`) of the shuffle pairs A, E, F
+at 650,000 (E and F against B's f = 1 reference) and of the baselines A (E4's pair) and B at 100,000 and 300,000 (fixed
+by the batch, whatever `--checkpoint` is). 93 images x 4 zones = 372 (image, zone) per job, against 96 for E4's set:
+expect about 25-45 min per job (from the 650,000 probes: 350-520 s for 96, two jobs at a time, a 50-walk diagnostic),
+seven jobs two at a time, about 2-3 h for the pod. Once the clone is updated (`git pull --ff-only`, nothing printed by
+`git status --short --untracked-files=no`) and no pod runs from it:
+
+```bash
+cd /scratch/helplessness-worldmodels-e5
+E5=experiments/E5_belief_training; export PYTHONPATH=src:$E5
+python $E5/submit_kubeflow.py --batch e5_probes_swap --phase probes --configuration p1-b-d1 --checkpoint 650000 --e4-results /scratch/helplessness-worldmodels-e4/results --repo-dir /scratch/helplessness-worldmodels-e5 --dry-run
+python $E5/submit_kubeflow.py --batch e5_probes_swap --phase probes --configuration p1-b-d1 --checkpoint 650000 --e4-results /scratch/helplessness-worldmodels-e4/results --repo-dir /scratch/helplessness-worldmodels-e5
+python $E5/export_batch.py create --batch e5_probes_swap --configuration p1-b-d1
+```
+
+The dry run must list no `LEFT OUT` line and seven jobs: `swap_A_sh100_k650000`, `swap_E_sh100_k650000`,
+`swap_F_sh100_k650000`, `swap_A_base_k100000`, `swap_A_base_k300000`, `swap_B_base_k100000`, `swap_B_base_k300000`, each
+with `--probe-set swap --diagnose-walks 150`. Outputs: `results/E5_belief_training/probes-swap__<...>/` (the export takes
+them with `swap_probes.csv`, `validity_summary.json` and `reconstruction.csv`). Locally, the archive `verify`'d and
+extracted, then:
+
+```bash
+python experiments/E5_belief_training/analysis_swap/analyse_swap.py <extracted>/results/E5_belief_training/probes-swap__* --out experiments/E5_belief_training/analysis_swap/tables --compare-probes <the e5_probes_baselines / e5_probes_a extractions>/results/E5_belief_training/probes__p1-b-d1__base__seed02__k100000__20261101T185641Z <...>/probes__p1-b-d1__base__seed02__k300000__20261028T125628Z
+python experiments/E5_belief_training/analysis_swap/fig_swap_gradient.py --tables experiments/E5_belief_training/analysis_swap/tables --out-dir <e6 worktree>/slides/out_e5/png_white
+```
+
 **Keep every checkpoint until then.** The probes need every run's `checkpoints/agent_env<K>.pt` on the volume, E4's runs of
 p1-b-d1 included (`/scratch/helplessness-worldmodels-e4/results/E4_generalization_gradient/`). Nothing in the code deletes
 or overwrites them: each is written once under its own step's name (an atomic write of that file only); `resume.pt` and

@@ -32,14 +32,17 @@ def bin_index(x: np.ndarray) -> np.ndarray:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--tables", type=Path, default=Path(__file__).resolve().parent / "tables")
+    parser.add_argument("--labels", nargs="+", default=list(LABELS),
+                        help="the measurements with a localisation table (default: the four of the 475,000 analysis)")
     args = parser.parse_args(argv)
+    labels = tuple(args.labels)
     loc = {}
-    for label in LABELS:
+    for label in labels:
         for r in AP.read_csv(args.tables / f"localisation_{label}.csv"):
             loc[(label, int(r["image"]), r["slot"])] = float(r["loc_agent_cell_step1"])
     probes = []
     for r in AP.read_csv(args.tables / "gradient_probes.csv"):
-        if r["label"] not in LABELS:
+        if r["label"] not in labels:
             continue
         lv = loc[(r["label"], int(r["image"]), r["slot"])]
         probes.append({**r, "loc_step1": lv, "kept": AP.truthy(r["valid"]) and lv >= LOC_MIN})
@@ -56,7 +59,7 @@ def main(argv: list[str] | None = None) -> int:
                     if (idx == i).any():
                         binned.append({"unit": unit, "key": key, "position": pos, "bin_from": BINS[i], "bin_to": BINS[i + 1],
                                        "n": int((idx == i).sum()), "x_mean": float(x[idx == i].mean()), "b_mean": float(b[idx == i].mean())})
-    for label in LABELS:
+    for label in labels:
         for pos in ("ud", "cd", "neutral"):
             valid = [r for r in probes if r["label"] == label and r["position"] == pos and AP.truthy(r["valid"])]
             idx = bin_index(np.array([float(r["dist_to_inc_over_D"]) for r in valid]))
@@ -71,12 +74,12 @@ def main(argv: list[str] | None = None) -> int:
     AP.write_csv(args.tables / "loc_removed.csv", removed)
     extremes = []
     for r in AP.read_csv(args.tables / "extremes.csv"):
-        if r["label"] in LABELS and r["probe"] in ("position_only", "theme_only"):
+        if r["label"] in labels and r["probe"] in ("position_only", "theme_only"):
             image = 92 if r["probe"] == "position_only" else 2
             lv = loc[(r["label"], image, r["slot"])]
             extremes.append({**r, "loc_step1": lv, "kept": AP.truthy(r["valid"]) and lv >= LOC_MIN})
     AP.write_csv(args.tables / "extremes_loc.csv", extremes)
-    for label in LABELS:
+    for label in labels:
         sel = [r for r in probes if r["label"] == label]
         print(f"{label}: valid {sum(AP.truthy(r['valid']) for r in sel)}, kept {sum(r['kept'] for r in sel)}")
     return 0
