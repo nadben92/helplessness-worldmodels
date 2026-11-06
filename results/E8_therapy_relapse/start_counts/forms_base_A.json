@@ -1,0 +1,98 @@
+{
+ "pair": "base_A",
+ "decision": "docs/e8/DECISIONS.md (20)",
+ "models": {
+  "base_A_exp": {
+   "run": "helplessness-worldmodels-e4/results/E4_generalization_gradient/grid12x12__2zones-p1-b-d1__pair-experimental__worldmodel-agent-e4__seed02__20261016T144543Z",
+   "condition": "experimental",
+   "start_checkpoint": 300000,
+   "n_start": 300000,
+   "TW0": {
+    "ok": true,
+    "checks": {
+     "transitions == meta env_steps": true,
+     "transitions == last checkpoint env_step": true,
+     "stored == with_stored_successor + pending + end_observations": true,
+     "stored == last checkpoint stored_steps": true,
+     "end_observations == episodes (checkpoints.jsonl)": true,
+     "terminal == successes (checkpoints.jsonl)": true,
+     "episodes_started == episodes + pending": true
+    },
+    "accounting": {
+     "stored": 333515,
+     "transitions": 300000,
+     "with_stored_successor": 299999,
+     "pending": 1,
+     "end_observations": 33515,
+     "terminal": 32604,
+     "truncated": 911,
+     "episodes_started": 33516
+    },
+    "env_steps": 300000
+   },
+   "TW3": {
+    "ok": true,
+    "transitions_off_the_dynamics": 0
+   },
+   "pending_transition": {
+    "s": 28,
+    "a": 0,
+    "s_next": 40
+   }
+  },
+  "base_A_ref": {
+   "run": "helplessness-worldmodels-e4/results/E4_generalization_gradient/grid12x12__2zones-p1-b-d1__pair-control__worldmodel-agent-e4__seed02__20261016T144543Z",
+   "condition": "reference",
+   "start_checkpoint": 300000,
+   "n_start": 300000,
+   "TW0": {
+    "ok": true,
+    "checks": {
+     "transitions == meta env_steps": true,
+     "transitions == last checkpoint env_step": true,
+     "stored == with_stored_successor + pending + end_observations": true,
+     "stored == last checkpoint stored_steps": true,
+     "end_observations == episodes (checkpoints.jsonl)": true,
+     "terminal == successes (checkpoints.jsonl)": true,
+     "episodes_started == episodes + pending": true
+    },
+    "accounting": {
+     "stored": 340967,
+     "transitions": 300000,
+     "with_stored_successor": 299999,
+     "pending": 1,
+     "end_observations": 40967,
+     "terminal": 40558,
+     "truncated": 409,
+     "episodes_started": 40968
+    },
+    "env_steps": 300000
+   },
+   "TW3": {
+    "ok": true,
+    "transitions_off_the_dynamics": 0
+   },
+   "pending_transition": {
+    "s": 13,
+    "a": 0,
+    "s_next": 1
+   }
+  }
+ },
+ "TW1": {
+  "ok": true,
+  "zone_cells": 25,
+  "zone_transitions": 22254,
+  "off_conveyor": [],
+  "cells_counted_under_fewer_than_2_actions": []
+ },
+ "TW2": {
+  "ok": true,
+  "zone_cells": 25,
+  "cells_counted_under_2plus_actions": 25,
+  "of_which_2plus_successors": 25,
+  "action_with_several_successors": [],
+  "cells_where_two_actions_share_a_successor": []
+ },
+ "ok": true
+}

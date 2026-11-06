@@ -212,3 +212,47 @@ est la même (`start_counts.py --pair base_A ...`). Rien n'a été lancé sur le
 
 **Reste à faire pour le jumeau** (après la vague 1) : N_start + N_thérapie (le `steps.npz` / replay des runs de thérapie)
 → T̂ du mélange, contrôlé par la forme TW (`np.array_equal`), puis b_tab en nw en fonction des visites.
+
+## 10. Jumeau : comptages de départ de base_A (6 novembre)
+
+**Fichiers.** Les deux `replay_final.npz` de base_A (run E4 p1-b-d1, graine 2) ont été rapatriés de `/scratch` par
+l'utilisateur dans `C:\nrw\tabular_twin_e4`, sous les noms `replay_final.npz` et `replay_final(1).npz`. Leurs noms ne
+disaient pas lequel était lequel : ils ont été identifiés par leur contenu, contre le dernier enregistrement de
+`checkpoints.jsonl` de chaque run. Les trois comptes coïncident sans ambiguïté :
+
+| Fichier | Pas stockés | Épisodes terminés | Succès | Run |
+|---|---|---|---|---|
+| `replay_final.npz` (SHA-256 5d6c8aaa…) | 340 967 | 40 967 | 40 558 | référence |
+| `replay_final(1).npz` (SHA-256 7826aa1d…) | 333 515 | 33 515 | 32 604 | exposé |
+
+Comme pour base_B, chaque fichier a été copié (originaux conservés) sous le nom `replay_final.npz` dans le dossier de son
+run, à côté de son `meta.yaml`, `config.yaml` et `checkpoints.jsonl` (`C:\nrw\e4_wave1\results\E4_generalization_gradient\`).
+
+**Résultat** (`start_counts.py --pair base_A`, CPU local ; résumé
+`results/E8_therapy_relapse/start_counts/forms_base_A.json` ; comptages hors dépôt, `C:\nrw\e8_twin\base_A`) : **toutes
+les formes vérifiées**.
+
+| Forme | Exposé | Référence |
+|---|---|---|
+| TW0 comptabilité | 333 515 stockés = 299 999 + 1 en suspens + 33 515 fins (32 604 au but, 911 tronquées) ; 300 000 transitions = `env_steps` ; 7 / 7 | 340 967 = 299 999 + 1 + 40 967 fins (40 558 au but, 409 tronquées) ; 300 000 ; 7 / 7 |
+| Transition en suspens, complétée par la dynamique | (28, 0) → 40 | (13, 0) → 1 |
+| TW1 tapis roulant (nw, 25 cases) | 22 254 transitions, 0 hors du tapis ; chaque case sous les 5 actions, 1 successeur | — |
+| TW2 même zone chez la référence | — | 52 382 transitions ; chaque case sous les 5 actions, 5 successeurs distincts |
+| TW3 accord avec la dynamique | 0 transition hors de P | 0 transition hors de P |
+
+Les comptages de départ des deux baselines sont donc disponibles. Le jumeau proprement dit (N_départ + N_thérapie, forme
+TW) viendra après la vague 1.
+
+**Budget « planned 300000 » des logs de la vague 1 (lu dans le code, rien relancé).** 300 000 =
+`budget.total_steps + prefill_steps` = 299 744 + 256, hérité tel quel de `configs/e5/e5.yaml` (lui-même hérité d'E4) ;
+les 150 000 pas de la thérapie entrent par `max_env_steps`. Dans un run E8, ce budget prévu ne règle rien :
+- epsilon (0,1), les taux d'apprentissage et `slow_tau` sont des constantes. Il n'y a aucun scheduler : le taux du
+  modèle ne dépend que de la bascule (`phase_learning_rate`), et la bascule est à 0 ;
+- la seule dépendance au budget prévu est la rampe de beta_rep (20 % des pas de gradient prévus restants), calculée au
+  moment où la bascule se déclenche. En départ frais, `switch_step = 0` et `rep_warmup = 0` sont posés avant le pas 0, et
+  la bascule ne peut pas se redéclencher (testé : `tests/e8/test_e8_therapy.py`). Ce code ne s'exécute donc jamais ;
+- l'échéance de séparation (`switch_max_steps`, absolue et inactive une fois basculé) et le seuil tardif sont en pas
+  absolus ;
+- les checkpoints, la taille du replay et la fin du run se lisent sur les 150 000 pas ;
+- `planned_env_steps` ne sert qu'au contrôle de cohérence d'une reprise et aux métadonnées (`results.json` :
+  `planned_env_steps: 300000`, `truncated_by_max_env_steps: true`), qu'aucun script d'E8 ne lit.
