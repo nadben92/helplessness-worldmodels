@@ -192,6 +192,16 @@ def induction_items(st: Setting, directions: Path | None, plan_b: bool = True) -
     return items
 
 
+def episode_tag(it: dict) -> str:
+    """The arrays' key prefix of one plan item in episodes.npz. The lookahead's items (k set) carry their model: before
+    2026-11-06 both models' k-step episodes were saved under one key, the reference's overwriting the exposed model's
+    (docs/e8/DECISIONS.md (19)); the rows were computed before the save and are unchanged."""
+    tag = f"{it['mode']}__{it['alpha']:g}" + ("" if it["tau"] is None else f"__tau{it['tau']:g}")
+    if it["k"] is not None:
+        tag += f"__k{it['k']}__{'exposed' if it['role'] == 'experimental' else 'reference'}"
+    return tag
+
+
 def phase_episodes(st: Setting, phase: str, directions: Path | None, taus: list[float] | None, log) -> tuple[dict, dict]:
     e6 = dict(st.e6)
     ref_fresh = fs.reference_fresh(st.models["reference"], st.tw, st.image, e6)
@@ -220,7 +230,7 @@ def phase_episodes(st: Setting, phase: str, directions: Path | None, taus: list[
         ep = fs.run_model(model, st.tw, st.image, e6, st.eps[it["role"]], hook=hook, tau=it["tau"], q_fn=q_fn)
         rows.append({**episode_row(st, ep, ref_plain, ref_fresh, it["role"], mode=it["mode"], alpha=it["alpha"], tau=it["tau"], k=it["k"]),
                      "seconds": time.perf_counter() - t0})
-        tag = f"{it['mode']}__{it['alpha']:g}" + ("" if it["tau"] is None else f"__tau{it['tau']:g}") + ("" if it["k"] is None else f"__k{it['k']}")
+        tag = episode_tag(it)
         for key, value in ep.items():
             arrays[f"{tag}__{key}"] = value
         arrays[f"{tag}__b_local"] = fs.b_local(ep, ref_fresh)
