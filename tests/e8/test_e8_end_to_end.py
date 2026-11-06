@@ -104,3 +104,13 @@ def test_analysis_runs(campaign):
     assert set(forms) >= {"R", "M", "P1", "P2", "P3", "P4", "P4_overall"}
     assert (res / "curves.csv").is_file() and (res / "recovery.csv").is_file() and (res / "figures" / "recovery_base_X.png").is_file()
     shutil.rmtree(res)
+
+
+def test_campaign_config_has_no_test_only_setting():
+    """The real runs keep E6's 150 validity walks: no test-only key in the campaign's config (only e8_mini.yaml has one)."""
+    def keys(d, prefix=""):
+        return [f"{prefix}{k}" for k, v in d.items()] + [x for k, v in d.items() if isinstance(v, dict) for x in keys(v, f"{prefix}{k}.")]
+    cfg = e8_setup.load_config(REPO_ROOT / "configs" / "e8" / "e8.yaml")
+    assert not [k for k in keys(cfg) if "test_only" in k]
+    mini = e8_setup.load_config(REPO_ROOT / "configs" / "e8" / "e8_mini.yaml")
+    assert mini["e8"]["probes"]["test_only_validity_n_walks"] == 10

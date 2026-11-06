@@ -83,6 +83,14 @@ def images_for(conf: dict, kind: str, therapy: str, which: str) -> list[dict]:
     return out
 
 
+def put(arrays: dict, key: str, value) -> None:
+    """Every array of a job under its own key: a second write to a key stops the job (E7's lookahead once saved two
+    models' episodes under one key, the second overwriting the first: docs/e8/DECISIONS.md (19))."""
+    if key in arrays:
+        raise KeyError(f"episodes.npz key written twice: {key}")
+    arrays[key] = value
+
+
 def frozen_copy(model) -> dict:
     return {name: {k: v.detach().clone() for k, v in getattr(model, name).state_dict().items()} for name in ("rssm", "goal_head", "critic")}
 
@@ -211,14 +219,16 @@ def measure_job(cfg: dict, pc: dict, e6: dict, pairs: list[str], models_spec: di
                     row.update({"oracle_k": ok, "oracle_directed_share": fs.phenotype_row(ep_o, im, eps, e6, with_bootstrap=False)["directed_share"],
                                 "oracle_b_step1": bo["b_step1"], "oracle_loc_template_step1": bo["loc_template_step1"]})
                     for key in ("states", "actions", "length"):
-                        arrays[f"{p}__{im['name']}__oracle__{key}"] = ep_o[key]
+                        put(arrays, f"{p}__{im['name']}__oracle__{key}", ep_o[key])
                 rows.append(row)
+                if role == "reference" and p != pairs[0]:
+                    continue  # the reference's arrays are the same for every partner: saved once
                 tag = f"{p}__{im['name']}__exposed" if role == "experimental" else f"{ref_id}__{im['name']}__reference"
                 for key in SAVE:
-                    arrays[f"{tag}__{key}"] = ep[key]
+                    put(arrays, f"{tag}__{key}", ep[key])
                 for key in READOUT_KEYS:
-                    arrays[f"{tag}__{key}"] = ro[key]
-        arrays[f"{ref_id}__{im['name']}__reference_fresh_I"] = ref_fresh
+                    put(arrays, f"{tag}__{key}", ro[key])
+        put(arrays, f"{ref_id}__{im['name']}__reference_fresh_I", ref_fresh)
         log(f"[E8 probes] k={checkpoint} {im['name']} ({im['slot']}, {'treated' if im['treated'] else 'untreated'}): "
             + "; ".join(f"{r['pair']} b_walks {r['b_walks']:+.2f} valid {r['walks_valid']} directed {r['directed_share']:.2f}"
                         for r in rows[-2 * len(pairs)::2]) + f"; reference {time.perf_counter() - t0:.0f} s (its episodes {t_ref - t0:.0f} s)")
@@ -249,6 +259,9 @@ def probe_config(cfg: dict, n_reps: int | None, n_walks: int | None) -> tuple[di
         pc["e8_probes"]["n_walks"] = int(n_walks)
     e6 = fs.e6_protocol(pc)
     e6["measure"] = "all"  # DECISIONS (18): E6's own setting (configs/e6/e6.yaml)
+    test_walks = pc["e8_probes"].get("test_only_validity_n_walks")
+    if test_walks is not None:  # TESTS ONLY (configs/e8/e8_mini.yaml): E4's validity probe on fewer walks; never in a real config
+        e6["validity"] = {**e6["validity"], "n_walks": int(test_walks)}
     if n_reps is not None:
         e6["n_reps"] = int(n_reps)
     return pc, e6

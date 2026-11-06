@@ -15,3 +15,6 @@ e8:
     e4_probe: true
     oracle_checkpoints: [0]
     oracle_k: 1
+    # TESTS ONLY: E4's validity probe on 10 walks instead of e6.validity.n_walks (150) -- the end-to-end test checks the
+    # plumbing, never a verdict that depends on the number of walks; configs/e8/e8.yaml must never set it (tested)
+    test_only_validity_n_walks: 10

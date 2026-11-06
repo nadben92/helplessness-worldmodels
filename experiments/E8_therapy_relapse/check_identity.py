@@ -51,6 +51,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--c12", type=Path, required=True)
     parser.add_argument("--oracle", type=Path, default=None)
     parser.add_argument("--image", default="training", help="E8's image name of the training image (shuffle: assignment01)")
+    parser.add_argument("--e5-records", type=Path, default=None,
+                        help="F0 (c): the exposed model's E5 run (its checkpoints.jsonl): the 12-assignment walks at --at, |diff| <= 0.05 bit")
+    parser.add_argument("--at", type=int, default=650000, help="--e5-records: the record's environment step (the start checkpoint)")
     parser.add_argument("--out", type=Path, default=None)
     args = parser.parse_args(argv)
     rows = [r for r in json.loads((args.probes / "rows.json").read_text(encoding="utf-8")) if r["pair"] == args.pair and r["image"] == args.image]
@@ -84,11 +87,26 @@ def main(argv: list[str] | None = None) -> int:
         for key in ("directed_share", "b_step1", "loc_template_step1"):
             mine = rows[0]["oracle_directed_share"] if key == "directed_share" else rows[0][f"oracle_{key}"]
             checks.append({"what": f"oracle k1 {key}", "ok": same(mine, o_row[key]), "e8": mine, "campaign": o_row[key]})
-    failed = [c for c in checks if not c["ok"]]
-    report = {"probes": str(args.probes), "pair": args.pair, "n_checks": len(checks), "n_failed": len(failed), "checks": checks}
+    tolerance = []
+    if args.e5_records is not None:  # F0 (c): another device (the cluster's GPU), EXPECTED_FORMS' tolerance
+        recs = [json.loads(x) for x in (args.e5_records / "checkpoints.jsonl").read_text(encoding="utf-8").splitlines() if x.strip()]
+        rec = next(r for r in recs if r["env_step"] == args.at)["e5"]["by_assignment"]
+        all_rows = json.loads((args.probes / "rows.json").read_text(encoding="utf-8"))
+        for r in (x for x in all_rows if x["pair"] == args.pair and x["role"] == "exposed"):
+            k = str(r["assignment"])
+            if k in rec:
+                record = rec[k]["walks"][r["slot"]]["I_curve"][0]
+                tolerance.append({"what": f"E5 record, assignment {k} ({r['slot']})", "ok": abs(r["walks_I_step1"] - record) <= 0.05,
+                                  "e8": r["walks_I_step1"], "record": record, "diff": r["walks_I_step1"] - record})
+    failed = [c for c in checks + tolerance if not c["ok"]]
+    report = {"probes": str(args.probes), "pair": args.pair, "n_checks": len(checks), "n_failed": len(failed), "checks": checks,
+              "e5_records_tolerance_0.05": tolerance}
     if args.out is not None:
         args.out.write_text(json.dumps(report, indent=1, default=float), encoding="utf-8")
-    print(f"F0 identity, {args.pair}: {len(checks) - len(failed)} / {len(checks)} comparisons hold"
+    if tolerance:
+        print(f"F0 (c), E5 records: {sum(c['ok'] for c in tolerance)} / {len(tolerance)} within 0.05 bit "
+              f"(max |diff| {max(abs(c['diff']) for c in tolerance):.4f})")
+    print(f"F0 identity, {args.pair}: {sum(c['ok'] for c in checks)} / {len(checks)} exact comparisons hold"
           + ("" if not failed else "; FAILED: " + ", ".join(c["what"] for c in failed)))
     return 0 if not failed else 1
 

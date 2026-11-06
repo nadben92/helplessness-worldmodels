@@ -262,3 +262,20 @@ skipped on a restart); a first short job must finish before the full chain is la
   meta.yaml with the weights' SHA-256 and their hash before / after; status.json).
 - C1 / C3 use the model's own tie tolerance (`agent_config.tie_tol_abs`, 0.0751 for every E4/E5 run: E7's
   `analyse_e7_diagnostics.TIE_TOL`).
+
+## 2026-11-06 (19) -- E7's lookahead keys fixed; E8's oracle checked (user, after the report of 2026-11-05)
+
+- **The bug (E7, finished).** `run_e7_diagnostics.phase_episodes` saved the lookahead's k-step episodes of the exposed
+  model and of its reference under one key (`none__0__k<k>`): in `episodes.npz` the reference's overwrote the exposed
+  model's. The rows of `summary.json` were computed before the save: no published value changes.
+- **The fix, minimal (user).** `episode_tag` gives the lookahead's arrays a model suffix (`none__0__k<k>__exposed`,
+  `__reference`); the induction's and softmax's keys are unchanged; no analysis, slide or paper script read these arrays
+  (checked). Tested (`tests/e6/test_e7_lookahead_keys.py`). Reduced E7 rerun (base_A, `--n-reps 1`, CPU) before / after:
+  the 6 summary rows bit for bit identical; the old key's arrays equal the new reference key's; the new exposed arrays
+  differ from them and give exactly the exposed row's directed share, at k = 1, 5 and 10. Nothing of the campaign is
+  rerun. Erratum: `experiments/E6_phenotypes_latent/IMPLEMENTATION_REPORT.md`, section 16.
+- **E8 does not inherit it.** The library's `critic_readout.oracle_q_fn` computes Q only and stores nothing; `probes_e8.py`
+  runs the oracle on the exposed model only and saves it under `<pair>__<image>__oracle__*` (one key per pair and image);
+  the checkpoint-0 check of base_A found E8's oracle arrays at the exposed row's directed share (0.8752, not the
+  reference's 0.9387). A guard now stops a probe job on any second write to a key of its `episodes.npz`; the shared
+  reference's arrays are saved once per image (its rows stay one per pair).
