@@ -168,3 +168,47 @@ sondes coûtent nettement moins que l'entraînement ; aucune réduction proposé
 
 **Vague 2** : toujours bloquée (`batches.LAUNCHABLE = ("e8_w1_base",)`) jusqu'à la validation de la vague 1 et la
 fixation de son budget par l'utilisateur.
+
+## 9. Jumeau tabulaire : comptages de départ reconstruits (6 novembre, DECISIONS (20))
+
+Le brouillon « jumeau abandonné » (hors dépôt, jamais commité) est supprimé. La règle et les formes ont été écrites et
+commitées avant tout calcul (a371172).
+
+**L'écart 333 410 / 300 000 (exposé base_B).** Ce n'est ni un préremplissage en plus ni un doublon. Chaque pas
+d'environnement stocke son observation de départ (300 000, les 256 pas de préremplissage compris : ce sont des pas en
+boucle fermée comme les autres, sans entraînement). Chaque épisode terminé stocke en plus sa dernière observation, avec
+`a = 0` : 33 410 épisodes terminés, dont 32 369 au but et 1 041 tronqués à 36 transitions (`checkpoints.jsonl` :
+33 410 épisodes, 32 369 succès). D'où 300 000 + 33 410 = 333 410. Le 33 411e épisode est en cours quand le run
+s'arrête : son dernier pas stocké porte la 300 000e action, mais son successeur n'est pas stocké. Pour la référence :
+339 938 = 300 000 + 39 938 (39 218 au but, 720 tronqués).
+
+**Ce qui compte comme transition (s, a, s').** Chaque pas stocké qui n'est pas une fin d'épisode, avec sa propre action ;
+s' est le pas stocké suivant du même épisode.
+- La transition vers le but compte. Rien ne sort du but : son `a = 0` n'est jamais compté.
+- La transition vers le 36e état d'un épisode tronqué compte. L'observation tronquée, elle, n'a pas de transition
+  (la troncature est une limite de boucle).
+- La réinitialisation n'est jamais une transition. Le préremplissage compte (le `N` de `run_one` le compte).
+- La transition en suspens (dernier pas, successeur non stocké) est complétée par la dynamique du run lui-même
+  (`transition_tensor()`, ligne vérifiée one-hot). C'est la seule utilisation de l'environnement. Exposé :
+  (133, 3) → 132 ; référence : (122, 2) → 134.
+
+**Code.** `twin/replay_counts.py` (nouveau, numpy seul) et `experiments/E8_therapy_relapse/start_counts.py`.
+Le test `tests/twin/test_replay_counts.py` (3 / 3, 48 s) vérifie l'égalité exacte avec le `counts.npz` de `run_one` à
+chaque checkpoint d'un run mini qui s'arrête en cours d'épisode, ainsi que les conventions sur des replays synthétiques.
+
+**Formes, base_B** (CPU local, 6 s ; résumé : `results/E8_therapy_relapse/start_counts/forms_base_B.json` ; comptages
+`N_<k>` à chaque checkpoint et `N_start` hors dépôt, `C:\nrw\e8_twin\base_B`) :
+
+| Forme | Exposé | Référence |
+|---|---|---|
+| TW0 comptabilité : transitions = `env_steps` du run, ligne à ligne (stockés, fins = épisodes, terminaux = succès, débuts = épisodes + 1 en cours) | 300 000 = 299 999 + 1 en suspens ; 7 / 7 | 300 000 = 299 999 + 1 en suspens ; 7 / 7 |
+| TW1 tapis roulant (zone nw, 25 cases) : toute transition comptée va au successeur du tapis, quelle que soit l'action | 20 954 transitions, 0 hors du tapis ; chaque case comptée sous les 5 actions, 1 successeur | — |
+| TW2 même zone chez la référence : le successeur dépend de l'action | — | 52 264 transitions ; chaque case sous les 5 actions, 5 successeurs distincts, aucune action à deux successeurs |
+| TW3 accord avec la dynamique du run, partout | 0 transition hors de P | 0 transition hors de P |
+
+**base_A** : son `replay_final.npz` a été écrit sur le cluster (`save_final_replay: true` dans E4), mais l'export d'E4 ne
+le prend pas. Il n'en existe aucune copie locale. Le jumeau de base_A attend ce fichier depuis `/scratch` ; la commande
+est la même (`start_counts.py --pair base_A ...`). Rien n'a été lancé sur le cluster.
+
+**Reste à faire pour le jumeau** (après la vague 1) : N_start + N_thérapie (le `steps.npz` / replay des runs de thérapie)
+→ T̂ du mélange, contrôlé par la forme TW (`np.array_equal`), puis b_tab en nw en fonction des visites.
