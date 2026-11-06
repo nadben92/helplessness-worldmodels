@@ -5,4 +5,5 @@ logged by any agent, tabular or world model.
 tabular_twin.py     twin_from_counts and its helpers (moved from experiments/E2_online_4zones/twin.py)
 matched_control.py  the matched-counts control and reference draws (moved from experiments/E2_online_4zones/
                     matched_control.py)
+replay_counts.py    N[s,a,s'] rebuilt from a closed-loop run's replay_final.npz (E8, docs/e8/DECISIONS.md (20))
 """
