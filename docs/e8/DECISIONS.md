@@ -279,3 +279,46 @@ skipped on a restart); a first short job must finish before the full chain is la
   the checkpoint-0 check of base_A found E8's oracle arrays at the exposed row's directed share (0.8752, not the
   reference's 0.9387). A guard now stops a probe job on any second write to a key of its `episodes.npz`; the shared
   reference's arrays are saved once per image (its rows stay one per pair).
+
+## 2026-11-06 (20) -- the twin's start counts rebuilt from `replay_final.npz` (user; implementer for the rule)
+
+Supersedes (14). The start runs' `counts.npz` are not available, but their `replay_final.npz` is the run's whole history
+(the replay is sized for the run, `ReplayBuffer.for_run`, and never overwritten), so the start counts are rebuilt from
+it, for the baselines only. The rule below is written before any count is computed.
+
+- **What a stored step is** (`agents/worldmodel/closed_loop.py`, E3 (5) of 2026-09-30). Every `step()` of the collector
+  stores the CURRENT observation (s_t, the action a_t taken from it, the reward of arriving at it, `is_first`), takes
+  the environment step and increments `N[s_t, a_t, s_{t+1}]`. When that step ends the episode (goal reached: `terminated`;
+  or H = 36 transitions without the goal: `truncated`), the episode's LAST observation is stored too, with `a = 0` (no
+  action is taken from it) and its flag. An episode of n transitions stores n + 1 steps; a reset is never a transition.
+- **The gap for base_B's exposed run, line by line** (`replay_final.npz` of the `e5_wave2` archive, `meta.yaml`,
+  `checkpoints.jsonl`). 333,410 stored steps = 300,000 source observations (one per environment step, the 256 prefill
+  steps included: they are closed-loop steps like the others, only without training; 179,846 gradient steps =
+  (300,000 - 256) x 0.6) + 33,410 end observations (32,369 at the goal, 1,041 truncated at 36 transitions) of the
+  33,410 completed episodes (`checkpoints.jsonl`: 33,410 episodes, 32,369 successes). 33,411 `is_first`: the 33,411th
+  episode is still running when the run stops after its 300,000th transition. Its reference: 339,938 = 300,000 +
+  39,938 (39,218 at the goal, 720 truncated). Nothing else (no prefill outside the 300,000, no duplicate, no reset step).
+- **What counts as a transition (s, a, s')**: every stored step that is NOT an episode end (`terminal` or `truncated`
+  false), with its own action, and as s' the state of the next stored step when that step is in the same episode
+  (`is_first` false). So:
+  - the transition INTO the goal counts (its s' is the goal's stored observation); nothing leaves the goal (its `a = 0`
+    is never counted: the goal is absorbing, the episode ends there);
+  - the transition into the 36th state of a truncated episode counts; the truncated observation's `a = 0` does not
+    (truncation is a loop limit, not a transition; CLAUDE.md);
+  - no transition from an episode's last observation to the next episode's first (the reset);
+  - the prefill's transitions count (`run_one`'s `N` counts them).
+- **The pending last transition.** When the run stops mid-episode, the last stored step is not an end and its successor
+  is not stored (the collector keeps it in memory, in `resume.pt`, not versioned). Its (s, a) is in the replay; its s'
+  is completed from the run's own environment, `two_zones_setup.world(cfg, conf, condition).env.transition_tensor()`,
+  the single source of the dynamics, after asserting that the row P[s, a] is one-hot (deterministic dynamics, from E4
+  on). This is the only use of the environment; that one transition is reported apart. Without a pending transition
+  (the run ends on an episode end) nothing is completed.
+- **Counts at a checkpoint k**: the first k transitions in the replay's order (`run_one` records `N_<k>` after k
+  environment steps). The twin's N_start is N at the start checkpoint (base_B: 300,000 = the whole run).
+- **Exactness**: the rebuilding function (new, `twin/replay_counts.py`, numpy only) is tested against `run_one`'s own
+  `counts.npz` on a mini run that writes both files: N at every checkpoint `np.array_equal`. The forms are in
+  EXPECTED_FORMS (TW0-TW3), written before the computation.
+- **base_A** (E4): E4 wrote `replay_final.npz` on the cluster (`configs/e4/e4.yaml`, `save_final_replay: true`), but E4's
+  `export_batch.py` leaves it out: no local copy exists. base_A's twin waits for the file from `/scratch` (the user).
+- Local computation only (CPU), nothing on the cluster. The rebuilt counts are written outside the repository (bulk
+  arrays); their summary (the forms' numbers) is committed.

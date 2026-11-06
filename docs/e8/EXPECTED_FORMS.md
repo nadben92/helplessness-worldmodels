@@ -55,7 +55,23 @@ training image; shuffle: the treated mean), for X in {b, C3, D}, over the checkp
   <= 0.15 for C3 and D.
 
 **TW -- tabular twin.** Its T_hat equals the count mixture (N_start + N_therapy) / (n_start + n_therapy) exactly
-(`np.array_equal` on the counts it is built from). Blocked while the start count tables are missing (DECISIONS (14)).
+(`np.array_equal` on the counts it is built from). N_start rebuilt from the start run's `replay_final.npz` (DECISIONS (20)), checked first by TW0-TW3
+(written 2026-11-06, before any count is computed; baselines only):
+- **TW0 -- accounting.** Transitions retained = the run's logged environment steps (`meta.yaml` `env_steps`, the last
+  record of `checkpoints.jsonl`), line by line: stored steps = retained transitions with a stored successor + pending
+  transitions (0 or 1, completed from the run's environment) + end observations; end observations = completed
+  episodes = `checkpoints.jsonl`'s `episodes`; terminal end observations = its `successes`; every end observation is
+  followed by an `is_first` (or ends the replay) and every `is_first` but the first follows an end. Any other gap fails.
+- **TW1 -- the exposed conveyor.** On the cells of the exposed run's UD zone (nw for `p1-b-d1`), every counted
+  transition goes to the conveyor's successor of its cell (the row P_exp[s, a] of the run's environment, the same for
+  the 5 actions), whatever the action: zero counts elsewhere, and every zone cell with counts has them under at least
+  2 distinct actions.
+- **TW2 -- the reference's same zone.** On the same cells in the reference run, the successor depends on the action:
+  for every cell, distinct counted actions have distinct counted successors (each action one successor), so every cell
+  counted under >= 2 actions has >= 2 distinct successors.
+- **TW3 -- agreement with the dynamics.** Every counted transition of either run, anywhere, has P[s, a, s'] = 1 in its
+  run's environment (deterministic dynamics), and the rebuilding function equals `run_one`'s `counts.npz` at every
+  checkpoint of a mini run (`np.array_equal`; tested).
 
 ## 2. Recovery times (definitions used by the predictions)
 
