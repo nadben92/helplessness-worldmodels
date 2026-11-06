@@ -78,6 +78,8 @@ pessimiste ; elle sera refaite sur le premier job shuffle (12 images).
 
 ## 5. Points ouverts
 
+État au 5 novembre ; les points 2 et 3, et le point 5 pour shuffle F, sont traités en section 8.
+
 1. **Jumeau tabulaire bloqué** (DECISIONS (14)) : les `counts.npz` des runs de départ ne sont pas en local. Existent-ils
    sur `/scratch` ?
 2. **Bug d'E7** (section 4) : signalé, non corrigé.
@@ -117,3 +119,52 @@ python experiments/E8_therapy_relapse/chain_cpu.py --batch e8_w1_base --batch-ro
 python experiments/E8_therapy_relapse/check_identity.py --probes <probes__base_A_ref__k000000__*> --pair base_A --e6 <e6__base_A__*> --c12 <e7d7__base_A__natural__natural_training__*> --oracle <e7diag__base_A__lookahead__*>
 python experiments/E8_therapy_relapse/analyze_e8.py --probes "C:/nrw/e8_w1/probes/E8_therapy_relapse/probes__*" --runs "C:/nrw/e8_w1/extracted/results/E8_therapy_relapse/grid12x12__*" --out results/E8_therapy_relapse/e8_w1_base --e6-cloud "C:/nrw/wt-e6/scratch/all/e6_*/E6_phenotypes_latent/e6__*"
 ```
+
+## 8. Suite du 6 novembre : correctif d'E7, tests, jumeau, identité de shuffle F
+
+**Correctif d'E7 (commit 565ea11, DECISIONS (19)).** `run_e7_diagnostics.episode_tag` donne aux tableaux de la phase
+`lookahead` un suffixe de modèle (`none__0__k<k>__exposed`, `__reference`) ; les clés de l'induction et du softmax ne
+changent pas ; aucun script d'analyse, de diapositives ou du papier ne lisait ces tableaux. Test :
+`tests/e6/test_e7_lookahead_keys.py`. Rejeu réduit (base_A, `--n-reps 1`, CPU) avant / après : les 6 lignes de synthèse
+identiques bit pour bit ; les tableaux de l'ancienne clé égaux à ceux de la nouvelle clé `reference` ; les nouveaux
+tableaux `exposed` en diffèrent et redonnent exactement la part dirigée de la ligne « exposed », à k = 1, 5 et 10. Rien de
+la campagne n'est relancé. Erratum d'une ligne : rapport d'E6/E7, section 16.
+
+**L'oracle d'E8 n'hérite pas du bug (constaté).** `probing.critic_readout.oracle_q_fn` (le code déplacé) calcule Q et
+n'écrit rien ; le bug était dans l'écriture d'E7, pas dans l'oracle. `probes_e8.py` ne fait tourner l'oracle que sur
+l'exposé et l'écrit sous `<paire>__<image>__oracle__*`, une clé par paire et par image. Au checkpoint 0, la part dirigée
+des tableaux oracle d'E8 est celle de la ligne « exposed » de la campagne (base_A : 0,8752, pas 0,9387 ; shuffle F :
+0,8590, égale à la ligne). Garde-fou ajouté : un job de sondes s'arrête (`KeyError`) à toute seconde écriture d'une clé
+de son `episodes.npz` ; les tableaux de la référence partagée sont écrits une fois par image (ses lignes restent une par
+paire).
+
+**Test de bout en bout.** Sonde de validité d'E4 à 10 marches au lieu de 150, dans le test seulement :
+`test_only_validity_n_walks: 10` dans `configs/e8/e8_mini.yaml`, commenté « TESTS ONLY » ; `configs/e8/e8.yaml` n'a aucune
+clé `test_only` (testé : `test_campaign_config_has_no_test_only_setting`), les runs réels gardent 150 marches. Le test
+n'affirme que la tuyauterie (fichiers, clés, nombre d'affectations, tirages nw, statuts), aucun verdict qui dépende du
+nombre de marches. Suite complète (`pytest`, worktree `e8`, machine au repos, CPU) : **1 179 passés, 6 sautés, 3 xfail, 0 échec, en 6 771 s (1 h 53)** ; le test de bout en bout en prend 2 461 s (41 min, contre 75 min avant la réduction), puis vient l'extension d'E5 (≈ 21 min). Les 6 sauts et 3 xfail sont antérieurs à E8 et dus à l'environnement ou à l'histoire d'E3 (inductor absent, handoff pilote d'E3 absent, `RUN_GPU.md` d'E3, xfail stricts du protocole d'E3) ; l'identité d'entraînement d'E4 bit pour bit a tourné.
+
+**Jumeau tabulaire.** Non touché. Constat en passant (vérifié, rien reconstruit) : `replay_final.npz` n'est pas tronqué
+— le replay d'un run E4/E5 est dimensionné pour tout le run et jamais écrasé (`ReplayBuffer.for_run`) ; celui de
+l'exposé de base_B contient 333 410 pas = ses 300 000 transitions + les observations finales de ses 33 410 épisodes.
+Des comptages tirés de lui seraient donc ceux du run. L'entrée DECISIONS « jumeau abandonné pour E8 » est préparée hors
+du dépôt, non commitée (`C:\nrw\e8short\DECISIONS_draft_twin_abandoned.md`), en attendant la vérification de `/scratch`.
+
+**Identité au checkpoint 0, shuffle F (`treated_quadrant: nw`).** Run court en local (CPU, 300 pas, checkpoints 0 et 300 ;
+exposé F et référence B), sondes au checkpoint 0 sur les 12 images, contre la campagne à 650 000 :
+
+| Vérification | Résultat |
+|---|---|
+| F0 (a) `check_identity.py` (épisodes et lignes d'E6, sonde d'E4, tableaux C1/C3 de D7, oracle k = 1 sur ses lignes ; exposé et référence) | **43 / 43 égalités exactes** |
+| F0 (b) le code existant appelé directement sur le fichier de départ de F (`walks_by_assignment` d'E5 sans option, `run_model` d'E6 sans q_fn de lecture), contre les lignes et tableaux du job | **marches 12 / 12, épisodes d'E6 12 / 12 égaux bit pour bit** |
+| F0 (c) enregistrements d'E5 (b au pas 1 par affectation, mesurés sur GPU au cluster) à 0,05 bit | **12 / 12** (écart max 0,043, affectation 2) |
+| Validité d'E4 sur les 12 images | 12 / 12 valides ; b de −2,21 à −1,97 |
+| F0 (d) poids du checkpoint 0 = fichier de départ (F et B ; SHA-256 du départ vérifié au chargement) | 61 / 61 tenseurs égaux (`torch.equal`) pour chacun ; le fichier du checkpoint 0, ré-sérialisé, a son propre SHA-256 |
+| Tirages de la thérapie (run court) | affectations 0, 1, 2 seulement (UD en nw) ; épisodes 17 / 12 / 11 pour F, 17 / 12 / 12 pour la référence B, même suite d'affectations (flux commun ; B fait un épisode de plus en 300 pas) |
+
+**Coût mesuré d'un job shuffle** (12 images, F + référence B, oracle compris, CPU, 1 thread) : 3 535 s. Vague 2 (3 paires
+partageant la référence B, 14 checkpoints) : ≈ 33 h CPU, ≈ 3 h sur 12 processus, contre 71–85 h estimées en (12) — les
+sondes coûtent nettement moins que l'entraînement ; aucune réduction proposée.
+
+**Vague 2** : toujours bloquée (`batches.LAUNCHABLE = ("e8_w1_base",)`) jusqu'à la validation de la vague 1 et la
+fixation de son budget par l'utilisateur.
