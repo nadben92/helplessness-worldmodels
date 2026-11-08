@@ -139,3 +139,57 @@ untreated / mean f_X over the treated (defined when the treated mean f_X >= 0.25
   otherwise mixed.
 - Untreated assignments are also split by where T_inc is (each of ne, se, sw) and by whether nw is neutral or CD in
   them (descriptive).
+
+## 4. Wave 1 additions (written 2026-11-08, before any of these is computed)
+
+Written after the `e8_w1_base` archive was verified (MANIFEST: 262 files, 0 problem; 4 runs `done`; 28 probe jobs
+`done`) and before any health number, count, twin value or cross-device difference was computed. While reading the
+record's structure, one record was displayed: base_A exposed at 150,000 (success rate 1.0; `mass_true_by_region` nw
+0.985; `switch_step` 0); it is stated here, and the thresholds below are E4's / E5's existing levels, not tuned on it.
+
+**H -- health of the therapy training.** For every run of the batch:
+- (a) the run is `done` at `max_env_steps` (150,000 in wave 1), `switch_step` = 0 in every record (the switch never
+  fires again), and the collapse guard's statistic stays above E5's collapse threshold (1.0 bit) at every evaluation
+  recorded (`switch_pairs.stat_min` > 1.0 in every record that has one);
+- (b) `success_rate` (the record's last 100 episodes) >= 0.90 at every checkpoint t >= 5,000;
+- (c) the health record's prior mass on the true successor (`health.mass_true_by_region`) >= 0.90 (E4's mass criterion)
+  at every t >= 5,000 in every region of the reference, and in every region but nw for the exposed run (in nw the
+  exposed run's mass is the old belief being corrected: reported as a recovery curve, exploratory, no verdict).
+- Before 5,000 a transient is allowed (as R): reported with its depth and checkpoints. `I_s_by_region` is reported
+  (exploratory).
+A failure of H is a form failure (section 1): reported, and the predictions are not read until it is understood.
+
+**TW on the therapy counts** (baselines; the run's own `counts.npz`, written by `run_one`):
+- **TW4 -- the run's counts equal the replay's.** At every checkpoint k of the run's grid, `counts.npz`'s `N_<k>` equals
+  the counts rebuilt from the run's `replay_final.npz` with DECISIONS (20)'s rule (`twin.replay_counts`), the pending
+  transition (if any) completed by the **therapy world's** dynamics (`two_zones_setup.world(cfg, conf, "reference")`,
+  the world of `e8_therapy.make_hooks`, for the exposed run and its reference alike): `np.array_equal`. Any difference
+  stops the twin and is reported.
+- **TW0 and TW3 on the therapy**, as in section 1 (transitions = 150,000 = `env_steps`; every counted transition has
+  P[s, a, s'] = 1 in the therapy world).
+- **TW2 on both runs** (replaces TW1 on the therapy: nw is controllable there for the exposed run as for the
+  reference): on nw's cells, distinct counted actions have distinct counted successors, each action one successor.
+- **TW -- the mixture.** At every therapy checkpoint k, the counts the twin is built from are N_mix(k) = N_start +
+  N_<k> (`np.array_equal` against the sum of the two stored tables; N_start of section 1's TW0-TW3, `C:\nrw\e8_twin`).
+  The twin is E2's `twin_from_counts` through `pipeline.agent_run.twin_at_checkpoint` (alpha = the run's `twin.alpha`,
+  1.0; geographic support), so T_hat is the twin's usual estimator of the mixture: (N_start + N_therapy) /
+  (n_start + n_therapy) up to that prior.
+- **b_tab** (descriptive, no verdict): the twin's per-state b (I_hat - I_ref, the matched-count reference drawn from the
+  reference dynamics) averaged over nw's 25 cells, for the exposed run and the reference, against the therapy's
+  treated-zone visits and environment steps, beside the world model's b. Expected shape: the reference's b_tab near 0
+  throughout; the exposed run's b_tab starts at its start value and rises as a dilution curve, slowly at first (the
+  start counts in nw are about 22,000 conveyor transitions), with no threshold attached. It is an interpretative
+  reference curve, not a paired control (the world model restarts from an empty replay).
+
+**X -- the cluster's probes against the local CPU probes (exploratory).** The analysis reads the local CPU reruns of
+the 28 probe jobs (same code, weights and seeds; the device of the 650,000 campaign, so F0 (a) is exact). The
+cluster's GPU jobs are compared with them field by field (max |difference| of b, C1, C3 and D over the checkpoints);
+reported, no verdict.
+
+**Localisation over the therapy (descriptive, no verdict).** L_dec(t) (the decoder's `loc_template` in the zone), the
+quadrant the agent is drawn in when mislocalised (`loc_mis_decoded_in_<q>`: E6's "quadrant jump" regime when one
+quadrant takes most of it), and the directed share from the true cell on the well and badly localised zone steps.
+
+**P2 in wave 1.** P2 (a) needs 5 exposed agents and (b) the shuffle agents: neither is decidable on the two baselines.
+Wave 1 reports the lags of base_A and base_B (with censoring) and their belief / cache decomposition; the verdicts of P2
+are read after wave 2. No threshold of section 3 changes.
