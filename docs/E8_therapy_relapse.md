@@ -1,6 +1,7 @@
 # E8 — Therapy and relapse
 
-**Status (2026-11-05): design written, code not started.** Branch `e8` (from `v0.2-e7`). The user's brief:
+**Status (2026-11-08): wave 1 (baselines) run and analysed (report section 11: control forms held, P1 held, P2 not
+decidable on the baselines, P3 did not hold); wave 2 (shuffle) proposed, not launched.** Branch `e8` (from `v0.2-e7`). The user's brief:
 `docs/e8/prompt_e8_therapie.md`. Decisions: `docs/e8/DECISIONS.md`. Expected forms and predictions, committed before any
 computation: `docs/e8/EXPECTED_FORMS.md`. Report: `experiments/E8_therapy_relapse/IMPLEMENTATION_REPORT.md`.
 

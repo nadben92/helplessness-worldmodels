@@ -256,3 +256,163 @@ les 150 000 pas de la thérapie entrent par `max_env_steps`. Dans un run E8, ce 
 - les checkpoints, la taille du replay et la fin du run se lisent sur les 150 000 pas ;
 - `planned_env_steps` ne sert qu'au contrôle de cohérence d'une reprise et aux métadonnées (`results.json` :
   `planned_env_steps: 300000`, `truncated_by_max_env_steps: true`), qu'aucun script d'E8 ne lit.
+
+## 11. Vague 1 (baselines) : analyse (8 novembre)
+
+Code du cluster : `95c235b` (runs et sondes). Le seul commit local postérieur alors présent, `fa102ea`, ne touchait que ce
+rapport et `forms_base_A.json` : rien de l'entraînement ni des mesures. Formes ajoutées avant tout calcul : EXPECTED_FORMS
+section 4 (7905b01) ; décisions (21), (22) (f2d69c7).
+
+### 11.1 Vérification de l'export
+
+- `e8_w1_base__20261108T165312Z.tar.gz` extrait hors dépôt (`C:\nrw\e8_wave1\extracted`) ; `export_batch.py verify` :
+  **262 fichiers, 0 problème**. Les 4 runs sont `done` à 150 000 pas (89 846 pas de gradient), et chacun a ses 14 checkpoints.
+- Les 28 jobs de sondes sont présents, un par paire et par checkpoint, tous `done`, chacun avec 2 lignes (exposé,
+  référence). Ils ont tourné sur **GPU** (`device: cuda`, torch 2.10.0+cu128).
+- Les 8 fichiers rapatriés à part ont été copiés dans leurs dossiers de runs par `place_run_files.py` (2af568a, originaux
+  conservés, SHA-256 vérifié après copie). Chaque dossier est identifié par le nom de dossier de run contenu dans le nom
+  du fichier.
+- **Sondes refaites sur CPU** (DECISIONS (21)). F0 (a) est définie sur le device de la campagne à 650 000. Les 28 jobs ont
+  donc été relancés en local par `chain_cpu.py` : smoke d'abord (3,5 min), puis la tâche planifiée `E8_w1_cpu_chain`
+  (12 processus, 52 min, 28/28 `done`). Sorties hors dépôt, dans `C:\nrw\e8_wave1\probes_cpu`. L'analyse lit ces reprises.
+
+### 11.2 Formes de contrôle : toutes vérifiées
+
+| Forme | Résultat |
+|---|---|
+| F0 (a) checkpoint 0 = campagne à 650 000, CPU, égalité exacte (`identity/F0a_base_*.json`) | **base_A 43 / 43, base_B 43 / 43** |
+| F0 (c) base_B, I de l'exposé au pas 1 (marches canoniques) contre l'enregistrement d'E5 à 300 000 (0,000799), 0,05 bit | CPU 0,0111 (écart 0,010) : tient. Le job GPU du cluster redonne l'enregistrement exactement (écart 0,0). base_A n'a pas d'enregistrement local (prévu) |
+| F0 (d) poids du checkpoint 0 = fichier de départ (RSSM, tête but, critic, critic lent) | 61 / 61 tenseurs égaux pour chacun des 4 modèles ; SHA-256 des départs conformes |
+| H (a) pas de rebascule, pas d'effondrement | `switch_step` = 0 dans tous les enregistrements ; statistique de la garde ≥ 4,99 bits sur 1 797 évaluations par run (seuil 1,0) |
+| H (b), (c) succès et masse par région dès 5 000 | succès 1,0 à tous les checkpoints ; masse min. hors nw de l'exposé ≥ 0,933 (exposés) et ≥ 0,958 (références). Transitoire unique au checkpoint 500 : couloir à 0,889 (base_A exp.) et 0,886 (base_B exp.) |
+| R la référence reste contrôlable | **tient**, sans transitoire : I_réf 2,29–2,32 à tous les checkpoints ; C1, C3 et D dans ± 0,05 de leur valeur au checkpoint 0 partout |
+| M l'exposé ne se dégrade pas en nw | **tient** : ρ (b, C3, D) = 1,00 / 0,95 / 0,70 (base_A) et 1,00 / 1,00 / 0,87 (base_B) ; drawdown max. 0,045 (C3 de base_A) |
+| X GPU du cluster contre CPU local (exploratoire) | écart max. : b 0,081 (base_A, 2 000), C1 0,051, C3 0,040, D 0,050 (base_B, 500) ; écarts médians : b 0,012, D 0,002 |
+
+### 11.3 Prédictions, telles que calculées (seuils d'EXPECTED_FORMS)
+
+Abscisses (identiques pour les deux paires) : 500 / 1 000 / 2 000 / 3 500 / 10 000 / 25 000 pas d'environnement =
+146 / 446 / 1 046 / 1 946 / 5 846 / 14 846 pas de gradient. Visites de nw entre parenthèses.
+
+| | base_A | base_B |
+|---|---|---|
+| b(0) → b(150 000) (marches, pas 1) | −2,29 → −0,07 | −2,30 → −0,02 |
+| t½ b | 3 500 (288) | 2 000 (227) |
+| t½ C1 / C3 / D | 1 000 (87) / 2 000 (154) / 1 000 (87) | 500 (53) / 2 000 (227) / 2 000 (227) |
+| b > −0,5 (franchissement) | 25 000 (2 842) | 10 000 (1 167) |
+| g_D ≤ 0,05 (comportement au niveau de la référence) | 2 000 (154) | 3 500 (402) |
+| t½ soutenus | égaux aux t½ (aucune rechute) | égaux aux t½ |
+
+Aucun t½ n'est censuré.
+
+- **P1 (la correction tient) : tient pour base_A et base_B.** Aucun t½ de b n'est censuré, b(T) > −0,5, et b ne retombe jamais
+  sous −1,0 après son franchissement : la remontée est monotone (ρ = 1).
+- **P2 : non décidable en vague 1** (section 4 d'EXPECTED_FORMS). Les retards t½(D) − t½(C3) valent **−1 000 pas (base_A :
+  le comportement avant la lecture du planificateur)** et **0 (base_B)**. Aucun retard positif chez les baselines, ce qui
+  est compatible avec un cache faible. Le verdict attend shuffle A, E et F.
+- Décomposition croyance / cache (descriptive, `decomposition.csv`). Au checkpoint 0, effet croyance 0,39 et effet cache
+  0,064 (base_A) ; 0,35 et 0,165 (base_B), soit les valeurs de la campagne d'E7. L'effet cache tombe à −0,009 dès 2 000
+  chez base_A ; chez base_B, il vaut 0,086 à 2 000, puis −0,004 à 10 000. L'effet croyance est < 0,025 dès 2 000 (A), et
+  < 0,006 dès 10 000 (B).
+- **P3 (récupération en marche) : ne tient pas pour base_A ni pour base_B.** Les deux gains sont suffisants (D : 0,45 et
+  0,51 ; b : 2,23 et 2,28). Mais s_D = 0,45 et 0,44 < 0,5 : la part dirigée monte sur trois intervalles de la grille
+  (0–500, 500–1 000, 1 000–2 000), pas sur un seul. Et s_b = 0,23 et 0,30 < 0,5. La grille est fine à cet endroit : ce n'est
+  pas une marche sous-échantillonnée (limite écrite en P3).
+
+### 11.4 Résultats exploratoires (non prévus, marqués comme tels)
+
+1. **Le comportement suit C1, C3 et la localisation, pas b.** C1, C3, D et la localisation par le décodeur sont tous revenus
+   au niveau de la référence entre 1 000 et 3 500 pas (87 à 402 visites de nw). b, lui, est encore à −1,27 (A) et −1,05 (B)
+   à 2 000, et ne passe −0,5 qu'à 10 000–25 000 pas. Dans le plan (b, D) (`b_vs_directed.png`), les points d'E8 sont sur le
+   nuage d'E6 à 650 000 : D ≈ 0,92–0,94 dès b ≈ −1,1. C'est la leçon d'E7 : b sous-estime la récupération que l'agent
+   utilise.
+2. **Localisation** (`localisation_base_*.png`). Au checkpoint 0, l'exposé est mal localisé sur 39 % (A) et 29 % (B) des
+   pas en zone. Il est alors dessiné en se à 97 % et 99 %, le régime « saut de quadrant » d'E6. L_dec dépasse 0,97 dès
+   1 000 (A) et 0,99 dès 2 000 (B). Ensuite, il reste moins de 10 pas mal localisés par checkpoint. Depuis la vraie case,
+   la part dirigée des pas mal localisés suit celle des pas bien localisés au checkpoint 0 (0,46 contre 0,50 pour A).
+3. **La part de pas en zone récupère beaucoup plus tard que la part dirigée.** Elle passe de 0,46 à 0,73 (A) et de 0,48 à
+   0,82 (B) à 150 000, pour 0,81–0,82 chez la référence. base_A n'y est pas encore à 150 000. La latence de récupération
+   vaut 1 pas dès 1 000–2 000.
+4. **La masse a priori sur le vrai successeur en nw** (enregistrement de santé, sur le replay de thérapie) remonte
+   progressivement, comme b : 0,22 → 0,985 (A) et 0,18 → 0,991 (B).
+
+### 11.5 Jumeau tabulaire (`twin/`, therapy_counts.py)
+
+| Forme | base_A exp. / réf. | base_B exp. / réf. |
+|---|---|---|
+| TW4 `counts.npz` = comptages reconstruits depuis `replay_final.npz`, aux 14 checkpoints | égaux / égaux | égaux / égaux |
+| TW0 comptabilité (150 000 transitions) | 171 892 = 149 999 + 1 en suspens + 21 892 fins / 171 928 = 149 999 + 1 + 21 928 | 171 749 = 150 000 + 0 + 21 749 / 171 808 = 150 000 + 0 + 21 808 |
+| Transition en suspens, complétée par la dynamique de thérapie | (45, 1) → 46 / (99, 3) → 98 | aucune |
+| TW2 en nw (contrôlable chez les deux) | 25 cases, 5 successeurs distincts | idem |
+| TW3 accord avec la dynamique de thérapie | 0 hors de P | 0 hors de P |
+| Mélange N_départ + N_thérapie (`np.array_equal`) | 14 / 14 | 14 / 14 |
+
+Aucun épisode tronqué pendant la thérapie (succès 1,0).
+
+**b_tab en nw** (jumeau d'E2, α = 1), à 150 000 :
+
+- exposé : −2,23 → **−1,44** (base_A, 20 278 visites de nw contre 22 254 transitions de tapis au départ) et −2,22 →
+  **−1,36** (base_B) ;
+- référence : 0 exactement (la dynamique est déterministe, donc les tirages appariés redonnent les mêmes comptages).
+
+Le world model franchit −0,5 après 1 100 à 2 800 visites. Le mélange des comptages est encore à −1,4 après 20 000 à
+26 000 visites (`twin_overlay.png`). Lecture interprétative : le world model ne moyenne pas l'ancienne expérience, il la
+réécrit (replay vide, poids réentraînés). Ce n'est pas un contrôle apparié.
+
+### 11.6 Proposition pour la vague 2 (non débloquée : `batches.LAUNCHABLE` inchangé)
+
+Lecture de la vague 1. Le comportement, C1 et C3 se corrigent en 1 000 à 3 500 pas (≈ 90–400 visites de nw). b franchit
+−0,5 entre 10 000 et 25 000 pas. À 60 000, b est à −0,18 et −0,09. Les shuffle ont appris 3 à 5 fois plus lentement, et
+leur cache est plus lourd (E7 : 0,22–0,24 chez A et E). Hypothèse : la thérapie partielle sur nw met T_inc en nw dans
+chaque épisode, avec la même géométrie, donc le taux de visites de la zone traitée devrait être proche de celui des
+baselines (≈ 0,13–0,18 par pas). Cette hypothèse est à vérifier au premier checkpoint.
+
+- **Budget `max_env_steps` = 250 000.** Franchissement de b à 25 000 (le plus lent des baselines) × 5 = 125 000, × 2 de
+  marge. P1 demande b(T) > −0,5 avec un plateau visible derrière, et P4 lit les non soignées à T. Alternative à 300 000 si
+  l'on veut voir le plateau de A et E avec plus de marge.
+- **Grille** : celle de la vague 1, prolongée : 0, 500, 1 000, 2 000, 3 500, 5 000, 7 500, 10 000, 15 000, 25 000, 40 000,
+  60 000, 100 000, 150 000, 200 000, 250 000 (16 checkpoints). La partie dense du début reste nécessaire. Chez les
+  baselines, tout le comportement s'est joué avant 3 500 pas ; ×3–5, cela donne 3 500–17 500 pas, que la grille couvre en
+  6 points. C'est aussi ce qui permet de décider P3 sans l'ambiguïté d'un long intervalle.
+- **Oracle** : 0, 2 000, 5 000, 10 000, 25 000, 60 000, 150 000, 250 000 (8 au lieu de 5). Chez les baselines, l'effet cache
+  disparaît entre 2 000 et 10 000 pas : la grille de 5 points ne l'aurait pas vu décroître chez A et E. Coût négligeable
+  (≈ 60 s par ensemble).
+- **Coût d'entraînement** : 4 runs (A, E, F, référence B) × 250 000 pas. Au rythme de la vague 1 (≈ 7 900 pas / h / run,
+  4 runs par pod), cela fait ≈ 32 h ; au rythme d'E5 (6 200 pas / h à 5 runs), ≈ 40 h. À 300 000 : 38–48 h.
+- **Coût des mesures** : 12 affectations par checkpoint, 3 paires partageant la référence B. Le job shuffle mesuré (F + B,
+  12 images) prend 3 535 s CPU, soit ≈ 2,4 h CPU par checkpoint pour les 3 paires (section 8). Sur 16 checkpoints, ≈ 38 h
+  CPU. Durée réelle en local : la vague 1 a demandé ≈ 3× le temps nominal par job sous 12 processus concurrents. Avec 16
+  jobs sur 12 processus (2 tours), compter **≈ 12–15 h** de chaîne CPU. F0 (a) impose le CPU pour le checkpoint 0 ; le
+  reste pourrait tourner sur le GPU du cluster (écarts X ci-dessus), à décider.
+- À faire avant le lancement, sur décision de l'utilisateur : `max_env_steps`, `checkpoints` et
+  `probes.oracle_checkpoints` dans un bloc de vague 2 de `configs/e8/` ; `e8_w2_shuf_nw` dans `batches.LAUNCHABLE` ;
+  `--dry-run` d'abord.
+
+### 11.7 Figures et sorties (`results/E8_therapy_relapse/e8_w1_base/`)
+
+- `figures/recovery_<paire>.png` : b, C1, C3 et D en fonction des pas d'environnement.
+- `figures/recovery_3abscissae_<paire>.png` : les mêmes, en fonction des pas d'environnement, des pas de gradient et des
+  visites de nw.
+- `figures/localisation_<paire>.png` : L_dec, quadrant décodé des pas mal localisés (avec leur nombre), part dirigée depuis
+  la vraie case.
+- `figures/decomposition.png` : effets croyance et cache aux checkpoints de l'oracle.
+- `figures/b_vs_directed.png` : points (b, D) de tous les checkpoints sur le nuage d'E6 à 650 000.
+- `figures/twin_overlay.png` : b_tab du jumeau et b du world model en fonction des visites de nw.
+- Tables : `curves.csv`, `recovery.csv`, `decomposition.csv`, `devices.csv`, `forms.json` (H, R, M, P1–P3, X),
+  `identity/F0a_base_*.json`, `twin/forms_therapy_base_*.json`, `twin/twin_base_*.csv`.
+
+### 11.8 En bref
+
+- Formes de contrôle : F0 (43/43 exactes sur CPU pour les deux paires), H, R, M et TW0–TW4 tiennent toutes. Les sondes
+  GPU du cluster s'écartent du CPU de 0,08 bit au plus.
+- P1 tient chez base_A et base_B : b remonte de −2,3 à −0,07 et −0,02, de façon monotone, et franchit −0,5 à 25 000 et
+  10 000 pas.
+- Le comportement se corrige vite : D au niveau de la référence à 2 000 et 3 500 pas (150–400 visites de nw), avec C1, C3 et
+  la localisation. b suit beaucoup plus lentement (exploratoire : b sous-estime la récupération utilisée).
+- P2 n'est pas décidable sur les baselines. Retards de −1 000 et 0 pas, et effet cache résorbé entre 2 000 et 10 000 pas :
+  compatible avec un cache faible.
+- P3 ne tient pas : D monte sur trois intervalles fins de la grille (s_D 0,45 et 0,44), pas d'un coup.
+- Le jumeau des comptages (dilution) reste à −1,4 à 150 000. Le world model réécrit sa croyance bien plus vite que la
+  moyenne de son expérience.
+- Ouvert : P2 et P4 (shuffle, vague 2) ; la part de pas en zone de base_A, pas encore revenue à 150 000 ; la vague 2
+  (250 000 pas, 16 checkpoints, 8 points d'oracle proposés) attend la validation de l'utilisateur.
