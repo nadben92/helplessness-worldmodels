@@ -322,3 +322,26 @@ it, for the baselines only. The rule below is written before any count is comput
   `export_batch.py` leaves it out: no local copy exists. base_A's twin waits for the file from `/scratch` (the user).
 - Local computation only (CPU), nothing on the cluster. The rebuilt counts are written outside the repository (bulk
   arrays); their summary (the forms' numbers) is committed.
+
+## 2026-11-08 (21) -- wave 1's probe set: the local CPU reruns (implementer, after the export was verified)
+
+The cluster ran `--phase probes` on its GPU (28 jobs, `device: cuda`, code 95c235b). F0 (a) is defined on the same
+machine and device as the 650,000 campaign (local CPU, 1 thread), and the report's section 7 planned the local CPU
+probes (`chain_cpu.py`). So the 28 jobs are rerun on the local CPU from the archive's checkpoint weights (same code,
+same seeds; scheduled task `E8_w1_cpu_chain`, smoke job first), outside the repository, and the analysis reads these.
+The cluster's GPU outputs are kept untouched and compared with them (EXPECTED_FORMS section 4, X: exploratory).
+
+## 2026-11-08 (22) -- the therapy runs' replays and counts, and the twin of the therapy (implementer)
+
+- **Where the files go.** The `replay_final.npz` and `counts.npz` of each therapy run, brought back apart (the archive
+  never holds them) as `<run directory>__replay_final.npz` / `__counts.npz`, are copied under their plain names into
+  their run's directory of the extracted batch, next to its `meta.yaml` (base_A's and base_B's convention, report
+  sections 9-10), the originals kept; the run is identified by the directory name inside each file name, never guessed
+  (`place_run_files.py`: paths as arguments, SHA-256 checked after the copy, an existing different file refused).
+- **The therapy's counts.** Rebuilt from `replay_final.npz` by `twin.replay_counts` (DECISIONS (20)'s rule) with the
+  therapy world's dynamics for the pending transition, compared with the run's `counts.npz` (TW4).
+- **The twin's reference draws.** `pipeline.agent_run.twin_at_checkpoint` unchanged, called with the START run's seed
+  and condition (exposed: `experimental`; reference: `reference`) and env_step = n_start + k (the mixture's total of
+  environment steps, 300,000 + k): its matched-count reference is a child of the start run's `reference` stream keyed by
+  that total, as if the start run's own twin went on; no two mixtures share a key. The world passed (P_true) is the
+  therapy world; P_ref the reference dynamics (the same kernel in the therapy).
