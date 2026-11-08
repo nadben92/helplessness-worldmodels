@@ -193,3 +193,43 @@ quadrant takes most of it), and the directed share from the true cell on the wel
 **P2 in wave 1.** P2 (a) needs 5 exposed agents and (b) the shuffle agents: neither is decidable on the two baselines.
 Wave 1 reports the lags of base_A and base_B (with censoring) and their belief / cache decomposition; the verdicts of P2
 are read after wave 2. No threshold of section 3 changes.
+
+## 5. Wave 2 additions (written 2026-11-08, before any wave 2 run or computation)
+
+Wave 2 (`e8_w2_shuf_nw`, DECISIONS (23)): shuffle A, E, F and reference B, therapy on nw, T = 250,000, 16 checkpoints,
+oracle at 0, 2,000, 5,000, 10,000, 25,000, 60,000, 150,000, 250,000; probes on the local CPU. Nothing of wave 2 exists
+yet. These points make section 3's P2 and P4 and section 4's H operational for the shuffle agents; no threshold already
+written changes.
+
+**P2 (shuffle agents, with wave 1's baselines).**
+- Lags are read on the treated curves (mean over the valid treated assignments, section 0). The lags of base_A and base_B
+  are wave 1's as computed (T = 150,000; neither t½ censored: -1,000 and 0 steps); those of A, E and F come from wave 2
+  (T = 250,000). A censored t½ enters at its own run's T.
+- An agent's lag is **undefined** when either t½ is "nothing to recover" (g(0) < 0.10) or both are censored. For (a),
+  an agent with an undefined lag counts as **not** positive: (a) holds when at least 4 of the 5 exposed agents have a
+  defined lag > 0. For (b), any undefined lag among the five makes (b) **not decidable** (reported, not a failure).
+- Lags are differences of grid checkpoints: a lag of 0 means the same checkpoint, not "no lag at finer resolution".
+  P2 holds when (a) and (b) both hold; if (b) is not decidable, P2's verdict is (a)'s alone, reported as such.
+- The cache effect's shape (descriptive): its value at the last oracle checkpoint over its value at 0, per agent;
+  expected lower in the baselines and F than in A and E.
+
+**P4 (transfer).** Per shuffle agent, at T, per assignment image:
+- An image enters only when its point is valid at 0 and at T (the reference's walks at that checkpoint, section 0).
+- **Treated images** (UD slot nw): f_b = 1 - b(T)/b(0) when b(0) <= -0.5 (as t½'s condition); f_D = 1 - g_D(T)/g_D(0)
+  when g_D(0) >= 0.10.
+- **Untreated images** (the 9 others): the same set for f_b and f_D, the images with b(0) <= -1.0; f_D further needs
+  g_D(0) >= 0.10. (Section 3 wrote the b(0) condition for both; the analysis applies it to f_D too.)
+- f is not clipped (it may exceed 1 or be negative). Group means are plain means over the images that enter.
+- TI_X = mean f_X (untreated) / mean f_X (treated), defined when the treated mean f_X >= 0.25 and at least one image of
+  each group enters; otherwise "undefined" (reported with the counts). Verdict from TI_D: >= 0.5 transfer, <= 0.2 no
+  transfer, between partial; then over the 3 agents: "transfer" or "no transfer" if at least 2 of 3 agree, otherwise
+  mixed (an undefined agent agrees with neither).
+- Descriptive, no verdict: f_b(t), f_D(t) at every checkpoint, treated and untreated; the untreated split by where T_inc
+  is (ne, se, sw) and by nw's role in the image (neutral or CD).
+
+**H for the shuffle runs.** The health record is E5's `real_context_by_assignment` on the 3 treated assignments, keyed
+by assignment: (c) applies to every region of each treated assignment's record, except, for the exposed runs, the
+assignment's UD slot (nw: the old belief being corrected, reported as a recovery curve); (a) and (b) as written.
+
+**Treated-zone visit rate (descriptive).** Visits of nw per therapy step at each checkpoint, beside the baselines'
+(0.13-0.18): the assumption behind the budget (DECISIONS (23)).
