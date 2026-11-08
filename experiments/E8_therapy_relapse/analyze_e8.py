@@ -171,6 +171,51 @@ def form_R(rows: list[dict]) -> dict:
     return {"held": all(v["held"] for v in out.values()), "by_model": out}
 
 
+H_FROM, H_SUCCESS, H_MASS, COLLAPSE_BITS = 5000, 0.90, 0.90, 1.0
+
+
+def form_H(patterns: list[str]) -> dict:
+    """EXPECTED_FORMS section 4, H, on every therapy run: done at max_env_steps, switch_step 0 in every record, the
+    collapse guard's statistic above 1.0 bit at every evaluation, and from 5,000 on a success rate >= 0.90 and a prior
+    mass on the true successor >= 0.90 in every region (the exposed run's nw apart: reported, no verdict)."""
+    out = {}
+    for p in patterns:
+        for d in sorted(glob.glob(p)):
+            d = Path(d)
+            if not (d / "checkpoints.jsonl").is_file():
+                continue
+            cfg = yaml.safe_load((d / "config.yaml").read_text(encoding="utf-8"))
+            meta = yaml.safe_load((d / "meta.yaml").read_text(encoding="utf-8"))
+            model, exposed = cfg["e8"]["run"]["model"], cfg["e8"]["run"]["role"] == "experimental"
+            recs = [json.loads(x) for x in (d / "checkpoints.jsonl").read_text(encoding="utf-8").splitlines() if x.strip()]
+            budget = int(cfg["e8"]["max_env_steps"])
+            stats = [e[1] for r in recs for e in (r.get("switch_pairs") or {}).get("evals", [])]
+            a = {"status_done": meta["status"] == "done", "env_steps": int(meta["env_steps"]), "at_budget": int(meta["env_steps"]) == budget,
+                 "switch_step_0_everywhere": all(r["switch_step"] == 0 for r in recs), "n_guard_evals": len(stats),
+                 "guard_stat_min": float(min(stats)) if stats else float("nan"),
+                 "guard_above_collapse": bool(stats) and min(stats) > COLLAPSE_BITS}
+            fails, transient, nw = [], [], []
+            for r in recs:
+                t, h = int(r["env_step"]), r["e8"]["health"]
+                sr = r["success_rate"]  # None before the first episode ends (checkpoint 0)
+                bad = [f"success {sr:.3f}"] if sr is not None and sr < H_SUCCESS else []
+                if h is not None:
+                    for region, mass in h["mass_true_by_region"].items():
+                        if exposed and region == "nw":
+                            nw.append({"checkpoint": t, "mass_true": mass, "I_s": h["I_s_by_region"]["nw"]})
+                        elif mass < H_MASS:
+                            bad.append(f"mass {region} {mass:.3f}")
+                if bad and t > 0:
+                    (fails if t >= H_FROM else transient).append({"checkpoint": t, "what": bad})
+            held = all(a[k] for k in ("status_done", "at_budget", "switch_step_0_everywhere", "guard_above_collapse")) and not fails
+            out[model] = {"held": held, **a, "failures": fails, "transient_before_5000": transient,
+                          "success_rate": {int(r["env_step"]): r["success_rate"] for r in recs},
+                          "mass_true_by_region": {int(r["env_step"]): r["e8"]["health"]["mass_true_by_region"] for r in recs if r["e8"]["health"]},
+                          "I_s_by_region": {int(r["env_step"]): r["e8"]["health"]["I_s_by_region"] for r in recs if r["e8"]["health"]},
+                          "exposed_nw_recovery": nw}
+    return {"held": bool(out) and all(v["held"] for v in out.values()), "by_model": out}
+
+
 def drawdown(y: np.ndarray) -> float:
     run = np.maximum.accumulate(y)
     return float(np.max(run - y)) if y.size else float("nan")
@@ -305,6 +350,121 @@ def figures(cv: list[dict], rows: list[dict], out: Path, e6_cloud: list[dict]) -
     plt.close(fig)
 
 
+ABSCISSAE = (("checkpoint", "therapy environment steps"), ("grad_step", "therapy gradient steps"), ("treated_visits", "treated-zone (nw) visits"))
+LOC_QUADRANTS = ("nw", "ne", "se", "sw", "corridor")
+
+
+def figures_wave(cv: list[dict], rows: list[dict], out: Path, twin: list[dict]) -> None:
+    """Wave 1 figures: every measure against the three abscissae, the localisation, the decomposition and the twin's b_tab
+    over the world model's b (EXPECTED_FORMS section 4: descriptive)."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    (out / "figures").mkdir(exist_ok=True)
+    pairs = sorted({c["pair"] for c in cv})
+    for pair in pairs:
+        ser = [c for c in cv if c["pair"] == pair and c["group"] == "treated"]
+        fig, axes = plt.subplots(3, 4, figsize=(16, 10))
+        for i, (key, label) in enumerate(ABSCISSAE):
+            x = [c[key] if c[key] is not None else np.nan for c in ser]
+            for j, m in enumerate(MEASURES):
+                ax = axes[i, j]
+                ax.plot(x, [c[f"{m}_exp"] for c in ser], "-", marker="o", ms=4, lw=2, color="tab:red", label="exposed")
+                if m != "b":
+                    ax.plot(x, [c[f"{m}_ref"] for c in ser], "--", marker="s", ms=4, lw=2, color="tab:blue", label="reference")
+                else:
+                    ax.axhline(-0.5, color="0.6", lw=1, ls=":")
+                ax.set_xscale("symlog", linthresh=500 if key == "checkpoint" else 300 if key == "grad_step" else 50)
+                ax.set_xlabel(label), ax.set_title(f"{m}" if m != "b" else "b (walks, step 1)", fontsize=10)
+                ax.grid(alpha=0.25)
+        axes[0, 1].legend(fontsize=8)
+        fig.suptitle(f"{pair}: recovery on the training image (zone nw)")
+        fig.tight_layout()
+        fig.savefig(out / "figures" / f"recovery_3abscissae_{pair}.png", dpi=110)
+        plt.close(fig)
+        pr = sorted((r for r in rows if r["pair"] == pair), key=lambda r: r["checkpoint"])
+        fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+        for role, color, ls in (("exposed", "tab:red", "-"), ("reference", "tab:blue", "--")):
+            rr = [r for r in pr if r["role"] == role]
+            x = [r["checkpoint"] for r in rr]
+            axes[0].plot(x, [r["loc_template_zone"] for r in rr], ls, marker="o", ms=4, lw=2, color=color, label=role)
+            axes[2].plot(x, [r["loc_directed_localised"] for r in rr], ls, marker="o", ms=4, lw=2, color=color, label=f"{role}, well localised")
+            axes[2].plot(x, [r["loc_directed_mislocalised"] for r in rr], ls, marker="x", ms=6, lw=1, color=color, alpha=0.6,
+                         label=f"{role}, mislocalised (true cell)")
+        ex = [r for r in pr if r["role"] == "exposed"]
+        x = np.array([r["checkpoint"] for r in ex])
+        bottom = np.zeros(len(ex))
+        greys = {"nw": "0.15", "ne": "0.35", "se": "0.55", "sw": "0.72", "corridor": "0.88"}
+        for q in LOC_QUADRANTS:
+            share = np.array([float(r.get(f"loc_mis_decoded_in_{q}") or 0.0) for r in ex])
+            axes[1].bar(np.arange(len(ex)), share, bottom=bottom, color=greys[q], edgecolor="white", linewidth=1, label=q)
+            bottom += share
+        axes[1].set_xticks(np.arange(len(ex)), [f"{t // 1000}k" if t else "0" for t in x], rotation=60, fontsize=7)
+        axes[0].set_title("decoder localisation in the zone (L_dec)", fontsize=10)
+        axes[1].set_title("exposed, mislocalised zone steps: decoded quadrant", fontsize=10)
+        axes[2].set_title("directed share from the true cell", fontsize=10)
+        for ax in (axes[0], axes[2]):
+            ax.set_xscale("symlog", linthresh=500), ax.set_xlabel("therapy environment steps"), ax.grid(alpha=0.25)
+        axes[1].set_xlabel("therapy checkpoint")
+        for ax in axes:
+            ax.legend(fontsize=7)
+        fig.suptitle(f"{pair}: localisation over the therapy (descriptive)")
+        fig.tight_layout()
+        fig.savefig(out / "figures" / f"localisation_{pair}.png", dpi=110)
+        plt.close(fig)
+    deco = [c for c in cv if c["group"] == "treated" and np.isfinite(c["D_oracle1"])]
+    if deco:
+        fig, axes = plt.subplots(1, len(pairs), figsize=(6 * len(pairs), 4), squeeze=False)
+        for ax, pair in zip(axes[0], pairs):
+            d = [c for c in deco if c["pair"] == pair]
+            x = [c["checkpoint"] for c in d]
+            ax.plot(x, [c["D_oracle1"] - c["D_exp"] for c in d], "-", marker="o", lw=2, color="tab:red", label="belief effect (oracle k=1 - exposed)")
+            ax.plot(x, [c["D_ref"] - c["D_oracle1"] for c in d], "--", marker="s", lw=2, color="tab:purple", label="cache effect (reference - oracle k=1)")
+            ax.axhline(0, color="0.6", lw=1)
+            ax.set_xscale("symlog", linthresh=2000), ax.set_xlabel("therapy environment steps"), ax.set_ylabel("directed share")
+            ax.set_title(pair), ax.grid(alpha=0.25), ax.legend(fontsize=8)
+        fig.tight_layout()
+        fig.savefig(out / "figures" / "decomposition.png", dpi=110)
+        plt.close(fig)
+    if twin:
+        fig, axes = plt.subplots(1, len(pairs), figsize=(6 * len(pairs), 4), squeeze=False)
+        for ax, pair in zip(axes[0], pairs):
+            ser = [c for c in cv if c["pair"] == pair and c["group"] == "treated"]
+            ax.plot([c["treated_visits"] for c in ser], [c["b_exp"] for c in ser], "-", marker="o", lw=2, color="tab:red", label="world model, exposed (b, walks)")
+            for role, color, ls in (("exposed", "0.25", "-"), ("reference", "0.6", "--")):
+                tw = [t for t in twin if t["pair"] == pair and t["role"] == role]
+                ax.plot([t["treated_visits"] for t in tw], [t["b_tab_nw"] for t in tw], ls, marker="^", lw=2, color=color,
+                        label=f"tabular twin, {role} (start + therapy counts)")
+            ax.axhline(-0.5, color="0.6", lw=1, ls=":")
+            ax.set_xscale("symlog", linthresh=50), ax.set_xlabel("treated-zone (nw) visits in the therapy"), ax.set_ylabel("b in nw (bits)")
+            ax.set_title(pair), ax.grid(alpha=0.25), ax.legend(fontsize=7)
+        fig.tight_layout()
+        fig.savefig(out / "figures" / "twin_overlay.png", dpi=110)
+        plt.close(fig)
+
+
+COMPARE_FIELDS = ("b_walks", "walks_I_step1", "b_step1", "C1_loc", "C3_loc", "directed_share", "loc_template_zone", "oracle_directed_share")
+
+
+def compare_devices(rows: list[dict], other: list[dict]) -> list[dict]:
+    """EXPECTED_FORMS section 4, X (exploratory): the same jobs on another device, field by field."""
+    key = lambda r: (r["pair"], r["checkpoint"], r["role"], r["image"])
+    by = {key(r): r for r in other}
+    out = []
+    for r in rows:
+        o = by.get(key(r))
+        if o is None:
+            continue
+        rec = {"pair": r["pair"], "checkpoint": r["checkpoint"], "role": r["role"]}
+        for f in COMPARE_FIELDS:
+            a, b = r.get(f), o.get(f)
+            rec[f"d_{f}"] = (float(b) - float(a)) if a is not None and b is not None else float("nan")
+        out.append(rec)
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--probes", nargs="+", required=True)
@@ -312,6 +472,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--e6-cloud", nargs="+", default=[], help="E6's rows.json directories at 650,000 (the overlay)")
     parser.add_argument("--no-figures", action="store_true")
+    parser.add_argument("--twin", nargs="+", default=[], help="therapy_counts.py's twin_<pair>.csv files (the twin overlay)")
+    parser.add_argument("--compare-probes", nargs="+", default=[], help="the same probe jobs run on another device (form X)")
     args = parser.parse_args(argv)
     rows = load_rows(args.probes)
     if not rows:
@@ -320,7 +482,8 @@ def main(argv: list[str] | None = None) -> int:
     args.out.mkdir(parents=True, exist_ok=True)
     write_csv(args.out / "curves.csv", cv)
     times, recov = {}, []
-    forms: dict = {"R": form_R(rows), "M": form_M(cv), "F0": "check_identity.py", "TW": "blocked (DECISIONS (14))", "P1": {}, "P3": {}, "P4": {}}
+    forms: dict = {"H": form_H(args.runs), "R": form_R(rows), "M": form_M(cv), "F0": "check_identity.py",
+                   "TW": "therapy_counts.py (forms_therapy_<pair>.json)", "P1": {}, "P3": {}, "P4": {}}
     for pair in sorted({c["pair"] for c in cv}):
         for group in ("treated", "untreated"):
             ser = [c for c in cv if c["pair"] == pair and c["group"] == group]
@@ -335,6 +498,10 @@ def main(argv: list[str] | None = None) -> int:
         if pair.startswith("shuffle"):
             forms["P4"][pair] = p4(rows, pair)
     forms["P2"] = p2(times)
+    # EXPECTED_FORMS section 4: (a) needs the 5 exposed agents, (b) the shuffle agents; the lags alone otherwise
+    forms["P2"]["decidable"] = all(p in times for p in (*BASELINES, *SHUFFLE_HEAVY, *SHUFFLE_LIGHT))
+    if not forms["P2"]["decidable"]:
+        forms["P2"]["held"] = forms["P2"]["a_held"] = forms["P2"]["b_held"] = "not decidable on these agents"
     verdicts = [v["verdict"] for v in forms["P4"].values()]
     forms["P4_overall"] = next((v for v in ("transfer", "no transfer") if verdicts.count(v) >= 2), "mixed") if len(verdicts) == 3 else "incomplete"
     write_csv(args.out / "recovery.csv", recov)
@@ -343,11 +510,18 @@ def main(argv: list[str] | None = None) -> int:
             for c in cv if c["group"] == "treated" and np.isfinite(c["D_oracle1"])]
     write_csv(args.out / "decomposition.csv", deco) if deco else None
     write_csv(args.out / "transfer.csv", [{"pair": p, **v} for p, v in forms["P4"].items()]) if forms["P4"] else None
-    (args.out / "forms.json").write_text(json.dumps(forms, indent=1, default=float), encoding="utf-8")
     if not args.no_figures:
         cloud = [r for d in args.e6_cloud for g in glob.glob(d) for r in json.loads((Path(g) / "rows.json").read_text(encoding="utf-8"))
                  if r.get("valid") in (True, "True")]
         figures(cv, rows, args.out, cloud)
+        twin = [{k: (float(v) if k not in ("pair", "model", "role") else v) for k, v in r.items()}
+                for f in args.twin for r in csv.DictReader(open(f, encoding="utf-8"))]
+        figures_wave(cv, rows, args.out, twin)
+    if args.compare_probes:
+        cmp = compare_devices(rows, load_rows(args.compare_probes))
+        write_csv(args.out / "devices.csv", cmp)
+        forms["X"] = {f: float(np.nanmax(np.abs([c[f"d_{f}"] for c in cmp]))) if cmp else float("nan") for f in COMPARE_FIELDS}
+    (args.out / "forms.json").write_text(json.dumps(forms, indent=1, default=float), encoding="utf-8")
     print(f"[E8 analysis] {len(rows)} rows, {len(cv)} curve points -> {args.out}; R held {forms['R']['held']}, M held {forms['M']['held']}, "
           f"P2 {forms['P2']['held']}, P4 {forms['P4_overall']}")
     return 0
