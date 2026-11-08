@@ -286,7 +286,7 @@ def p2(times: dict[str, dict]) -> dict:
     """P2 on the lag intervals (EXPECTED_FORMS section 5, corrected): (a) and (b) each hold, fail or are not decidable."""
     iv = {pair: lag_interval(t) for pair, t in times.items()}
     positive = [p for p, v in iv.items() if not isinstance(v, str) and v[0] > 0]
-    not_positive = [p for p, v in iv.items() if isinstance(v, str) or v[1] <= 0]
+    not_positive = [p for p, v in iv.items() if not isinstance(v, str) and v[1] <= 0]  # nothing to recover: undecided
     undecided = len(iv) - len(positive) - len(not_positive)
     a = True if len(positive) >= 4 else False if len(positive) + undecided < 4 else None
     heavy, light = [iv.get(p) for p in SHUFFLE_HEAVY], [iv.get(p) for p in (*BASELINES, *SHUFFLE_LIGHT)]
@@ -346,7 +346,36 @@ def p4(rows: list[dict], pair: str) -> dict:
         ti = un / tr if np.isfinite(tr) and tr >= 0.25 and np.isfinite(un) else float("nan")  # both groups non-empty
         out[m] = {"treated_mean_f": tr, "untreated_mean_f": un, "n_treated": len(frac["treated"]), "n_untreated": len(frac["untreated"]), "TI": ti}
     ti = out["D"]["TI"]
-    out["verdict"] = ("undefined" if not np.isfinite(ti) else "transfer" if ti >= 0.5 else "no transfer" if ti <= 0.2 else "partial")
+    out["verdict"] = ("undefined" if not np.isfinite(ti) else "transfer" if ti >= 0.5 else "no transfer at T" if ti <= 0.2 else "partial")
+    out["crossings"] = crossings(pr, T)
+    return out
+
+
+def crossings(pr: list[dict], T: int) -> dict:
+    """EXPECTED_FORMS section 5 (revised): per image of P4's sets, the first checkpoint t > 0 with g_D(t) <= 0.05 (images
+    with g_D(0) >= 0.10) and the first with b(t) > -0.5 (untreated: b(0) <= -1.0; treated: b(0) <= -0.5), read at the
+    checkpoints where the image's point is valid; not reached by T: "> T". Untreated and treated, with the counts crossed."""
+    out = {"untreated": {}, "treated": {}}
+    for image in sorted({r["image"] for r in pr}):
+        ser = {(r["checkpoint"], r["role"]): r for r in pr if r["image"] == image}
+        if (0, "exposed") not in ser or (T, "exposed") not in ser or not ser[(0, "exposed")]["walks_valid"] or not ser[(T, "exposed")]["walks_valid"]:
+            continue
+        group = "treated" if ser[(0, "exposed")]["treated"] else "untreated"
+        b0 = float(ser[(0, "exposed")]["b_walks"])
+        if group == "untreated" and b0 > -1.0:  # P4's untreated set
+            continue
+        ts = sorted(t for (t, role) in ser if role == "exposed" and t > 0 and ser[(t, "exposed")]["walks_valid"] and (t, "reference") in ser)
+        g = lambda t: float(ser[(t, "reference")]["directed_share"]) - float(ser[(t, "exposed")]["directed_share"])
+        rec = {}
+        if g(0) >= 0.10:
+            rec["g_D<=0.05"] = next((t for t in ts if g(t) <= 0.05), f"> {T}")
+        if b0 <= -0.5:
+            rec["b>-0.5"] = next((t for t in ts if float(ser[(t, "exposed")]["b_walks"]) > -0.5), f"> {T}")
+        if rec:
+            out[group][image] = rec
+    for group, recs in list(out.items()):
+        out[f"{group}_crossed_by_T"] = {k: f"{sum(isinstance(r.get(k), (int, np.integer)) for r in recs.values())} / {sum(k in r for r in recs.values())}"
+                                        for k in ("g_D<=0.05", "b>-0.5")}
     return out
 
 
@@ -555,7 +584,7 @@ def main(argv: list[str] | None = None) -> int:
     if not forms["P2"]["decidable"]:
         forms["P2"]["held"] = forms["P2"]["a_held"] = forms["P2"]["b_held"] = forms["P2"]["held_on"] = "not decidable on these agents"
     verdicts = [v["verdict"] for v in forms["P4"].values()]
-    forms["P4_overall"] = next((v for v in ("transfer", "no transfer") if verdicts.count(v) >= 2), "mixed") if len(verdicts) == 3 else "incomplete"
+    forms["P4_overall"] = next((v for v in ("transfer", "no transfer at T") if verdicts.count(v) >= 2), "mixed") if len(verdicts) == 3 else "incomplete"
     write_csv(args.out / "recovery.csv", recov)
     deco = [{"pair": c["pair"], "checkpoint": c["checkpoint"], "D_exp": c["D_exp"], "D_oracle1": c["D_oracle1"], "D_ref": c["D_ref"],
              "belief_effect": c["D_oracle1"] - c["D_exp"], "cache_effect": c["D_ref"] - c["D_oracle1"]}

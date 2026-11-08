@@ -138,3 +138,26 @@ def test_form_H_unmeasured_region_is_reported_not_failed(tmp_path):
     _run(tmp_path, "u_ref", "reference", [_rec(0, None, ok), _rec(10000, 1.0, {**ok, "sw": None})])
     h = analyze.form_H([str(tmp_path / "u_ref")])["by_model"]["u_ref"]
     assert h["held"] and h["regions_not_measured"] == [{"checkpoint": 10000, "where": "sw"}]
+
+
+def test_p2_nothing_to_recover_is_undecided():
+    """EXPECTED_FORMS section 5 (revised): an agent with nothing to recover is not decidable, not "not positive"."""
+    times = {p: {"T": 250000, "t_half_C3": 1000, "t_half_D": 2000} for p in ("base_A", "base_B", "shuffle_A")}
+    times["shuffle_E"] = {"T": 250000, "t_half_C3": "nothing to recover", "t_half_D": 2000}
+    times["shuffle_F"] = {"T": 250000, "t_half_C3": 2000, "t_half_D": 1000}
+    out = analyze.p2(times)  # 3 positive + 1 undecided: (a) could still reach 4
+    assert out["a_positive"] == 3 and out["a_held"] == "not decidable" and out["b_held"] == "not decidable"
+    assert out["held"] == "not decidable" and out["held_on"] == "not decidable"
+
+
+def test_p4_no_transfer_at_T_and_crossings():
+    rows = _p4_rows("t1", True, -2.0, -0.2, 0.5, 0.9) + _p4_rows("u1", False, -2.0, -1.9, 0.5, 0.52)
+    mid = [{"pair": "shuffle_A", "image": "t1", "checkpoint": 5000, "treated": True, "walks_valid": True, "role": "exposed", "b_walks": -0.4,
+            "directed_share": 0.97}, {"pair": "shuffle_A", "image": "t1", "checkpoint": 5000, "treated": True, "walks_valid": True,
+                                      "role": "reference", "directed_share": 1.0}]
+    out = analyze.p4(rows + mid, "shuffle_A")
+    assert out["verdict"] == "no transfer at T"
+    c = out["crossings"]
+    assert c["treated"]["t1"] == {"g_D<=0.05": 5000, "b>-0.5": 5000}
+    assert c["untreated"]["u1"] == {"g_D<=0.05": "> 250000", "b>-0.5": "> 250000"}
+    assert c["untreated_crossed_by_T"] == {"g_D<=0.05": "0 / 1", "b>-0.5": "0 / 1"}
