@@ -205,11 +205,24 @@ written changes.
 - Lags are read on the treated curves (mean over the valid treated assignments, section 0). The lags of base_A and base_B
   are wave 1's as computed (T = 150,000; neither t½ censored: -1,000 and 0 steps); those of A, E and F come from wave 2
   (T = 250,000). A censored t½ enters at its own run's T.
-- An agent's lag is **undefined** when either t½ is "nothing to recover" (g(0) < 0.10) or both are censored. For (a),
-  an agent with an undefined lag counts as **not** positive: (a) holds when at least 4 of the 5 exposed agents have a
-  defined lag > 0. For (b), any undefined lag among the five makes (b) **not decidable** (reported, not a failure).
+- **Censoring (corrected 2026-11-08, before any wave 2 data; supersedes the earlier "an undefined lag counts as not
+  positive", which treated a censoring as an absence of lag).** Each lag is an interval, reported as such:
+  - both t½ reached: the lag itself, [L, L];
+  - D censored, C3 reached: lag >= T - t½(C3), a **lower bound**, [T - t½(C3), +inf) (positive when t½(C3) < T);
+  - C3 censored, D reached: lag < t½(D) - T <= 0, an **upper bound**, (-inf, t½(D) - T] (negative);
+  - both censored: (-inf, +inf), **not decidable** for that agent.
+  Censored lags are reported as bounds ("lag >= ..." / "lag <= ..."), never as values.
+- "Nothing to recover" (g(0) < 0.10 for C3 or D) is not a censoring: there is no gap whose recovery could lag. Unchanged
+  from the earlier rule: that agent counts as not positive in (a) and makes (b) not decidable.
+- **(a)**: an agent is positive when its interval's lower end > 0, not positive when its upper end <= 0 (or nothing to
+  recover), undecided otherwise (both censored, or a lower bound of exactly 0). (a) holds when at least 4 of the 5 are
+  positive; fails when the positive ones plus the undecided ones are fewer than 4; otherwise it is not decidable.
+- **(b)**: holds when min over A and E of the lower ends > max over base_A, base_B and F of the upper ends; fails when
+  min over A and E of the upper ends <= max over the light agents of the lower ends; otherwise (an infinite end that
+  matters, or an agent with nothing to recover) it is not decidable.
 - Lags are differences of grid checkpoints: a lag of 0 means the same checkpoint, not "no lag at finer resolution".
-  P2 holds when (a) and (b) both hold; if (b) is not decidable, P2's verdict is (a)'s alone, reported as such.
+  P2 holds when (a) and (b) both hold; fails when either fails; if one is not decidable and the other holds, P2's verdict
+  is the decided part's, reported as such; if both are not decidable, P2 is not decidable.
 - The cache effect's shape (descriptive): its value at the last oracle checkpoint over its value at 0, per agent;
   expected lower in the baselines and F than in A and E.
 
