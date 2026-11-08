@@ -212,10 +212,11 @@ written changes.
   - C3 censored, D reached: lag < t½(D) - T <= 0, an **upper bound**, (-inf, t½(D) - T] (negative);
   - both censored: (-inf, +inf), **not decidable** for that agent.
   Censored lags are reported as bounds ("lag >= ..." / "lag <= ..."), never as values.
-- "Nothing to recover" (g(0) < 0.10 for C3 or D) is not a censoring: there is no gap whose recovery could lag. Unchanged
-  from the earlier rule: that agent counts as not positive in (a) and makes (b) not decidable.
-- **(a)**: an agent is positive when its interval's lower end > 0, not positive when its upper end <= 0 (or nothing to
-  recover), undecided otherwise (both censored, or a lower bound of exactly 0). (a) holds when at least 4 of the 5 are
+- "Nothing to recover" (g(0) < 0.10 for C3 or D): there is no gap whose recovery could lag, so the lag does not exist.
+  **Revised 2026-11-08 (user), before any wave 2 data**: that agent is **not decidable** for (a) and for (b) (it no
+  longer counts as not positive in (a)).
+- **(a)**: an agent is positive when its interval's lower end > 0, not positive when its upper end <= 0, undecided
+  otherwise (both censored, nothing to recover, or a lower bound of exactly 0). (a) holds when at least 4 of the 5 are
   positive; fails when the positive ones plus the undecided ones are fewer than 4; otherwise it is not decidable.
 - **(b)**: holds when min over A and E of the lower ends > max over base_A, base_B and F of the upper ends; fails when
   min over A and E of the upper ends <= max over the light agents of the lower ends; otherwise (an infinite end that
@@ -234,9 +235,17 @@ written changes.
   g_D(0) >= 0.10. (Section 3 wrote the b(0) condition for both; the analysis applies it to f_D too.)
 - f is not clipped (it may exceed 1 or be negative). Group means are plain means over the images that enter.
 - TI_X = mean f_X (untreated) / mean f_X (treated), defined when the treated mean f_X >= 0.25 and at least one image of
-  each group enters; otherwise "undefined" (reported with the counts). Verdict from TI_D: >= 0.5 transfer, <= 0.2 no
-  transfer, between partial; then over the 3 agents: "transfer" or "no transfer" if at least 2 of 3 agree, otherwise
-  mixed (an undefined agent agrees with neither).
+  each group enters; otherwise "undefined" (reported with the counts). Verdict from TI_D: >= 0.5 transfer, <= 0.2 **no
+  transfer at T**, between partial; then over the 3 agents: "transfer" or "no transfer at T" if at least 2 of 3 agree,
+  otherwise mixed (an undefined agent agrees with neither).
+- **Revised 2026-11-08 (user), before any wave 2 data.** TI reads the untreated recovery at T only, so a transfer slower
+  than the budget would read as none: the low verdict is named "no transfer at T" (not "no transfer"), and it is
+  completed by the **crossings on the untreated images** (the untreated set above): per image, the first checkpoint
+  t > 0 at which g_D(t) <= 0.05 (behaviour at the reference's level; images with g_D(0) >= 0.10) and the first at which
+  b(t) > -0.5, each read only at checkpoints where the image's point is valid; not reached by T: reported "> T" (censored,
+  never extrapolated, never counted as zero). Per agent: the number of untreated images crossed by T over the number that
+  enter, and their crossings; the same on the treated images, for comparison. Descriptive beside the verdict, which
+  stays TI_D's.
 - Descriptive, no verdict: f_b(t), f_D(t) at every checkpoint, treated and untreated; the untreated split by where T_inc
   is (ne, se, sw) and by nw's role in the image (neutral or CD).
 
