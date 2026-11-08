@@ -345,3 +345,34 @@ The cluster's GPU outputs are kept untouched and compared with them (EXPECTED_FO
   environment steps, 300,000 + k): its matched-count reference is a child of the start run's `reference` stream keyed by
   that total, as if the start run's own twin went on; no two mixtures share a key. The world passed (P_true) is the
   therapy world; P_ref the reference dynamics (the same kernel in the therapy).
+
+## 2026-11-08 (23) -- wave 2 (`e8_w2_shuf_nw`): budget, checkpoints, oracle, CPU measures (user, on the implementer's proposal)
+
+Validated by the user after wave 1's analysis (report section 11.6). Wave 1's curves (base_A, base_B; report 11.3):
+behaviour, C1 and C3 back to the reference's level within 1,000-3,500 therapy steps (about 90-400 visits of nw); b
+crossing -0.5 at 10,000 and 25,000 steps, at -0.18 / -0.09 by 60,000 and near 0 at 150,000; the cache effect gone between
+2,000 and 10,000 steps. The shuffle agents learned 3 to 5 times more slowly than the baselines and carry a heavier cache
+(E7: 0.22-0.24 in A and E).
+
+- **Budget `max_env_steps` = 250,000.** The slowest baseline crossing of b (25,000) x 5 = 125,000, doubled for margin:
+  P1 needs b(T) > -0.5 with a plateau behind it, and P4 is read at T. (Alternative not retained: 300,000.)
+- **Checkpoints**: wave 1's grid extended by 200,000 and 250,000 (16 points): 0, 500, 1,000, 2,000, 3,500, 5,000,
+  7,500, 10,000, 15,000, 25,000, 40,000, 60,000, 100,000, 150,000, 200,000, 250,000. The dense start stays: the
+  baselines' behaviour moved before 3,500 steps; x 3-5 that is 3,500-17,500 steps, covered by 6 points, so P3 is not
+  read across a long interval.
+- **Oracle at k = 1**: 0, 2,000, 5,000, 10,000, 25,000, 60,000, 150,000, 250,000 (8 instead of 5): in the baselines the
+  cache effect vanished between 2,000 and 10,000 steps, which wave 1's 5-point grid would not resolve in A and E;
+  about 60 s per set.
+- **Measures on the local CPU only** (as (21)): no `--phase probes` on the cluster. F0 (a) is exact on the CPU, and wave
+  1 found the cluster's GPU probes within 0.08 bit (b) and 0.05 (C1, C3, D) of the CPU's, a gap of no use to keep. The
+  batch's 16 probe jobs (the three shuffle pairs and reference B at one checkpoint each, 12 images) run under
+  `chain_cpu.py` as a scheduled task, a smoke job first. Expected duration: 3,535 s CPU for one pair (section 8), about
+  2.4 h CPU per checkpoint for the three pairs, about 38 h CPU for 16 checkpoints; wave 1 ran about 3 times slower per job
+  than nominal under 12 concurrent processes, and 16 jobs on 12 processes go in 2 rounds: **about 12-15 h** of chain.
+- **Where it lives.** A config of its own, `configs/e8/e8_w2.yaml` (E5's base and the same `e8` block, with the three
+  values above), so `configs/e8/e8.yaml`, which wave 1 ran with, is not edited. `batches.py` names each batch's config;
+  `submit_kubeflow.py` (train; resume reads the run's own config) and `chain_cpu.py` (probes) pass `--config` for a
+  batch whose config is not the default, so wave 1's command lines are unchanged. `e8_w2_shuf_nw` joins
+  `batches.LAUNCHABLE`; ne, sw and se stay out.
+- Assumption to check at the first checkpoints: the partial therapy on nw puts T_inc in nw in every episode with the
+  same geometry, so the treated-zone visit rate should be close to the baselines' (about 0.13-0.18 per step).
