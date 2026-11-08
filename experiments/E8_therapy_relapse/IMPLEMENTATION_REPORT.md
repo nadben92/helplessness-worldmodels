@@ -356,8 +356,15 @@ Aucun épisode tronqué pendant la thérapie (succès 1,0).
 - référence : 0 exactement (la dynamique est déterministe, donc les tirages appariés redonnent les mêmes comptages).
 
 Le world model franchit −0,5 après 1 100 à 2 800 visites. Le mélange des comptages est encore à −1,4 après 20 000 à
-26 000 visites (`twin_overlay.png`). Lecture interprétative : le world model ne moyenne pas l'ancienne expérience, il la
-réécrit (replay vide, poids réentraînés). Ce n'est pas un contrôle apparié.
+26 000 visites (`twin_overlay.png`).
+
+Lecture interprétative, pas un contrôle apparié : l'écart tient en partie au design. Le world model repart d'un buffer
+vide, alors que le jumeau garde toute son histoire. La croyance stockée dans les poids se réécrit en quelques milliers de
+pas dès que l'expérience ancienne n'est plus rejouée. Un apprenant qui garde toute son histoire resterait bien plus
+longtemps biaisé.
+
+Piste future (non prévue dans E8) : une thérapie qui conserve l'ancien buffer, rejoué avec l'expérience nouvelle. Ce
+serait l'analogue d'une rumination ; le jumeau en donne la borne de dilution.
 
 ### 11.6 Proposition pour la vague 2 (non débloquée : `batches.LAUNCHABLE` inchangé)
 
@@ -412,7 +419,92 @@ baselines (≈ 0,13–0,18 par pas). Cette hypothèse est à vérifier au premie
 - P2 n'est pas décidable sur les baselines. Retards de −1 000 et 0 pas, et effet cache résorbé entre 2 000 et 10 000 pas :
   compatible avec un cache faible.
 - P3 ne tient pas : D monte sur trois intervalles fins de la grille (s_D 0,45 et 0,44), pas d'un coup.
-- Le jumeau des comptages (dilution) reste à −1,4 à 150 000. Le world model réécrit sa croyance bien plus vite que la
-  moyenne de son expérience.
+- Le jumeau des comptages (dilution) reste à −1,4 à 150 000. La croyance stockée dans les poids se réécrit en quelques
+  milliers de pas dès que l'expérience ancienne n'est plus rejouée (buffer vide) ; un apprenant qui garde toute son
+  histoire resterait bien plus longtemps biaisé. Piste future : thérapie avec l'ancien buffer conservé (rumination).
 - Ouvert : P2 et P4 (shuffle, vague 2) ; la part de pas en zone de base_A, pas encore revenue à 150 000 ; la vague 2
   (250 000 pas, 16 checkpoints, 8 points d'oracle proposés) attend la validation de l'utilisateur.
+
+## 12. Préparation de la vague 2 (8 novembre)
+
+L'utilisateur a validé la proposition de la section 11.6, avec des mesures en local sur CPU seulement. Décision (23)
+(b462eca).
+
+**Config et déblocage** (c13a9d8) :
+- `configs/e8/e8_w2.yaml` reprend `e8.yaml` avec trois valeurs changées : `max_env_steps` 250 000, la grille de 16 points,
+  `probes.oracle_checkpoints` en 8 points. Un test vérifie que la config résolue ne diffère que par ces trois valeurs.
+- `e8.yaml`, avec lequel la vague 1 a tourné, n'est pas modifié.
+- `batches.BATCH_CONFIG` associe la vague 2 à sa config, et `e8_w2_shuf_nw` entre dans `LAUNCHABLE` (ne, sw, se restent
+  bloqués).
+- `submit_kubeflow.py` (train) et `chain_cpu.py` (sondes) passent `--config` pour ce batch seulement : les lignes de
+  commande de la vague 1 sont inchangées (testé). La reprise lit la config du run lui-même.
+
+**Rien d'autre ne change pour l'entraînement par rapport à 95c235b** (`git diff 95c235b` sur `src/`, `configs/`,
+`pyproject.toml`, `run_e8.py`, `e8_therapy.py`, `e8_setup.py`, `probes_e8.py`, `batches.py`, `submit_kubeflow.py`) :
+- aucun fichier de `src/`, aucune config existante, ni `run_e8.py`, `e8_therapy.py`, `e8_setup.py`, `probes_e8.py` n'a
+  changé ;
+- seuls changent `batches.py` (la config par batch, `LAUNCHABLE`) et `submit_kubeflow.py` (`--config` transmis,
+  docstring), plus le nouveau `e8_w2.yaml` ;
+- le dry-run local du batch donne les 4 runs attendus (`--treated-quadrant nw --config configs/e8/e8_w2.yaml`), lançable.
+
+**Formes de la vague 2** (4ce1508, commit seul, avant tout run) :
+- P2 sur les shuffle : retards des baselines repris de la vague 1 ; un retard indéfini compte comme non positif en (a) et
+  rend (b) non décidable.
+- P4 chiffré : images valides à 0 et à T ; f_b soigné si b(0) ≤ −0,5 ; ensemble non soigné b(0) ≤ −1,0 pour f_b comme
+  pour f_D ; TI défini si la moyenne soignée est ≥ 0,25 ; seuils 0,5 / 0,2 inchangés.
+- Forme H sur l'enregistrement de santé par affectation, et taux de visites de nw.
+
+L'analyse est alignée sur ces formes (60a7bbf). Le `forms.json` de la vague 1 est regénéré : valeurs inchangées, seule la
+structure du bloc H change.
+
+**Test de bout en bout** relancé. Le premier passage (`tests/e8` + `tests/twin` : 30 passés, 1 échec, 42 min) a fait
+échouer `test_analysis_runs` sur un cas non prévu par la forme H. Dans le mini-run, la masse d'une région peut valoir
+`None` : aucun contexte réel de cette région dans le replay. Ce n'est pas une mesure. Une telle région est désormais
+rapportée sous `regions_not_measured`, sans compter comme échec (aucune en vague 1). Test ajouté. Résultat du second
+passage : section 12.1.
+
+**Tâche planifiée** `E8_w1_cpu_chain` supprimée. Le lanceur de la vague 2 est prêt hors dépôt
+(`C:\nrw\e8_wave2\logs_cpu\launch.pyw` : batch `e8_w2_shuf_nw`, extraction attendue dans `C:\nrw\e8_wave2\extracted`,
+sorties dans `C:\nrw\e8_wave2\probes_cpu`, 12 processus). Il n'est pas encore enregistré : l'archive n'existe pas.
+
+**Durées estimées.**
+- Entraînement : 4 runs × 250 000 pas, soit ≈ 32 h au rythme de la vague 1 (7 900 pas / h / run) et ≈ 40 h au rythme
+  d'E5.
+- Mesures : 16 jobs (3 paires et la référence B, 12 images, un checkpoint chacun), ≈ 2,4 h CPU nominales chacun. Sur 12
+  processus : un premier tour de 12 jobs à ≈ 3× le nominal (concurrence mesurée en vague 1), soit ≈ 7 h ; puis 4 jobs moins
+  chargés, ≈ 3–4 h. Total **≈ 10–15 h**, smoke compris.
+
+### 12.1 Tests et commandes de la vague 2
+
+Tests :
+- premier passage de `tests/e8` + `tests/twin` : 30 passés, 1 échec, celui décrit plus haut ;
+- après le correctif (28a2658), `tests/e8/test_e8_end_to_end.py` : **4 / 4 passés, 47 min** ;
+- tests ciblés (`test_e8_wave1_analysis.py`, `test_e8_batches.py`, `test_place_run_files.py`) : **12 / 12**.
+
+Commandes (le push est fait par l'utilisateur ; arrêter `nadim-launcher` avant la soumission) :
+
+```bash
+# local (Git Bash, C:\nrw\wt-e8)
+git push origin e8
+
+# cluster (terminal du notebook Kubeflow)
+cd /scratch/helplessness-worldmodels-e8
+git status --short --untracked-files=no      # doit être vide (submit_kubeflow refuse un fichier suivi modifié)
+git checkout e8 && git pull --ff-only origin e8
+git log --oneline -1                          # le dernier commit poussé
+python experiments/E8_therapy_relapse/submit_kubeflow.py --batch e8_w2_shuf_nw --repo-dir /scratch/helplessness-worldmodels-e8 --dry-run
+#   attendu : "launchable": true, 4 jobs (shuffle_A_exp, shuffle_E_exp, shuffle_F_exp, shuffle_B_ref),
+#   chacun avec --treated-quadrant nw --config configs/e8/e8_w2.yaml
+python experiments/E8_therapy_relapse/submit_kubeflow.py --batch e8_w2_shuf_nw --repo-dir /scratch/helplessness-worldmodels-e8
+python experiments/E8_therapy_relapse/submit_kubeflow.py --status <dossier superviseur affiché>
+# si interrompu :
+python experiments/E8_therapy_relapse/submit_kubeflow.py --batch e8_w2_shuf_nw --phase resume --repo-dir /scratch/helplessness-worldmodels-e8 --dry-run
+# à la fin (pas de --phase probes : mesures en local, DECISIONS (23)) :
+python experiments/E8_therapy_relapse/export_batch.py create --batch e8_w2_shuf_nw
+
+# local, après le transfert de l'archive dans C:\nrw\e8_wave2 (Git Bash, C:\nrw\wt-e8, PYTHONPATH=C:/nrw/wt-e8/src)
+mkdir -p C:/nrw/e8_wave2/extracted && tar -xzf C:/nrw/e8_wave2/e8_w2_shuf_nw__<UTC>.tar.gz -C C:/nrw/e8_wave2/extracted
+python experiments/E8_therapy_relapse/export_batch.py verify C:/nrw/e8_wave2/extracted
+python experiments/E8_therapy_relapse/chain_cpu.py --batch e8_w2_shuf_nw --batch-root C:/nrw/e8_wave2/extracted --out-dir C:/nrw/e8_wave2/probes_cpu --logs C:/nrw/e8_wave2/logs_cpu --smoke
+# puis la tâche planifiée E8_w2_cpu_chain (pythonw C:\nrw\e8_wave2\logs_cpu\launch.pyw), ≈ 10-15 h
+```
