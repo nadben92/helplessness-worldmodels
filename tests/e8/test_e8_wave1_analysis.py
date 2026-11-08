@@ -79,8 +79,29 @@ def test_p2_undefined_lag_and_b_not_decidable():
     times = {p: {"T": 150000, "t_half_C3": 2000, "t_half_D": 5000} for p in (*analyze.BASELINES, "shuffle_A", "shuffle_E")}
     times["shuffle_F"] = {"T": 250000, "t_half_C3": "nothing to recover", "t_half_D": 5000}
     out = analyze.p2(times)
-    assert out["lags"]["shuffle_F"] is None and out["a_positive"] == 4 and out["a_held"]
-    assert out["b_held"] == "not decidable" and out["held"] and out["held_on"] == "(a) only"
+    assert out["lags"]["shuffle_F"] == "nothing to recover" and out["a_positive"] == 4 and out["a_held"] is True
+    assert out["b_held"] == "not decidable" and out["held"] is True and out["held_on"] == "(a) only"
+
+
+def test_p2_censoring_gives_bounds():
+    """EXPECTED_FORMS section 5 (corrected): D censored -> lower bound (positive), C3 censored -> negative upper bound,
+    both censored -> not decidable for the agent; (a) and (b) decided on the intervals."""
+    T = 250000
+    times = {"base_A": {"T": 150000, "t_half_C3": 2000, "t_half_D": 1000}, "base_B": {"T": 150000, "t_half_C3": 2000, "t_half_D": 2000},
+             "shuffle_A": {"T": T, "t_half_C3": 10000, "t_half_D": f"censored at {T}"},
+             "shuffle_E": {"T": T, "t_half_C3": 5000, "t_half_D": 15000},
+             "shuffle_F": {"T": T, "t_half_C3": f"censored at {T}", "t_half_D": 7500}}
+    out = analyze.p2(times)
+    assert out["lags"]["shuffle_A"] == ">= 240000 (D censored)" and out["lags"]["shuffle_F"] == "<= -242500 (C3 censored)"
+    assert out["lags"]["shuffle_E"] == 10000.0 and out["a_positive"] == 2 and out["a_held"] is False  # 2 positive, none undecided
+    assert out["b_held"] is True and out["held"] is False and out["held_on"] == "(a) and (b)"
+    times["shuffle_A"] = {"T": T, "t_half_C3": f"censored at {T}", "t_half_D": f"censored at {T}"}
+    out = analyze.p2(times)
+    assert out["lags"]["shuffle_A"] == "not decidable (both censored)" and out["b_held"] == "not decidable"
+    times.update({p: {"T": T, "t_half_C3": 1000, "t_half_D": 2000} for p in ("base_A", "base_B", "shuffle_F")})
+    times["shuffle_E"] = {"T": T, "t_half_C3": 1000, "t_half_D": 5000}
+    out = analyze.p2(times)  # 4 positive, A undecided: (a) holds whatever A is; (b) hangs on A (E's 4,000 > the light 1,000)
+    assert out["a_positive"] == 4 and out["a_held"] is True and out["held"] is True and out["held_on"] == "(a) only"
 
 
 def _p4_rows(image, treated, b0, bT, d_exp0, d_expT, d_ref=1.0):

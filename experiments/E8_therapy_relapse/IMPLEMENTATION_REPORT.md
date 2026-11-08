@@ -508,3 +508,17 @@ python experiments/E8_therapy_relapse/export_batch.py verify C:/nrw/e8_wave2/ext
 python experiments/E8_therapy_relapse/chain_cpu.py --batch e8_w2_shuf_nw --batch-root C:/nrw/e8_wave2/extracted --out-dir C:/nrw/e8_wave2/probes_cpu --logs C:/nrw/e8_wave2/logs_cpu --smoke
 # puis la tâche planifiée E8_w2_cpu_chain (pythonw C:\nrw\e8_wave2\logs_cpu\launch.pyw), ≈ 10-15 h
 ```
+
+### 12.2 Correction de P2 (censure), avant toute donnée de la vague 2
+
+Sur la remarque de l'utilisateur, la règle « un retard indéfini compte comme non positif » de la section 5
+d'EXPECTED_FORMS (4ce1508) traitait une censure comme une absence de retard. Elle est remplacée (0f197f7, commit seul) :
+- part dirigée censurée et C3 rétabli : retard ≥ T − t½(C3), une borne inférieure positive ;
+- C3 censuré et part dirigée rétablie : une borne supérieure négative ;
+- les deux censurés : non décidable pour l'agent.
+
+Les retards censurés sont rapportés comme bornes. (a) et (b) se décident sur ces intervalles : tenue, échec ou non
+décidable. « Rien à récupérer » (écart < 0,10 au checkpoint 0) n'est pas une censure et garde sa règle.
+
+`analyze_e8.p2` est aligné (`lag_interval`), avec un test pour chacun des trois cas. Le `forms.json` de la vague 1 et
+toutes ses autres sorties sont identiques après la nouvelle exécution.

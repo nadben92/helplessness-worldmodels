@@ -251,19 +251,59 @@ def p1(series: list[dict], times: dict) -> dict:
     return {"held": all(conds.values()), **conds, "b_0": b[0], "b_T": b[-1], "T": T}
 
 
+def lag_interval(t: dict) -> tuple[float, float] | str:
+    """EXPECTED_FORMS section 5 (corrected): the lag t½(D) - t½(C3) as an interval [lo, hi] -- exact when both t½ are
+    reached, a lower bound T - t½(C3) when D is censored, an upper bound t½(D) - T when C3 is, (-inf, inf) when both are;
+    "nothing to recover" when either gap was below 0.10 at checkpoint 0 (not a censoring)."""
+    tc, td, T = t["t_half_C3"], t["t_half_D"], float(t["T"])
+    if as_steps(tc, t["T"]) is None or as_steps(td, t["T"]) is None:
+        return "nothing to recover"
+    c_cens, d_cens = (isinstance(v, str) for v in (tc, td))
+    if c_cens and d_cens:
+        return (-np.inf, np.inf)
+    if d_cens:
+        return (T - float(tc), np.inf)
+    if c_cens:
+        return (-np.inf, float(td) - T)
+    return (float(td) - float(tc),) * 2
+
+
+def _lag_report(iv) -> float | str:
+    """An exact lag as a number; a censored one as its bound, never as a value."""
+    if isinstance(iv, str):
+        return iv
+    lo, hi = iv
+    if lo == hi:
+        return lo
+    if np.isfinite(lo):
+        return f">= {lo:g} (D censored)"
+    if np.isfinite(hi):
+        return f"<= {hi:g} (C3 censored)"
+    return "not decidable (both censored)"
+
+
 def p2(times: dict[str, dict]) -> dict:
-    lags = {}
-    for pair, t in times.items():
-        tc, td = as_steps(t["t_half_C3"], t["T"]), as_steps(t["t_half_D"], t["T"])
-        both_censored = all(isinstance(t[k], str) and t[k].startswith("censored") for k in ("t_half_C3", "t_half_D"))
-        lags[pair] = None if (tc is None or td is None or both_censored) else td - tc
-    exposed = [p for p in lags if lags[p] is not None]
-    a = sum(lags[p] > 0 for p in exposed)
-    heavy, light = [lags.get(p) for p in SHUFFLE_HEAVY], [lags.get(p) for p in (*BASELINES, *SHUFFLE_LIGHT)]
-    b_ok = None if any(v is None for v in heavy + light) else min(heavy) > max(light)
-    # EXPECTED_FORMS section 5: an undefined lag counts as not positive in (a) and makes (b) not decidable; P2 is then (a)'s
-    return {"lags": lags, "a_positive": a, "a_held": a >= 4, "b_held": "not decidable" if b_ok is None else b_ok,
-            "held": bool(a >= 4) if b_ok is None else bool(a >= 4 and b_ok), "held_on": "(a) only" if b_ok is None else "(a) and (b)"}
+    """P2 on the lag intervals (EXPECTED_FORMS section 5, corrected): (a) and (b) each hold, fail or are not decidable."""
+    iv = {pair: lag_interval(t) for pair, t in times.items()}
+    positive = [p for p, v in iv.items() if not isinstance(v, str) and v[0] > 0]
+    not_positive = [p for p, v in iv.items() if isinstance(v, str) or v[1] <= 0]
+    undecided = len(iv) - len(positive) - len(not_positive)
+    a = True if len(positive) >= 4 else False if len(positive) + undecided < 4 else None
+    heavy, light = [iv.get(p) for p in SHUFFLE_HEAVY], [iv.get(p) for p in (*BASELINES, *SHUFFLE_LIGHT)]
+    if any(v is None or isinstance(v, str) for v in heavy + light):
+        b = None
+    elif min(v[0] for v in heavy) > max(v[1] for v in light):
+        b = True
+    elif min(v[1] for v in heavy) <= max(v[0] for v in light):
+        b = False
+    else:
+        b = None
+    decided = [x for x in (a, b) if x is not None]
+    held = None if not decided else all(decided)
+    on = {(True, True): "(a) and (b)", (True, False): "(a) only", (False, True): "(b) only", (False, False): "not decidable"}
+    nd = lambda x: "not decidable" if x is None else x
+    return {"lags": {p: _lag_report(v) for p, v in iv.items()}, "a_positive": len(positive), "a_held": nd(a), "b_held": nd(b),
+            "held": nd(held), "held_on": on[(a is not None, b is not None)]}
 
 
 def p3(series: list[dict]) -> dict:
