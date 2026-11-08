@@ -17,6 +17,8 @@ awake while the chain runs (Windows).
 --smoke: the first job only, with --n-reps 1 --n-walks 3, into <out-dir>/smoke/ (the end-to-end check before the full
 chain: it must finish; delete it afterwards). Its numbers are meaningless.
 
+A batch with its own config (batches.BATCH_CONFIG, e.g. wave 2's) gets --config in every job.
+
 Usage, from the repo root (src of this checkout on PYTHONPATH), on an extracted batch:
   python experiments/E8_therapy_relapse/chain_cpu.py --batch e8_w1_base --batch-root <extracted dir> --logs logs/e8_w1_cpu \\
       --out-dir <outputs root> [--workers 12] [--checkpoints all] [--smoke]
@@ -109,7 +111,7 @@ def jobs(batch: str, batch_root: Path, out_dir: Path, checkpoints: list[str], ex
         for k in ks:
             out[f"probes_{'-'.join(pairs)}_k{k:06d}"] = [sys.executable, "-u", str(Path(__file__).with_name("run_e8.py")), "--phase", "probes",
                                                          "--pairs", *pairs, *runs_args, "--checkpoint", str(k), "--device", "cpu",
-                                                         "--out-dir", str(out_dir), *extra]
+                                                         "--out-dir", str(out_dir), *batches.config_args(batch), *extra]
     return out
 
 

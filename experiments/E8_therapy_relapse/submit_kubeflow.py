@@ -11,7 +11,8 @@ Phases:
   probes   run_e8.py --phase probes, one job per probe job of the batch (the pairs sharing a reference) and checkpoint
            (--checkpoint k [k ...], or `all`: every checkpoint of the runs' grid), PROBES_MAX_PARALLEL at a time.
 
-Only batches.LAUNCHABLE batches are submitted (wave 2 after wave 1's validation); --dry-run prints the jobs of any batch.
+Only batches.LAUNCHABLE batches are submitted (wave 2 since DECISIONS (23)); --dry-run prints the jobs of any batch. A batch
+with its own config (batches.BATCH_CONFIG) gets --config in its train and probes commands; resume reads the run's own.
 Launched from E8's own clone (/scratch/helplessness-worldmodels-e8, branch e8, no modified tracked file). Results stay
 under <repo-dir>/results/E8_therapy_relapse/ and come back with export_batch.py. No push.
 
@@ -87,7 +88,7 @@ def commands(phase: str, python: str, batch: str, mount: str, device: str, resum
         runs = [a for m in models for a in ("--run", f"{m}={run_dirs[m]}")]
         for k in checkpoints or []:
             jobs.append((f"probes_{'-'.join(pairs)}_k{k:06d}", [*base, "--phase", "probes", "--pairs", *pairs, *runs, "--checkpoint", str(k),
-                                                               "--device", device]))
+                                                               "--device", device, *batches.config_args(batch)]))
     return jobs
 
 
