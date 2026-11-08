@@ -73,3 +73,40 @@ def test_compare_devices_and_p2_decidability():
     assert np.isclose(cmp[0]["d_directed_share"], 0.02) and cmp[0]["d_b_walks"] == 0.0
     times = {p: {"T": 150000, "t_half_C3": 5000, "t_half_D": 10000} for p in analyze.BASELINES}
     assert analyze.p2(times)["lags"] == {"base_A": 5000.0, "base_B": 5000.0}
+
+
+def test_p2_undefined_lag_and_b_not_decidable():
+    times = {p: {"T": 150000, "t_half_C3": 2000, "t_half_D": 5000} for p in (*analyze.BASELINES, "shuffle_A", "shuffle_E")}
+    times["shuffle_F"] = {"T": 250000, "t_half_C3": "nothing to recover", "t_half_D": 5000}
+    out = analyze.p2(times)
+    assert out["lags"]["shuffle_F"] is None and out["a_positive"] == 4 and out["a_held"]
+    assert out["b_held"] == "not decidable" and out["held"] and out["held_on"] == "(a) only"
+
+
+def _p4_rows(image, treated, b0, bT, d_exp0, d_expT, d_ref=1.0):
+    rows = []
+    for t, b, d in ((0, b0, d_exp0), (250000, bT, d_expT)):
+        common = {"pair": "shuffle_A", "image": image, "checkpoint": t, "treated": treated, "walks_valid": True}
+        rows += [{**common, "role": "exposed", "b_walks": b, "directed_share": d}, {**common, "role": "reference", "directed_share": d_ref}]
+    return rows
+
+
+def test_p4_filters():
+    rows = (_p4_rows("t1", True, -2.0, -0.2, 0.5, 0.9) + _p4_rows("t2", True, -0.3, -0.1, 0.5, 0.9)  # t2: b(0) > -0.5, f_b out
+            + _p4_rows("u1", False, -2.0, -1.0, 0.5, 0.75) + _p4_rows("u2", False, -0.8, -0.8, 0.5, 0.5))  # u2: b(0) > -1.0, out of both
+    out = analyze.p4(rows, "shuffle_A")
+    assert out["b"]["n_treated"] == 1 and out["b"]["n_untreated"] == 1 and np.isclose(out["b"]["TI"], 0.5 / 0.9)
+    assert out["D"]["n_treated"] == 2 and out["D"]["n_untreated"] == 1 and np.isclose(out["D"]["TI"], 0.5 / 0.8)
+    assert out["verdict"] == "transfer"
+
+
+def test_form_H_shuffle_record(tmp_path):
+    ok = {"corridor": 0.97, "nw": 0.95, "ne": 0.99, "se": 0.99, "sw": 0.99}
+    rec = _rec(10000, 1.0, ok)
+    rec["e8"]["health"] = {"0": {"mass_true_by_region": {**ok, "nw": 0.2}, "I_s_by_region": {k: 2.3 for k in ok}},
+                           "1": {"mass_true_by_region": {**ok, "se": 0.5}, "I_s_by_region": {k: 2.3 for k in ok}}}
+    rec["e8"]["treated_slot"] = "nw"
+    _run(tmp_path, "s_exp", "experimental", [_rec(0, None, ok), rec])
+    h = analyze.form_H([str(tmp_path / "s_exp")])["by_model"]["s_exp"]
+    assert h["failures"] == [{"checkpoint": 10000, "what": ["mass assignment 1: se 0.500"]}]
+    assert [x["where"] for x in h["exposed_nw_recovery"]] == ["assignment 0: nw", "assignment 1: nw"]

@@ -199,19 +199,21 @@ def form_H(patterns: list[str]) -> dict:
                 t, h = int(r["env_step"]), r["e8"]["health"]
                 sr = r["success_rate"]  # None before the first episode ends (checkpoint 0)
                 bad = [f"success {sr:.3f}"] if sr is not None and sr < H_SUCCESS else []
-                if h is not None:
-                    for region, mass in h["mass_true_by_region"].items():
-                        if exposed and region == "nw":
-                            nw.append({"checkpoint": t, "mass_true": mass, "I_s": h["I_s_by_region"]["nw"]})
+                # baseline: one record; shuffle (EXPECTED_FORMS section 5): one per treated assignment, keyed by it
+                parts = [] if h is None else [("", h)] if "mass_true_by_region" in h else [(f"assignment {k}: ", v) for k, v in h.items()]
+                treated = r["e8"].get("treated_slot") or "nw"
+                for label, part in parts:
+                    for region, mass in part["mass_true_by_region"].items():
+                        if exposed and region == treated:
+                            nw.append({"checkpoint": t, "where": label + region, "mass_true": mass, "I_s": part["I_s_by_region"][region]})
                         elif mass < H_MASS:
-                            bad.append(f"mass {region} {mass:.3f}")
+                            bad.append(f"mass {label}{region} {mass:.3f}")
                 if bad and t > 0:
                     (fails if t >= H_FROM else transient).append({"checkpoint": t, "what": bad})
             held = all(a[k] for k in ("status_done", "at_budget", "switch_step_0_everywhere", "guard_above_collapse")) and not fails
             out[model] = {"held": held, **a, "failures": fails, "transient_before_5000": transient,
                           "success_rate": {int(r["env_step"]): r["success_rate"] for r in recs},
-                          "mass_true_by_region": {int(r["env_step"]): r["e8"]["health"]["mass_true_by_region"] for r in recs if r["e8"]["health"]},
-                          "I_s_by_region": {int(r["env_step"]): r["e8"]["health"]["I_s_by_region"] for r in recs if r["e8"]["health"]},
+                          "health": {int(r["env_step"]): r["e8"]["health"] for r in recs if r["e8"]["health"]},
                           "exposed_nw_recovery": nw}
     return {"held": bool(out) and all(v["held"] for v in out.values()), "by_model": out}
 
@@ -257,7 +259,9 @@ def p2(times: dict[str, dict]) -> dict:
     a = sum(lags[p] > 0 for p in exposed)
     heavy, light = [lags.get(p) for p in SHUFFLE_HEAVY], [lags.get(p) for p in (*BASELINES, *SHUFFLE_LIGHT)]
     b_ok = None if any(v is None for v in heavy + light) else min(heavy) > max(light)
-    return {"lags": lags, "a_positive": a, "a_held": a >= 4, "b_held": b_ok, "held": bool(a >= 4 and b_ok)}
+    # EXPECTED_FORMS section 5: an undefined lag counts as not positive in (a) and makes (b) not decidable; P2 is then (a)'s
+    return {"lags": lags, "a_positive": a, "a_held": a >= 4, "b_held": "not decidable" if b_ok is None else b_ok,
+            "held": bool(a >= 4) if b_ok is None else bool(a >= 4 and b_ok), "held_on": "(a) only" if b_ok is None else "(a) and (b)"}
 
 
 def p3(series: list[dict]) -> dict:
@@ -285,11 +289,11 @@ def p4(rows: list[dict], pair: str) -> dict:
             if (0, "exposed") not in ser or (T, "exposed") not in ser or not ser[(0, "exposed")]["walks_valid"] or not ser[(T, "exposed")]["walks_valid"]:
                 continue
             group = "treated" if ser[(0, "exposed")]["treated"] else "untreated"
+            b0, bT = float(ser[(0, "exposed")]["b_walks"]), float(ser[(T, "exposed")]["b_walks"])
+            if group == "untreated" and b0 > -1.0:  # EXPECTED_FORMS section 5: the untreated set, for f_b and f_D alike
+                continue
             if m == "b":
-                b0, bT = float(ser[(0, "exposed")]["b_walks"]), float(ser[(T, "exposed")]["b_walks"])
-                if group == "untreated" and b0 > -1.0:
-                    continue
-                if b0 < 0:
+                if b0 <= -0.5:  # treated: t½'s condition (untreated already <= -1.0)
                     frac[group].append(1 - bT / b0)
             else:
                 g0 = float(ser[(0, "reference")]["directed_share"]) - float(ser[(0, "exposed")]["directed_share"])
@@ -297,7 +301,7 @@ def p4(rows: list[dict], pair: str) -> dict:
                 if g0 >= 0.10:
                     frac[group].append(1 - gT / g0)
         tr, un = (float(np.mean(frac[g])) if frac[g] else float("nan") for g in ("treated", "untreated"))
-        ti = un / tr if np.isfinite(tr) and tr >= 0.25 and np.isfinite(un) else float("nan")
+        ti = un / tr if np.isfinite(tr) and tr >= 0.25 and np.isfinite(un) else float("nan")  # both groups non-empty
         out[m] = {"treated_mean_f": tr, "untreated_mean_f": un, "n_treated": len(frac["treated"]), "n_untreated": len(frac["untreated"]), "TI": ti}
     ti = out["D"]["TI"]
     out["verdict"] = ("undefined" if not np.isfinite(ti) else "transfer" if ti >= 0.5 else "no transfer" if ti <= 0.2 else "partial")
@@ -507,7 +511,7 @@ def main(argv: list[str] | None = None) -> int:
     # EXPECTED_FORMS section 4: (a) needs the 5 exposed agents, (b) the shuffle agents; the lags alone otherwise
     forms["P2"]["decidable"] = all(p in times for p in (*BASELINES, *SHUFFLE_HEAVY, *SHUFFLE_LIGHT))
     if not forms["P2"]["decidable"]:
-        forms["P2"]["held"] = forms["P2"]["a_held"] = forms["P2"]["b_held"] = "not decidable on these agents"
+        forms["P2"]["held"] = forms["P2"]["a_held"] = forms["P2"]["b_held"] = forms["P2"]["held_on"] = "not decidable on these agents"
     verdicts = [v["verdict"] for v in forms["P4"].values()]
     forms["P4_overall"] = next((v for v in ("transfer", "no transfer") if verdicts.count(v) >= 2), "mixed") if len(verdicts) == 3 else "incomplete"
     write_csv(args.out / "recovery.csv", recov)
