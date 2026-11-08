@@ -110,3 +110,10 @@ def test_form_H_shuffle_record(tmp_path):
     h = analyze.form_H([str(tmp_path / "s_exp")])["by_model"]["s_exp"]
     assert h["failures"] == [{"checkpoint": 10000, "what": ["mass assignment 1: se 0.500"]}]
     assert [x["where"] for x in h["exposed_nw_recovery"]] == ["assignment 0: nw", "assignment 1: nw"]
+
+
+def test_form_H_unmeasured_region_is_reported_not_failed(tmp_path):
+    ok = {"corridor": 0.97, "nw": 0.95, "ne": 0.99, "se": 0.99, "sw": 0.99}
+    _run(tmp_path, "u_ref", "reference", [_rec(0, None, ok), _rec(10000, 1.0, {**ok, "sw": None})])
+    h = analyze.form_H([str(tmp_path / "u_ref")])["by_model"]["u_ref"]
+    assert h["held"] and h["regions_not_measured"] == [{"checkpoint": 10000, "where": "sw"}]

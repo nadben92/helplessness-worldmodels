@@ -194,7 +194,7 @@ def form_H(patterns: list[str]) -> dict:
                  "switch_step_0_everywhere": all(r["switch_step"] == 0 for r in recs), "n_guard_evals": len(stats),
                  "guard_stat_min": float(min(stats)) if stats else float("nan"),
                  "guard_above_collapse": bool(stats) and min(stats) > COLLAPSE_BITS}
-            fails, transient, nw = [], [], []
+            fails, transient, nw, unmeasured = [], [], [], []
             for r in recs:
                 t, h = int(r["env_step"]), r["e8"]["health"]
                 sr = r["success_rate"]  # None before the first episode ends (checkpoint 0)
@@ -204,7 +204,9 @@ def form_H(patterns: list[str]) -> dict:
                 treated = r["e8"].get("treated_slot") or "nw"
                 for label, part in parts:
                     for region, mass in part["mass_true_by_region"].items():
-                        if exposed and region == treated:
+                        if mass is None:  # no real context of that region in the replay: not measured, reported
+                            unmeasured.append({"checkpoint": t, "where": label + region})
+                        elif exposed and region == treated:
                             nw.append({"checkpoint": t, "where": label + region, "mass_true": mass, "I_s": part["I_s_by_region"][region]})
                         elif mass < H_MASS:
                             bad.append(f"mass {label}{region} {mass:.3f}")
@@ -214,7 +216,7 @@ def form_H(patterns: list[str]) -> dict:
             out[model] = {"held": held, **a, "failures": fails, "transient_before_5000": transient,
                           "success_rate": {int(r["env_step"]): r["success_rate"] for r in recs},
                           "health": {int(r["env_step"]): r["e8"]["health"] for r in recs if r["e8"]["health"]},
-                          "exposed_nw_recovery": nw}
+                          "exposed_nw_recovery": nw, "regions_not_measured": unmeasured}
     return {"held": bool(out) and all(v["held"] for v in out.values()), "by_model": out}
 
 

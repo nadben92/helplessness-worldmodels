@@ -291,7 +291,8 @@
       "draws": 64
      }
     },
-    "exposed_nw_recovery": []
+    "exposed_nw_recovery": [],
+    "regions_not_measured": []
    },
    "base_B_ref": {
     "held": true,
@@ -582,7 +583,8 @@
       "draws": 64
      }
     },
-    "exposed_nw_recovery": []
+    "exposed_nw_recovery": [],
+    "regions_not_measured": []
    },
    "base_A_exp": {
     "held": true,
@@ -959,7 +961,8 @@
       "mass_true": 0.9854623015873016,
       "I_s": 2.2701897695956306
      }
-    ]
+    ],
+    "regions_not_measured": []
    },
    "base_B_exp": {
     "held": true,
@@ -1336,7 +1339,8 @@
       "mass_true": 0.9912142217101894,
       "I_s": 2.296033059196933
      }
-    ]
+    ],
+    "regions_not_measured": []
    }
   }
  },
