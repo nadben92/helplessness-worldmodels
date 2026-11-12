@@ -283,12 +283,18 @@ def _lag_report(iv) -> float | str:
 
 
 def p2(times: dict[str, dict]) -> dict:
-    """P2 on the lag intervals (EXPECTED_FORMS section 5, corrected): (a) and (b) each hold, fail or are not decidable."""
+    """P2 on the lag intervals (EXPECTED_FORMS section 5, corrected): (a) and (b) each hold, fail or are not decidable.
+    (a) is read on shuffle A and E (DECISIONS (24)); the original rule (4 of the 5 positive) is reported, in no verdict."""
     iv = {pair: lag_interval(t) for pair, t in times.items()}
     positive = [p for p, v in iv.items() if not isinstance(v, str) and v[0] > 0]
     not_positive = [p for p, v in iv.items() if not isinstance(v, str) and v[1] <= 0]  # nothing to recover: undecided
     undecided = len(iv) - len(positive) - len(not_positive)
-    a = True if len(positive) >= 4 else False if len(positive) + undecided < 4 else None
+    a_original = True if len(positive) >= 4 else False if len(positive) + undecided < 4 else None
+    a = False if any(p in not_positive for p in SHUFFLE_HEAVY) else True if all(p in positive for p in SHUFFLE_HEAVY) else None
+    a_original_note = "reported, in no verdict"
+    if all(p in not_positive for p in BASELINES):
+        lags = ", ".join(f"{iv[p][1]:,.0f}" for p in BASELINES)
+        a_original_note = f"failed by construction: wave 1's baseline lags ({lags}) made it impossible"
     heavy, light = [iv.get(p) for p in SHUFFLE_HEAVY], [iv.get(p) for p in (*BASELINES, *SHUFFLE_LIGHT)]
     if any(v is None or isinstance(v, str) for v in heavy + light):
         b = None
@@ -303,7 +309,8 @@ def p2(times: dict[str, dict]) -> dict:
     on = {(True, True): "(a) and (b)", (True, False): "(a) only", (False, True): "(b) only", (False, False): "not decidable"}
     nd = lambda x: "not decidable" if x is None else x
     return {"lags": {p: _lag_report(v) for p, v in iv.items()}, "a_positive": len(positive), "a_held": nd(a), "b_held": nd(b),
-            "held": nd(held), "held_on": on[(a is not None, b is not None)]}
+            "held": nd(held), "held_on": on[(a is not None, b is not None)],
+            "a_original_held": nd(a_original), "a_original_note": a_original_note}
 
 
 def p3(series: list[dict]) -> dict:
@@ -579,10 +586,11 @@ def main(argv: list[str] | None = None) -> int:
         if pair.startswith("shuffle"):
             forms["P4"][pair] = p4(rows, pair)
     forms["P2"] = p2(times)
-    # EXPECTED_FORMS section 4: (a) needs the 5 exposed agents, (b) the shuffle agents; the lags alone otherwise
+    # EXPECTED_FORMS section 4: (b) and the original (a) need the 5 exposed agents; the lags alone otherwise
     forms["P2"]["decidable"] = all(p in times for p in (*BASELINES, *SHUFFLE_HEAVY, *SHUFFLE_LIGHT))
     if not forms["P2"]["decidable"]:
-        forms["P2"]["held"] = forms["P2"]["a_held"] = forms["P2"]["b_held"] = forms["P2"]["held_on"] = "not decidable on these agents"
+        for k in ("held", "a_held", "b_held", "held_on", "a_original_held", "a_original_note"):
+            forms["P2"][k] = "not decidable on these agents"
     verdicts = [v["verdict"] for v in forms["P4"].values()]
     forms["P4_overall"] = next((v for v in ("transfer", "no transfer at T") if verdicts.count(v) >= 2), "mixed") if len(verdicts) == 3 else "incomplete"
     write_csv(args.out / "recovery.csv", recov)

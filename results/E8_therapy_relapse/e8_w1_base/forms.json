@@ -1453,6 +1453,8 @@
   "b_held": "not decidable on these agents",
   "held": "not decidable on these agents",
   "held_on": "not decidable on these agents",
+  "a_original_held": "not decidable on these agents",
+  "a_original_note": "not decidable on these agents",
   "decidable": false
  },
  "P4_overall": "incomplete",

@@ -93,15 +93,35 @@ def test_p2_censoring_gives_bounds():
              "shuffle_F": {"T": T, "t_half_C3": f"censored at {T}", "t_half_D": 7500}}
     out = analyze.p2(times)
     assert out["lags"]["shuffle_A"] == ">= 240000 (D censored)" and out["lags"]["shuffle_F"] == "<= -242500 (C3 censored)"
-    assert out["lags"]["shuffle_E"] == 10000.0 and out["a_positive"] == 2 and out["a_held"] is False  # 2 positive, none undecided
-    assert out["b_held"] is True and out["held"] is False and out["held_on"] == "(a) and (b)"
+    assert out["lags"]["shuffle_E"] == 10000.0 and out["a_positive"] == 2 and out["a_held"] is True  # A (bound) and E positive
+    assert out["b_held"] is True and out["held"] is True and out["held_on"] == "(a) and (b)"
+    assert out["a_original_held"] is False  # 2 positive, none undecided
+    assert out["a_original_note"] == "failed by construction: wave 1's baseline lags (-1,000, 0) made it impossible"
     times["shuffle_A"] = {"T": T, "t_half_C3": f"censored at {T}", "t_half_D": f"censored at {T}"}
     out = analyze.p2(times)
     assert out["lags"]["shuffle_A"] == "not decidable (both censored)" and out["b_held"] == "not decidable"
+    assert out["a_held"] == "not decidable" and out["held"] == "not decidable"
     times.update({p: {"T": T, "t_half_C3": 1000, "t_half_D": 2000} for p in ("base_A", "base_B", "shuffle_F")})
     times["shuffle_E"] = {"T": T, "t_half_C3": 1000, "t_half_D": 5000}
-    out = analyze.p2(times)  # 4 positive, A undecided: (a) holds whatever A is; (b) hangs on A (E's 4,000 > the light 1,000)
-    assert out["a_positive"] == 4 and out["a_held"] is True and out["held"] is True and out["held_on"] == "(a) only"
+    out = analyze.p2(times)  # A undecided: (a) and (b) hang on A; the original rule holds (4 positive), in no verdict
+    assert out["a_positive"] == 4 and out["a_original_held"] is True and out["a_original_note"] == "reported, in no verdict"
+    assert out["a_held"] == "not decidable" and out["held"] == "not decidable" and out["held_on"] == "not decidable"
+
+
+def test_p2_a_on_heavy_cache_agents():
+    """DECISIONS (24): (a) reads shuffle A and E only; one not positive fails it, whatever the others."""
+    T = 250000
+    times = {"base_A": {"T": 150000, "t_half_C3": 2000, "t_half_D": 1000}, "base_B": {"T": 150000, "t_half_C3": 2000, "t_half_D": 2000},
+             "shuffle_A": {"T": T, "t_half_C3": 2000, "t_half_D": 10000},
+             "shuffle_E": {"T": T, "t_half_C3": 2000, "t_half_D": 2000},  # lag 0: not positive
+             "shuffle_F": {"T": T, "t_half_C3": 1000, "t_half_D": 5000}}
+    out = analyze.p2(times)
+    assert out["a_held"] is False and out["b_held"] is False and out["held"] is False
+    times["shuffle_E"] = {"T": T, "t_half_C3": f"censored at {T}", "t_half_D": 7500}  # upper bound -242,500
+    assert analyze.p2(times)["a_held"] is False
+    times["shuffle_E"] = {"T": T, "t_half_C3": 2000, "t_half_D": f"censored at {T}"}  # lower bound 248,000; F's 4,000 below
+    out = analyze.p2(times)
+    assert out["a_held"] is True and out["b_held"] is True and out["held"] is True
 
 
 def _p4_rows(image, treated, b0, bT, d_exp0, d_expT, d_ref=1.0):
