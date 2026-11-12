@@ -75,12 +75,19 @@ def test_compare_devices_and_p2_decidability():
     assert analyze.p2(times)["lags"] == {"base_A": 5000.0, "base_B": 5000.0}
 
 
-def test_p2_undefined_lag_and_b_not_decidable():
-    times = {p: {"T": 150000, "t_half_C3": 2000, "t_half_D": 5000} for p in (*analyze.BASELINES, "shuffle_A", "shuffle_E")}
+def test_p2_light_agent_with_nothing_to_recover_leaves_b():
+    """DECISIONS (25): a light agent with nothing to recover leaves (b)'s light set; none left: (b) not decidable."""
+    times = {p: {"T": 150000, "t_half_C3": 2000, "t_half_D": 5000} for p in analyze.BASELINES}
+    times.update({p: {"T": 250000, "t_half_C3": 2000, "t_half_D": 10000} for p in analyze.SHUFFLE_HEAVY})
     times["shuffle_F"] = {"T": 250000, "t_half_C3": "nothing to recover", "t_half_D": 5000}
     out = analyze.p2(times)
     assert out["lags"]["shuffle_F"] == "nothing to recover" and out["a_positive"] == 4 and out["a_held"] is True
-    assert out["b_held"] == "not decidable" and out["held"] is True and out["held_on"] == "(a) only"
+    assert out["b_light_removed"] == ["shuffle_F"] and out["b_held"] is True  # 8,000 > the baselines' 3,000
+    assert out["held"] is True and out["held_on"] == "(a) and (b)"
+    times.update({p: {"T": 150000, "t_half_C3": "nothing to recover", "t_half_D": 5000} for p in analyze.BASELINES})
+    out = analyze.p2(times)
+    assert out["b_light_removed"] == ["base_A", "base_B", "shuffle_F"] and out["b_held"] == "not decidable"
+    assert out["held"] is True and out["held_on"] == "(a) only"
 
 
 def test_p2_censoring_gives_bounds():

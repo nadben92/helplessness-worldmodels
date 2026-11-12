@@ -1451,6 +1451,7 @@
   "a_positive": 0,
   "a_held": "not decidable on these agents",
   "b_held": "not decidable on these agents",
+  "b_light_removed": [],
   "held": "not decidable on these agents",
   "held_on": "not decidable on these agents",
   "a_original_held": "not decidable on these agents",

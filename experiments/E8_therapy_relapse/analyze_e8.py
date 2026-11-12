@@ -295,8 +295,12 @@ def p2(times: dict[str, dict]) -> dict:
     if all(p in not_positive for p in BASELINES):
         lags = ", ".join(f"{iv[p][1]:,.0f}" for p in BASELINES)
         a_original_note = f"failed by construction: wave 1's baseline lags ({lags}) made it impossible"
-    heavy, light = [iv.get(p) for p in SHUFFLE_HEAVY], [iv.get(p) for p in (*BASELINES, *SHUFFLE_LIGHT)]
-    if any(v is None or isinstance(v, str) for v in heavy + light):
+    # DECISIONS (25): a light agent with nothing to recover leaves the light set; A or E with nothing to recover, or no
+    # light agent left, and (b) is not decidable
+    light_removed = [p for p in (*BASELINES, *SHUFFLE_LIGHT) if isinstance(iv.get(p), str)]
+    heavy = [iv.get(p) for p in SHUFFLE_HEAVY]
+    light = [iv.get(p) for p in (*BASELINES, *SHUFFLE_LIGHT) if p not in light_removed]
+    if not light or any(v is None or isinstance(v, str) for v in heavy + light):
         b = None
     elif min(v[0] for v in heavy) > max(v[1] for v in light):
         b = True
@@ -309,6 +313,7 @@ def p2(times: dict[str, dict]) -> dict:
     on = {(True, True): "(a) and (b)", (True, False): "(a) only", (False, True): "(b) only", (False, False): "not decidable"}
     nd = lambda x: "not decidable" if x is None else x
     return {"lags": {p: _lag_report(v) for p, v in iv.items()}, "a_positive": len(positive), "a_held": nd(a), "b_held": nd(b),
+            "b_light_removed": light_removed,
             "held": nd(held), "held_on": on[(a is not None, b is not None)],
             "a_original_held": nd(a_original), "a_original_note": a_original_note}
 
