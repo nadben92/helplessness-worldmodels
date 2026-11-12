@@ -393,3 +393,17 @@ could be positive: (a), and with it P2, failed whatever wave 2 shows.
   fails when min over A and E of the upper ends <= max over those three of the lower ends; otherwise not decidable.
 - **The original rule** (at least 4 of 5) is still computed and reported, as "failed by construction: wave 1's baseline
   lags (-1,000 and 0) made it impossible"; it enters no verdict.
+
+## 2026-11-12 (25) -- P2 (b): a light agent with nothing to recover leaves the comparison (user, before any wave 2 data)
+
+Written before the wave 2 archive was extracted: nothing of wave 2 has been read. Under (24)'s (b), any of the five
+agents with nothing to recover (g(0) < 0.10 for C3 or D: no lag exists) made (b) not decidable, even when A and E could
+still be compared with the other light agents.
+
+- A light agent (base_A, base_B or shuffle F) with nothing to recover is **removed from the light set**; (b) is decided
+  on the light agents left, with (24)'s rule unchanged (holds when min over A and E of the lower ends > max over the light
+  agents left of the upper ends; fails when min over A and E of the upper ends <= max over them of the lower ends;
+  otherwise not decidable).
+- No light agent left: (b) is not decidable.
+- A or E with nothing to recover: (b) is not decidable (the prediction concerns them).
+- The light agents removed are reported with (b).

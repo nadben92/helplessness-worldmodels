@@ -225,6 +225,9 @@ written changes.
 - **(b)**: holds when min over A and E of the lower ends > max over base_A, base_B and F of the upper ends; fails when
   min over A and E of the upper ends <= max over the light agents of the lower ends; otherwise (an infinite end that
   matters, or an agent with nothing to recover) it is not decidable.
+  **Revised 2026-11-12 (user), before any wave 2 data (DECISIONS (25))**: a light agent (base_A, base_B or F) with nothing
+  to recover is removed from the light set instead of making (b) not decidable; if no light agent is left, (b) is not
+  decidable; if A or E has nothing to recover, (b) is not decidable (the prediction concerns them).
 - Lags are differences of grid checkpoints: a lag of 0 means the same checkpoint, not "no lag at finer resolution".
   P2 holds when (a) and (b) both hold; fails when either fails; if one is not decidable and the other holds, P2's verdict
   is the decided part's, reported as such; if both are not decidable, P2 is not decidable.
