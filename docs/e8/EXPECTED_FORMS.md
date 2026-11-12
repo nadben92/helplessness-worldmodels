@@ -216,8 +216,12 @@ written changes.
   **Revised 2026-11-08 (user), before any wave 2 data**: that agent is **not decidable** for (a) and for (b) (it no
   longer counts as not positive in (a)).
 - **(a)**: an agent is positive when its interval's lower end > 0, not positive when its upper end <= 0, undecided
-  otherwise (both censored, nothing to recover, or a lower bound of exactly 0). (a) holds when at least 4 of the 5 are
-  positive; fails when the positive ones plus the undecided ones are fewer than 4; otherwise it is not decidable.
+  otherwise (both censored, nothing to recover, or a lower bound of exactly 0).
+  **Revised 2026-11-12 (user), after wave 1's data and before any wave 2 data (DECISIONS (24))**: (a) is read on the
+  heavy-cache agents only, shuffle A and shuffle E. (a) holds when both are positive; fails when either is not positive;
+  otherwise it is not decidable. The original rule (at least 4 of the 5 exposed agents positive; failed when the positive
+  ones plus the undecided ones are fewer than 4; otherwise not decidable) is still computed and reported beside it, with
+  the note "failed by construction: wave 1's baseline lags (-1,000 and 0) made it impossible"; it enters no verdict.
 - **(b)**: holds when min over A and E of the lower ends > max over base_A, base_B and F of the upper ends; fails when
   min over A and E of the upper ends <= max over the light agents of the lower ends; otherwise (an infinite end that
   matters, or an agent with nothing to recover) it is not decidable.

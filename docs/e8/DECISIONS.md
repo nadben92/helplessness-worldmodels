@@ -376,3 +376,20 @@ crossing -0.5 at 10,000 and 25,000 steps, at -0.18 / -0.09 by 60,000 and near 0 
   `batches.LAUNCHABLE`; ne, sw and se stay out.
 - Assumption to check at the first checkpoints: the partial therapy on nw puts T_inc in nw in every episode with the
   same geometry, so the treated-zone visit rate should be close to the baselines' (about 0.13-0.18 per step).
+
+## 2026-11-12 (24) -- P2 (a) read on shuffle A and E only (user, after wave 1's data, before any wave 2 data)
+
+Written after wave 1's analysis (report section 11) and before the wave 2 archive was opened: nothing of wave 2 has been
+read. EXPECTED_FORMS section 5's (a) asked for a positive lag in at least 4 of the 5 exposed agents (base_A, base_B,
+shuffle A, E, F). Wave 1's baseline lags are exact and not positive (base_A -1,000, base_B 0 steps), so at most 3 agents
+could be positive: (a), and with it P2, failed whatever wave 2 shows.
+
+- **Revised (a)**: on shuffle A and shuffle E only. Holds when both lags are positive (lower end > 0, a lower bound when
+  D is censored); fails when either is not positive (upper end <= 0); not decidable otherwise.
+- **Justification**: E7's prediction concerns the heavy-cache agents (cache effect at 650,000: 0.24 in A, 0.22 in E); the
+  original rule counted light-cache agents (the baselines, F: 0.06-0.16), for which no lag is predicted. They stay in
+  (b), as the light side of the comparison.
+- **(b) unchanged**: holds when min over A and E of the lower ends > max over base_A, base_B and F of the upper ends;
+  fails when min over A and E of the upper ends <= max over those three of the lower ends; otherwise not decidable.
+- **The original rule** (at least 4 of 5) is still computed and reported, as "failed by construction: wave 1's baseline
+  lags (-1,000 and 0) made it impossible"; it enters no verdict.
