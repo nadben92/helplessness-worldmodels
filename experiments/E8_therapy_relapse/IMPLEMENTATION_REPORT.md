@@ -522,3 +522,191 @@ décidable. « Rien à récupérer » (écart < 0,10 au checkpoint 0) n'est pas 
 
 `analyze_e8.p2` est aligné (`lag_interval`), avec un test pour chacun des trois cas. Le `forms.json` de la vague 1 et
 toutes ses autres sorties sont identiques après la nouvelle exécution.
+
+## 13. Vague 2 (shuffle A, E, F, référence B, thérapie partielle en nw) : analyse (12–13 novembre)
+
+Résultats dans `results/E8_therapy_relapse/e8_w2_shuf_nw/`. Révisions écrites avant toute donnée de la vague 2 :
+DECISIONS (24) (P2 (a) sur A et E seuls, a77a635) et (25) (P2 (b), agent léger sans rien à récupérer retiré, e4beaee).
+Décision écrite après F0, avant R, H, M et les prédictions : (26) (bb808cb). Aucune règle d'EXPECTED_FORMS n'a changé
+après la lecture de R et H. Ligne de résumé de `analyze_e8.py` vue en même temps que R (« P2 False, P4 transfer ») :
+signalé à l'utilisateur, rien n'a été ajusté ensuite.
+
+### 13.1 Export, runs et mesures
+
+- Archive `e8_w2_shuf_nw__20261112T124924Z.tar.gz` : 163 315 840 octets, SHA-256 `9422bc4c…0952889` (égale à celle du
+  cluster), 104 entrées (les 103 fichiers du manifeste et `MANIFEST.json`), extraite hors dépôt
+  (`C:\nrw\e8_wave2\extracted`). `export_batch.py verify` : **103 fichiers, 0 problème**. Les 4 runs sont `done` à
+  250 000 pas (149 846 pas de gradient), environ 32,5 h d'entraînement chacun sur le cluster.
+- Sondes sur CPU local seulement (DECISIONS (23)) : smoke (1 job réduit, 21 min, supprimé ensuite), puis la tâche
+  planifiée `E8_w2_cpu_chain` (12 processus) : **16 / 16 jobs `done`, 9 h 47** (13 h 57 → 23 h 44 UTC). Sorties hors
+  dépôt dans `C:\nrw\e8_wave2\probes_cpu`. La tâche est supprimée.
+- L'analyse lit les sondes CPU des deux vagues (retards des baselines pour P2) et les runs des deux vagues (H).
+
+### 13.2 Formes de contrôle
+
+| Forme | Résultat |
+|---|---|
+| F0 (a) checkpoint 0 = campagne à 650 000, CPU, égalité exacte | **F 43 / 43, E 43 / 43 ; A 20 / 20** sur les grandeurs de l'exposé seul (`--exposed-only`, décision (26)) |
+| F0 (a) de A, comparaison complète (gardée : `identity/F0a_shuffle_A_full.json`) | 22 / 43 : tous les écarts portent sur la référence ou sur b. La campagne appariait A à la **référence A** (seed02), E8 l'apparie à la référence B (design). Erratum daté dans EXPECTED_FORMS §1. La référence B est vérifiée exacte par E et F |
+| F0 (c) I de l'exposé au pas 1 contre les enregistrements d'E5 (GPU du cluster), 0,05 bit | F 12 / 12 (max 0,043) ; E 10 / 12 (affectations 6 : +0,053, 7 : +0,113) ; A 9 / 12 (2 : +0,089, 8 : +0,052, 11 : −0,075). **Écart de device CPU / GPU, sans verdict** (décision (26)) |
+| H santé de l'entraînement | Les 4 runs `done` à 250 000, `switch_step` = 0 partout, garde ≥ 3,27 bits (seuil 1,0), succès ≥ 0,90. Référence B, A et E : **tiennent** (transitoires avant 5 000 : A à 1 000, couloir 0,877 et sw 0,856 ; E à 500, se 0,857 et couloir 0,893). **shuffle F : en échec tel qu'écrit** : masse sur le vrai successeur < 0,90 dans l'affectation 0, en ne et dans le couloir, de 5 000 à 25 000 pas (minimum 0,857) ; au-dessus de 0,90 dès 40 000. Ne bloque pas la lecture de F (utilisateur) ; fenêtre signalée en 13.6 |
+| R la référence reste contrôlable | base_A, base_B (vague 1) : tiennent. **Référence B : tient sur les affectations soignées (0–2), échoue sur les non soignées (3–11)** (13.3) |
+| M l'exposé ne se dégrade pas en nw | **tient** pour les 5 paires : ρ (b, C3, D) = 0,92 / 0,96 / 0,85 (A), 0,97 / 0,91 / 0,81 (E), 0,98 / 0,89 / 0,16 (F) ; drawdown max. 0,037 (b de E) |
+
+### 13.3 R : oubli partiel des arrangements non entraînés (résultat)
+
+La référence B s'entraîne 250 000 pas sur les 3 affectations de la thérapie (UD en nw) seulement.
+- Affectations soignées (0–2) : I_réf de 2,24 à 2,30, masse ≥ 0,93, C1, C3 et D stables, à tous les checkpoints.
+- Affectations non soignées (3–11) : I_réf passe sous log2 5 − 0,15 = 2,17 à partir de 10 000–25 000 pas.
+  - **3, 6 et 9, durablement** : I_réf à T = 1,63, 2,07 et 2,13 (minimum 1,59 sur l'affectation 9 à 25 000) ; la masse
+    de la référence sur le vrai successeur tombe jusqu'à 0,03 (affectation 3 à T). C3 sort des bornes à T sur 3 et 9
+    (0,99 → 0,89 et 0,91), C1 sur 9 (1,00 → 0,91).
+  - Les 6 autres : un creux entre 15 000 et 40 000 pas (I_réf 2,01–2,16), puis retour dans les bornes.
+  - **3, 6 et 9 sont exactement les affectations où nw a le rôle CD** (la couleur de T_ctrl en nw) ; la thérapie ne montre
+    nw qu'avec la couleur de T_inc (rôle UD). Dans les 6 autres, nw est neutre.
+- D_réf reste dans ± 0,05 de sa valeur au checkpoint 0 sur toutes les images (moyenne non soignée 0,92–0,93 ; par image
+  à T ≥ 0,89 : 3 : 0,93 → 0,89, 6 : 0,94 → 0,91, 9 : 0,93 → 0,90). Le comportement de la référence ne suit pas la dérive de
+  sa croyance.
+- **Validité des points** (critère d'E4 sur la référence : masse ≥ 0,90 et |I_réf − log2 5| ≤ 0,15 ; `validity.csv`,
+  `validity_counts.csv`) : 120 points invalides sur 576 (3 paires × 12 images × 16 checkpoints). Aucun sur les
+  affectations soignées. Affectation 3 invalide dès 15 000, 6 dès 5 000 (2 paires sur 3) puis 7 500, 9 dès 10 000, jusqu'à
+  T. Les 6 autres : invalides à 15 000–40 000 seulement. **À 25 000, aucun point non soigné n'est valide.** b, f_b, TI_b,
+  les courbes et les franchissements ne lisent que les points valides (c'est ce que faisait déjà l'analyse : `walks_valid`
+  est ce critère) ; les moyennes non soignées portent donc sur un ensemble d'images qui change (9 jusqu'à 3 500, 0 à
+  25 000, 6 dès 60 000).
+- **Exploratoire, l'exposé** (`drift.csv`, `figures/validity_drift.png`) : même motif. Sur 3, 6 et 9, la masse de l'exposé
+  à T vaut 0,23 / 0,44 / 0,33 (A), 0,00 / 0,66 / 0,71 (E), 0,55 / 0,32 / 0,23 (F), contre 0,94–0,98 sur les autres non
+  soignées ; I_exp à T 1,67–2,14 contre 2,20–2,27. Les deux modèles perdent la prédiction des arrangements où nw porte la
+  couleur de T_ctrl.
+
+### 13.4 Prédictions, telles que calculées
+
+Abscisses : 500 / 1 000 / 2 000 / 3 500 / 5 000 / 10 000 / 40 000 / 60 000 / 100 000 pas d'environnement = 146 / 446 /
+1 046 / 1 946 / 2 846 / 5 846 / 23 846 / 35 846 / 59 846 pas de gradient. Courbes soignées : moyenne des 3 affectations
+(toutes valides à tous les checkpoints).
+
+**P1 tient chez A, E et F** (et chez base_A, base_B en vague 1). b (soigné) : −2,14 → +0,03 (A), −2,14 → −0,01 (E),
+−2,05 → −0,03 (F) ; t½ de b à 1 000, 500 et 1 000 pas ; franchissement de −0,5 à 1 000, 2 000 et 2 000 ; pas de rechute.
+
+**P2 en échec, sur (a) et sur (b).**
+
+| | t½ C3 | t½ D | retard |
+|---|---|---|---|
+| shuffle A | 1 000 | 1 000 | **0** |
+| shuffle E | 500 | 500 | **0** |
+| shuffle F | 500 | 500 | 0 |
+| base_A (vague 1) | 2 000 | 1 000 | −1 000 |
+| base_B (vague 1) | 2 000 | 2 000 | 0 |
+
+- (a) révisée (24) : A et E ont un retard de 0, non positif : **en échec**.
+- (b) : min des bornes hautes de A et E (0) ≤ max des bornes basses des légers (0) : **en échec**. Aucun agent léger
+  retiré (25).
+- Règle d'origine (4 sur 5) : 0 positif, **en échec par construction** (retards des baselines −1 000 et 0).
+- Résolution : un retard de 0 veut dire le même checkpoint (500 ou 1 000 pas) ; un retard plus fin que la grille n'est pas
+  mesurable.
+- Décomposition (descriptive ; l'oracle k = 1 ne tourne que sur l'image d'entraînement, assignment01, alors que D_réf et
+  D_exp sont des moyennes soignées) : effet cache au checkpoint 0 = 0,284 (A), 0,223 (E), 0,075 (F), contre 0,064 (base_A)
+  et 0,165 (base_B). À 2 000 pas, premier point d'oracle : −0,019 (A), −0,014 (E), −0,014 (F), contre −0,009 (base_A) et
+  **0,086 (base_B)**. Rapport au dernier point d'oracle sur la valeur à 0 : −0,03 (A), −0,04 (E), −0,11 (F). La forme
+  attendue (cache de A et E résorbé plus lentement) n'est pas observée : il est résorbé dès 2 000 pas, plus tôt que chez
+  base_B.
+- **Effet cache de A au checkpoint 0** (`cache_A.json`, image d'entraînement) : **0,279 avec la référence B** (D_réf 0,928,
+  D_oracle1 0,649), **0,242 avec la référence A** de la campagne (D_réf 0,892), le 0,24 cité d'E7.
+
+**P3 : tient chez F, ne tient pas chez A et E** (tient si s_D ≥ 0,5 et s_b < 0,5).
+
+| | gain D | s_D | gain b | s_b | verdict |
+|---|---|---|---|---|---|
+| shuffle A | 0,55 | 0,43 | 2,17 | 0,42 | ne tient pas (s_D) |
+| shuffle E | 0,43 | 0,81 | 2,13 | 0,51 | ne tient pas (s_b) |
+| shuffle F | 0,42 | 0,92 | 2,01 | 0,48 | **tient** |
+
+Limite écrite d'avance : la récupération soignée a lieu entre 0 et 2 000 pas, sur 3 intervalles de la grille. Le saut de D
+chez E et F est l'intervalle 0–500 ; le s_b de E (0,51) est juste au-dessus du seuil.
+
+**P4 : « transfer » (3 agents sur 3).**
+
+| | TI_D | TI_b | images soignées / non soignées | verdict |
+|---|---|---|---|---|
+| shuffle A | 0,985 | 0,981 | 3 / 6 | transfer |
+| shuffle E | 0,983 | 0,999 | 3 / 6 | transfer |
+| shuffle F | 0,977 | 1,000 | 3 / 6 | transfer |
+
+- Les 6 images non soignées qui entrent sont celles où nw est neutre (4, 5, 7, 8, 10, 11) ; 3, 6 et 9 (nw = CD) sont
+  exclues, invalides à T. Le transfert n'est donc lu que sur les arrangements où nw est neutre.
+- D_réf sur les non soignées (vérifié) : 0,92–0,93 en moyenne à tous les checkpoints valides, dans ± 0,05 de sa valeur à
+  0 par image : g_D et TI_D ne sont pas tirés par une baisse de la référence.
+- Franchissements (`transfer.csv`, `dose.csv`), en pas d'environnement / pas de gradient / visites de nw de l'exposé :
+
+| | g_D ≤ 0,05, soignées | g_D ≤ 0,05, non soignées | b > −0,5, soignées | b > −0,5, non soignées |
+|---|---|---|---|---|
+| shuffle A | 2 000 / 1 046 / 232 | 3 500–10 000 / 1 946–5 846 / 489–1 677 | 1 000–2 000 / 446–1 046 / 125–232 | 10 000–60 000 / 5 846–35 846 / 1 677–10 201 |
+| shuffle E | 1 000 / 446 / 71 | 40 000–60 000 / 23 846–35 846 / 6 443–9 654 | 2 000 / 1 046 / 203 | 15 000–60 000 / 8 846–35 846 / 2 190–9 654 |
+| shuffle F | 500 / 146 / 58 | 40 000–100 000 / 23 846–59 846 / 6 632–16 910 | 2 000 / 1 046 / 252 | 40 000–60 000 / 23 846–35 846 / 6 632–10 097 |
+
+- Toutes les images franchissent avant T (6 / 6 non soignées, 3 / 3 soignées, pour chaque agent). Aucun point non soigné
+  n'étant valide à 25 000, un franchissement lu à 40 000 veut dire « entre 15 000 et 40 000 ».
+- Pour D, le transfert demande 2 à 5 fois plus de pas que la récupération soignée chez A, 40 à 200 fois plus chez E et F.
+
+### 13.5 Dose de thérapie (visites de nw)
+
+Taux de visites de nw par pas (`visit_rates.csv`) :
+
+| | 0–500 | 0–5 000 | 0–250 000 |
+|---|---|---|---|
+| shuffle A | 0,074 | 0,158 | 0,169 |
+| shuffle E | 0,064 | 0,129 | 0,173 |
+| shuffle F | 0,116 | 0,162 | 0,168 |
+| référence B | 0,194 | 0,184 | 0,172 |
+
+Les exposés évitent nw au début (6–12 % des pas contre 19 % pour la référence), puis rejoignent son taux vers 5 000 pas.
+Malgré cela, la dose qui suffit est faible : t½ de D soigné à 125 (A), 32 (E) et 58 (F) visites, contre 87 (base_A) et
+227 (base_B) en vague 1. Le transfert non soigné, lui, arrive après 489–1 677 visites de nw (A) et 6 443–16 910 (E, F).
+
+### 13.6 Fenêtre de H pour shuffle F (5 000–25 000 pas)
+
+Checkpoints concernés : 5 000, 7 500, 10 000, 15 000, 25 000 (colonne `in_F_H_window` de `dose.csv`, bande grise de
+`figures/dose_crossings.png`). Ce qui tombe dedans : **les t½ non soignés de F** (b, C1, C3 et D à 10 000 ; courbes
+moyennes sur 7 images valides). Hors de la fenêtre : les t½ soignés (500–1 000), les franchissements soignés (500 et
+2 000), les franchissements P4 non soignés (40 000–100 000), P1 et TI (lus à T), le retard de P2 (au checkpoint 500).
+L'échec de H porte sur l'enregistrement de santé de l'affectation 0 (soignée), en ne et dans le couloir, pas en nw.
+
+### 13.7 Figures et sorties (`results/E8_therapy_relapse/e8_w2_shuf_nw/`)
+
+- `figures/recovery_<paire>.png`, `recovery_3abscissae_<paire>.png`, `localisation_<paire>.png`, `decomposition.png`,
+  `b_vs_directed.png` (`analyze_e8.py`, les 5 paires).
+- `figures/validity_drift.png` : I et masse au pas 1 de la référence et de l'exposé, par image (paire A).
+- `figures/dose_crossings.png` : franchissements g_D ≤ 0,05 par image, en pas et en visites de nw.
+- Tables : `curves.csv`, `recovery.csv`, `decomposition.csv`, `transfer.csv`, `forms.json` (`analyze_e8.py`) ;
+  `validity.csv`, `validity_counts.csv`, `drift.csv`, `dose.csv`, `visit_rates.csv`, `cache_A.json`
+  (`w2_supplements.py`) ; `identity/F0a_shuffle_*.json`.
+
+Commandes (Git Bash, `C:\nrw\wt-e8`, `PYTHONPATH=C:/nrw/wt-e8/src`) :
+
+```bash
+python experiments/E8_therapy_relapse/check_identity.py --probes <probes__shuffle_B_ref__k000000__*> --pair shuffle_A \
+    --image assignment01 --e6 <e6__f1_A__*> --c12 <e7d7__f1_A__natural__natural_training__*> \
+    --oracle <e7diag__f1_A__lookahead__*> --e5-records <run E5 seed02, experimental> --exposed-only \
+    --out results/E8_therapy_relapse/e8_w2_shuf_nw/identity/F0a_shuffle_A.json
+python experiments/E8_therapy_relapse/analyze_e8.py \
+    --probes C:/nrw/e8_wave1/probes_cpu/E8_therapy_relapse/probes__* C:/nrw/e8_wave2/probes_cpu/E8_therapy_relapse/probes__* \
+    --runs C:/nrw/e8_wave1/extracted/results/E8_therapy_relapse/grid12x12__* C:/nrw/e8_wave2/extracted/results/E8_therapy_relapse/grid12x12__* \
+    --out results/E8_therapy_relapse/e8_w2_shuf_nw --e6-cloud "C:/nrw/wt-e6/scratch/all/e6_*/E6_phenotypes_latent/e6__*"
+PYTHONPATH="C:/nrw/wt-e8/src;C:/nrw/wt-e8/experiments/E8_therapy_relapse" python experiments/E8_therapy_relapse/w2_supplements.py \
+    --probes C:/nrw/e8_wave2/probes_cpu/E8_therapy_relapse/probes__* \
+    --runs C:/nrw/e8_wave2/extracted/results/E8_therapy_relapse/grid12x12__* \
+    --analysis results/E8_therapy_relapse/e8_w2_shuf_nw --campaign-e6-A <e6__f1_A__*>
+```
+
+### 13.8 En bref
+
+- Formes : F0 exact (F, E 43/43 ; A 20/20 côté exposé, la campagne l'appariait à la référence A) ; M tient ; H tient sauf
+  F (masse 0,86–0,89 en ne et couloir, affectation 0, 5 000–25 000 pas) ; F0 (c) : écart CPU / GPU jusqu'à 0,11 bit.
+- R échoue sur les non soignées : la référence oublie en partie les arrangements non entraînés, surtout les 3 où nw porte
+  la couleur de T_ctrl (I_réf jusqu'à 1,6, masse jusqu'à 0,03) ; l'exposé fait de même ; D_réf reste stable.
+- P1 tient (A, E, F) : b soigné de −2,1 à ≈ 0, t½ en 500–1 000 pas, plus vite que les baselines.
+- P2 échoue sur (a) et (b) : retard 0 chez A et E ; leur effet cache (0,28 et 0,22 au départ) est résorbé dès 2 000 pas.
+- P3 tient chez F seulement ; la récupération soignée tient dans 3 intervalles de la grille.
+- P4 : transfert chez les 3 agents (TI_D 0,98), lu sur les 6 arrangements où nw est neutre ; il demande 2 à 200 fois plus
+  de pas que la récupération soignée (A le plus rapide).
+- Les exposés évitent nw au début (6–12 % des pas contre 19 %), mais 30 à 125 visites suffisent à corriger D.

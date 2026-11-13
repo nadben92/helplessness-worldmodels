@@ -1,7 +1,10 @@
 # E8 — Therapy and relapse
 
-**Status (2026-11-08): wave 1 (baselines) run and analysed (report section 11: control forms held, P1 held, P2 not
-decidable on the baselines, P3 did not hold); wave 2 (shuffle) proposed, not launched.** Branch `e8` (from `v0.2-e7`). The user's brief:
+**Status (2026-11-13): waves 1 (baselines) and 2 (shuffle A, E, F with reference B, therapy on nw) run and analysed.
+Wave 1 (report section 11): control forms held, P1 held, P2 not decidable on the baselines, P3 did not hold. Wave 2
+(report section 13): F0 exact (A on its exposed side, DECISIONS (26)), M held; R failed on the untreated assignments
+(partial forgetting of the untrained arrangements), H failed for F (assignment 0, 5,000-25,000 steps); P1 held, P2 failed
+on (a) and (b), P3 held for F only, P4 "transfer" (3 of 3, read on the 6 arrangements where nw is neutral).** Branch `e8` (from `v0.2-e7`). The user's brief:
 `docs/e8/prompt_e8_therapie.md`. Decisions: `docs/e8/DECISIONS.md`. Expected forms and predictions, committed before any
 computation: `docs/e8/EXPECTED_FORMS.md`. Report: `experiments/E8_therapy_relapse/IMPLEMENTATION_REPORT.md`.
 
