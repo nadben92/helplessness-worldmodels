@@ -647,6 +647,43 @@ chez E et F est l'intervalle 0–500 ; le s_b de E (0,51) est juste au-dessus du
 - Toutes les images franchissent avant T (6 / 6 non soignées, 3 / 3 soignées, pour chaque agent). Aucun point non soigné
   n'étant valide à 25 000, un franchissement lu à 40 000 veut dire « entre 15 000 et 40 000 ».
 - Pour D, le transfert demande 2 à 5 fois plus de pas que la récupération soignée chez A, 40 à 200 fois plus chez E et F.
+- **Couleur ou position ?** Pendant la thérapie, ne, se et sw étaient aussi contrôlables, avec d'autres couleurs que T_inc
+  (affectations 0–2 : la couleur de T_ctrl ou des couleurs neutres). Le transfert ne peut donc pas être attribué à la
+  couleur seule. Il peut passer par la couleur (T_inc, soignée en nw, retrouvée ailleurs) ou par la position (le quadrant
+  où se trouve T_inc dans l'image non soignée a déjà été vu contrôlable pendant la thérapie). Le design de la vague 2 ne
+  sépare pas ces deux voies.
+
+**Transfert ou oubli ? (exploratoire, demandé par l'utilisateur le 13 novembre ; aucun verdict ni règle changés).**
+Sur les images non soignées valides, l'exposé est suivi à chaque checkpoint (`profile.csv`, `profile_crossings.csv`,
+`figures/transfer_profile.png`) : masse sur le vrai successeur dans le quadrant de T_inc (marches au pas 1), C3,
+localisation (L_dec : case décodée = vraie case, sur les pas en zone), I_exp et D. Premier checkpoint valide où chacun
+atteint le niveau de la référence : g_D ≤ 0,05 (comme P4), g_C3 ≤ 0,05, masse ≥ 0,90 et |I − log2 5| ≤ 0,15 (niveaux
+d'E4), écart de L_dec ≤ 0,05. Seuils de lecture choisis pour cette vérification, après les données.
+
+| 6 images où nw est neutre | D | C3 | masse ≥ 0,90 | I | masse au franchissement de D | écart de C3 au franchissement de D | baisse max. de la masse sous sa valeur à 0 |
+|---|---|---|---|---|---|---|---|
+| shuffle A | 3 500–10 000 | 3 500–100 000 | 40 000–100 000 | 60 000–150 000 | 0,44–0,60 | 0,04–0,15 | 0 |
+| shuffle E | 40 000–60 000 | **même checkpoint que D** (6 / 6) | 60 000–100 000 | 60 000–150 000 | 0,83–0,95 | ≤ 0,03 | 0 |
+| shuffle F | 40 000–100 000 | 15 000–100 000, jamais après D | 100 000–200 000 | 100 000–200 000 | 0,74–0,93 | ≤ 0,05 | ≤ 0,016 |
+
+- **Profil de transfert, pas d'oubli, chez les trois agents.** La masse part de 0,20–0,28 et monte jusqu'à 0,93–0,98 à T
+  sans jamais repasser sous sa valeur de départ (baisse max. ≤ 0,016) ; C3, I et L_dec montent aussi. Les prédictions
+  deviennent justes dans les arrangements non soignés où nw est neutre.
+- **L'ordre diffère selon l'agent.** Chez E et F, D et C3 franchissent ensemble (ou C3 avant), avec une masse déjà à
+  0,74–0,95 ; la masse atteint 0,90 au même checkpoint que D ou jusqu'à 4 checkpoints plus tard. Chez A, D franchit
+  d'abord (3 500–10 000 pas) avec une masse de 0,44–0,60 et, sur 4 images sur 6, un C3 encore 0,07–0,15 sous la
+  référence : le comportement de A devance sa croyance et sa lecture critique. Ce n'est pas le profil d'oubli (la masse
+  ne baisse pas), mais D monte avant que C3 ne suive.
+- L_dec atteint la référence entre 7 500 et 40 000 pas chez A, entre 3 500 et 10 000 chez E, et seulement entre 60 000 et
+  250 000 chez F.
+- Rappel : aucun point non soigné n'est valide à 25 000 ; un franchissement lu à 40 000 veut dire « entre 15 000 et
+  40 000 ».
+- **Les 3 images où nw est CD** (invalides dès 5 000–15 000, hors P4 ; tous leurs points sont lus ici) : D et C3 de
+  l'exposé montent jusqu'au niveau de la référence, mais sa masse ne suit pas. Moyenne des 3 images : un pic à 0,41 (A, à 7 500 pas) et
+  0,58 (E, à 15 000), puis une baisse (0,23 et 0,34 à 40 000) ; chez F, elle descend jusqu'à 0,15 à 25 000 et
+  finit à 0,37. Par image, la masse passe jusqu'à 0,22 sous sa valeur de départ. La référence suit la même pente (13.3).
+  Là, le profil est celui d'une prédiction dégradée, partagée par les deux modèles, avec un comportement qui récupère quand
+  même.
 
 ### 13.5 Dose de thérapie (visites de nw)
 
@@ -677,9 +714,11 @@ L'échec de H porte sur l'enregistrement de santé de l'affectation 0 (soignée)
   `b_vs_directed.png` (`analyze_e8.py`, les 5 paires).
 - `figures/validity_drift.png` : I et masse au pas 1 de la référence et de l'exposé, par image (paire A).
 - `figures/dose_crossings.png` : franchissements g_D ≤ 0,05 par image, en pas et en visites de nw.
+- `figures/transfer_profile.png` (exploratoire) : D, C3, L_dec, masse et I de l'exposé sur les images non soignées (nw
+  neutre : points valides ; nw CD : tous les points).
 - Tables : `curves.csv`, `recovery.csv`, `decomposition.csv`, `transfer.csv`, `forms.json` (`analyze_e8.py`) ;
-  `validity.csv`, `validity_counts.csv`, `drift.csv`, `dose.csv`, `visit_rates.csv`, `cache_A.json`
-  (`w2_supplements.py`) ; `identity/F0a_shuffle_*.json`.
+  `validity.csv`, `validity_counts.csv`, `drift.csv`, `dose.csv`, `visit_rates.csv`, `cache_A.json`, `profile.csv`,
+  `profile_crossings.csv` (`w2_supplements.py`) ; `identity/F0a_shuffle_*.json`.
 
 Commandes (Git Bash, `C:\nrw\wt-e8`, `PYTHONPATH=C:/nrw/wt-e8/src`) :
 
@@ -708,5 +747,7 @@ PYTHONPATH="C:/nrw/wt-e8/src;C:/nrw/wt-e8/experiments/E8_therapy_relapse" python
 - P2 échoue sur (a) et (b) : retard 0 chez A et E ; leur effet cache (0,28 et 0,22 au départ) est résorbé dès 2 000 pas.
 - P3 tient chez F seulement ; la récupération soignée tient dans 3 intervalles de la grille.
 - P4 : transfert chez les 3 agents (TI_D 0,98), lu sur les 6 arrangements où nw est neutre ; il demande 2 à 200 fois plus
-  de pas que la récupération soignée (A le plus rapide).
+  de pas que la récupération soignée (A le plus rapide). Couleur ou position : ce design ne les sépare pas.
+- Exploratoire : profil de transfert, pas d'oubli (masse, C3, I montent vers la référence, la masse ne baisse jamais) ;
+  chez A, D franchit avant C3 et la masse.
 - Les exposés évitent nw au début (6–12 % des pas contre 19 %), mais 30 à 125 visites suffisent à corriger D.
