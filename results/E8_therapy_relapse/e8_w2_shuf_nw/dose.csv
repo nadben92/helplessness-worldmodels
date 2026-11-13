@@ -1,0 +1,115 @@
+pair,group,what,env_steps,grad_steps,treated_visits,in_F_H_window
+shuffle_A,treated,t_half_b,1000,446,125,False
+shuffle_A,treated,t_half_b_sustained,1000,446,125,False
+shuffle_A,treated,t_half_C1,1000,446,125,False
+shuffle_A,treated,t_half_C1_sustained,1000,446,125,False
+shuffle_A,treated,t_half_C3,1000,446,125,False
+shuffle_A,treated,t_half_C3_sustained,1000,446,125,False
+shuffle_A,treated,t_half_D,1000,446,125,False
+shuffle_A,treated,t_half_D_sustained,1000,446,125,False
+shuffle_A,treated,cross_b_in_control,1000,446,125,False
+shuffle_A,treated,cross_D_at_reference,2000,1046,232,False
+shuffle_A,untreated,t_half_b,10000,5846,1677,False
+shuffle_A,untreated,t_half_b_sustained,40000,23846,6780,False
+shuffle_A,untreated,t_half_C1,5000,2846,789,False
+shuffle_A,untreated,t_half_C1_sustained,40000,23846,6780,False
+shuffle_A,untreated,t_half_C3,7500,4346,1187,False
+shuffle_A,untreated,t_half_C3_sustained,40000,23846,6780,False
+shuffle_A,untreated,t_half_D,5000,2846,789,False
+shuffle_A,untreated,t_half_D_sustained,40000,23846,6780,False
+shuffle_A,untreated,cross_b_in_control,40000,23846,6780,False
+shuffle_A,untreated,cross_D_at_reference,10000,5846,1677,False
+shuffle_E,treated,t_half_b,500,146,32,False
+shuffle_E,treated,t_half_b_sustained,500,146,32,False
+shuffle_E,treated,t_half_C1,500,146,32,False
+shuffle_E,treated,t_half_C1_sustained,500,146,32,False
+shuffle_E,treated,t_half_C3,500,146,32,False
+shuffle_E,treated,t_half_C3_sustained,500,146,32,False
+shuffle_E,treated,t_half_D,500,146,32,False
+shuffle_E,treated,t_half_D_sustained,500,146,32,False
+shuffle_E,treated,cross_b_in_control,2000,1046,203,False
+shuffle_E,treated,cross_D_at_reference,1000,446,71,False
+shuffle_E,untreated,t_half_b,15000,8846,2190,False
+shuffle_E,untreated,t_half_b_sustained,40000,23846,6443,False
+shuffle_E,untreated,t_half_C1,10000,5846,1396,False
+shuffle_E,untreated,t_half_C1_sustained,40000,23846,6443,False
+shuffle_E,untreated,t_half_C3,15000,8846,2190,False
+shuffle_E,untreated,t_half_C3_sustained,40000,23846,6443,False
+shuffle_E,untreated,t_half_D,15000,8846,2190,False
+shuffle_E,untreated,t_half_D_sustained,40000,23846,6443,False
+shuffle_E,untreated,cross_b_in_control,40000,23846,6443,False
+shuffle_E,untreated,cross_D_at_reference,40000,23846,6443,False
+shuffle_F,treated,t_half_b,1000,446,92,False
+shuffle_F,treated,t_half_b_sustained,1000,446,92,False
+shuffle_F,treated,t_half_C1,500,146,58,False
+shuffle_F,treated,t_half_C1_sustained,500,146,58,False
+shuffle_F,treated,t_half_C3,500,146,58,False
+shuffle_F,treated,t_half_C3_sustained,500,146,58,False
+shuffle_F,treated,t_half_D,500,146,58,False
+shuffle_F,treated,t_half_D_sustained,500,146,58,False
+shuffle_F,treated,cross_b_in_control,2000,1046,252,False
+shuffle_F,treated,cross_D_at_reference,500,146,58,False
+shuffle_F,untreated,t_half_b,10000,5846,1704,True
+shuffle_F,untreated,t_half_b_sustained,40000,23846,6632,False
+shuffle_F,untreated,t_half_C1,10000,5846,1704,True
+shuffle_F,untreated,t_half_C1_sustained,40000,23846,6632,False
+shuffle_F,untreated,t_half_C3,10000,5846,1704,True
+shuffle_F,untreated,t_half_C3_sustained,40000,23846,6632,False
+shuffle_F,untreated,t_half_D,10000,5846,1704,True
+shuffle_F,untreated,t_half_D_sustained,40000,23846,6632,False
+shuffle_F,untreated,cross_b_in_control,40000,23846,6632,False
+shuffle_F,untreated,cross_D_at_reference,40000,23846,6632,False
+shuffle_A,treated assignment00,P4 g_D<=0.05,2000,1046,232,False
+shuffle_A,treated assignment00,P4 b>-0.5,2000,1046,232,False
+shuffle_A,treated assignment01,P4 g_D<=0.05,2000,1046,232,False
+shuffle_A,treated assignment01,P4 b>-0.5,1000,446,125,False
+shuffle_A,treated assignment02,P4 g_D<=0.05,2000,1046,232,False
+shuffle_A,treated assignment02,P4 b>-0.5,1000,446,125,False
+shuffle_A,untreated assignment04,P4 g_D<=0.05,10000,5846,1677,False
+shuffle_A,untreated assignment04,P4 b>-0.5,60000,35846,10201,False
+shuffle_A,untreated assignment05,P4 g_D<=0.05,10000,5846,1677,False
+shuffle_A,untreated assignment05,P4 b>-0.5,60000,35846,10201,False
+shuffle_A,untreated assignment07,P4 g_D<=0.05,10000,5846,1677,False
+shuffle_A,untreated assignment07,P4 b>-0.5,40000,23846,6780,False
+shuffle_A,untreated assignment08,P4 g_D<=0.05,10000,5846,1677,False
+shuffle_A,untreated assignment08,P4 b>-0.5,60000,35846,10201,False
+shuffle_A,untreated assignment10,P4 g_D<=0.05,5000,2846,789,False
+shuffle_A,untreated assignment10,P4 b>-0.5,10000,5846,1677,False
+shuffle_A,untreated assignment11,P4 g_D<=0.05,3500,1946,489,False
+shuffle_A,untreated assignment11,P4 b>-0.5,40000,23846,6780,False
+shuffle_E,treated assignment00,P4 g_D<=0.05,1000,446,71,False
+shuffle_E,treated assignment00,P4 b>-0.5,2000,1046,203,False
+shuffle_E,treated assignment01,P4 g_D<=0.05,1000,446,71,False
+shuffle_E,treated assignment01,P4 b>-0.5,2000,1046,203,False
+shuffle_E,treated assignment02,P4 g_D<=0.05,1000,446,71,False
+shuffle_E,treated assignment02,P4 b>-0.5,2000,1046,203,False
+shuffle_E,untreated assignment04,P4 g_D<=0.05,40000,23846,6443,False
+shuffle_E,untreated assignment04,P4 b>-0.5,40000,23846,6443,False
+shuffle_E,untreated assignment05,P4 g_D<=0.05,60000,35846,9654,False
+shuffle_E,untreated assignment05,P4 b>-0.5,60000,35846,9654,False
+shuffle_E,untreated assignment07,P4 g_D<=0.05,60000,35846,9654,False
+shuffle_E,untreated assignment07,P4 b>-0.5,60000,35846,9654,False
+shuffle_E,untreated assignment08,P4 g_D<=0.05,60000,35846,9654,False
+shuffle_E,untreated assignment08,P4 b>-0.5,15000,8846,2190,False
+shuffle_E,untreated assignment10,P4 g_D<=0.05,40000,23846,6443,False
+shuffle_E,untreated assignment10,P4 b>-0.5,40000,23846,6443,False
+shuffle_E,untreated assignment11,P4 g_D<=0.05,40000,23846,6443,False
+shuffle_E,untreated assignment11,P4 b>-0.5,40000,23846,6443,False
+shuffle_F,treated assignment00,P4 g_D<=0.05,500,146,58,False
+shuffle_F,treated assignment00,P4 b>-0.5,2000,1046,252,False
+shuffle_F,treated assignment01,P4 g_D<=0.05,500,146,58,False
+shuffle_F,treated assignment01,P4 b>-0.5,2000,1046,252,False
+shuffle_F,treated assignment02,P4 g_D<=0.05,500,146,58,False
+shuffle_F,treated assignment02,P4 b>-0.5,2000,1046,252,False
+shuffle_F,untreated assignment04,P4 g_D<=0.05,40000,23846,6632,False
+shuffle_F,untreated assignment04,P4 b>-0.5,40000,23846,6632,False
+shuffle_F,untreated assignment05,P4 g_D<=0.05,60000,35846,10097,False
+shuffle_F,untreated assignment05,P4 b>-0.5,60000,35846,10097,False
+shuffle_F,untreated assignment07,P4 g_D<=0.05,100000,59846,16910,False
+shuffle_F,untreated assignment07,P4 b>-0.5,60000,35846,10097,False
+shuffle_F,untreated assignment08,P4 g_D<=0.05,100000,59846,16910,False
+shuffle_F,untreated assignment08,P4 b>-0.5,60000,35846,10097,False
+shuffle_F,untreated assignment10,P4 g_D<=0.05,40000,23846,6632,False
+shuffle_F,untreated assignment10,P4 b>-0.5,40000,23846,6632,False
+shuffle_F,untreated assignment11,P4 g_D<=0.05,40000,23846,6632,False
+shuffle_F,untreated assignment11,P4 b>-0.5,40000,23846,6632,False

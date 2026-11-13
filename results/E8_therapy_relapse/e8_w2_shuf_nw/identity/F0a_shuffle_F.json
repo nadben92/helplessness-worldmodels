@@ -1,0 +1,304 @@
+{
+ "probes": "C:\\nrw\\e8_wave2\\probes_cpu\\E8_therapy_relapse\\probes__shuffle_B_ref__k000000__20261112T135817Z",
+ "pair": "shuffle_F",
+ "n_checks": 43,
+ "n_failed": 0,
+ "checks": [
+  {
+   "what": "e6 exposed states",
+   "ok": true
+  },
+  {
+   "what": "e6 exposed actions",
+   "ok": true
+  },
+  {
+   "what": "e6 exposed length",
+   "ok": true
+  },
+  {
+   "what": "e6 exposed terminated",
+   "ok": true
+  },
+  {
+   "what": "e6 exposed I",
+   "ok": true
+  },
+  {
+   "what": "e6 exposed loc_template",
+   "ok": true
+  },
+  {
+   "what": "e6 exposed decoded_cell",
+   "ok": true
+  },
+  {
+   "what": "e6 exposed decoded_template",
+   "ok": true
+  },
+  {
+   "what": "e6 exposed Q",
+   "ok": true
+  },
+  {
+   "what": "e6 exposed row b_step1",
+   "ok": true,
+   "e8": -1.703592585575022,
+   "campaign": -1.703592585575022
+  },
+  {
+   "what": "e6 exposed row directed_share",
+   "ok": true,
+   "e8": 0.44105263157894736,
+   "campaign": 0.44105263157894736
+  },
+  {
+   "what": "e6 exposed row recovery_latency",
+   "ok": 1.0,
+   "e8": NaN,
+   "campaign": NaN
+  },
+  {
+   "what": "e6 exposed row zone_share",
+   "ok": true,
+   "e8": 0.4298642533936652,
+   "campaign": 0.4298642533936652
+  },
+  {
+   "what": "e6 exposed row loc_template_step1",
+   "ok": true,
+   "e8": 0.9777777777777777,
+   "campaign": 0.9777777777777777
+  },
+  {
+   "what": "e6 exposed row loc_template_zone",
+   "ok": true,
+   "e8": 0.8515789473684211,
+   "campaign": 0.8515789473684211
+  },
+  {
+   "what": "e6 exposed row b_step1_probe",
+   "ok": true,
+   "e8": -2.0822190795770363,
+   "campaign": -2.0822190795770363
+  },
+  {
+   "what": "e6 exposed row valid",
+   "ok": true,
+   "e8": true,
+   "campaign": true
+  },
+  {
+   "what": "c12 exposed V_zbar",
+   "ok": true
+  },
+  {
+   "what": "c12 exposed V_zbar_mean",
+   "ok": true
+  },
+  {
+   "what": "c12 exposed Q_hbar",
+   "ok": true
+  },
+  {
+   "what": "e6 reference states",
+   "ok": true
+  },
+  {
+   "what": "e6 reference actions",
+   "ok": true
+  },
+  {
+   "what": "e6 reference length",
+   "ok": true
+  },
+  {
+   "what": "e6 reference terminated",
+   "ok": true
+  },
+  {
+   "what": "e6 reference I",
+   "ok": true
+  },
+  {
+   "what": "e6 reference loc_template",
+   "ok": true
+  },
+  {
+   "what": "e6 reference decoded_cell",
+   "ok": true
+  },
+  {
+   "what": "e6 reference decoded_template",
+   "ok": true
+  },
+  {
+   "what": "e6 reference Q",
+   "ok": true
+  },
+  {
+   "what": "e6 reference row b_step1",
+   "ok": true,
+   "e8": 0.0,
+   "campaign": 0.0
+  },
+  {
+   "what": "e6 reference row directed_share",
+   "ok": true,
+   "e8": 0.928,
+   "campaign": 0.928
+  },
+  {
+   "what": "e6 reference row recovery_latency",
+   "ok": true,
+   "e8": 1.0,
+   "campaign": 1.0
+  },
+  {
+   "what": "e6 reference row zone_share",
+   "ok": true,
+   "e8": 0.823045267489712,
+   "campaign": 0.823045267489712
+  },
+  {
+   "what": "e6 reference row loc_template_step1",
+   "ok": true,
+   "e8": 0.9888888888888889,
+   "campaign": 0.9888888888888889
+  },
+  {
+   "what": "e6 reference row loc_template_zone",
+   "ok": true,
+   "e8": 0.998,
+   "campaign": 0.998
+  },
+  {
+   "what": "e6 reference row b_step1_probe",
+   "ok": true,
+   "e8": -2.0822190795770363,
+   "campaign": -2.0822190795770363
+  },
+  {
+   "what": "e6 reference row valid",
+   "ok": true,
+   "e8": true,
+   "campaign": true
+  },
+  {
+   "what": "c12 reference V_zbar",
+   "ok": true
+  },
+  {
+   "what": "c12 reference V_zbar_mean",
+   "ok": true
+  },
+  {
+   "what": "c12 reference Q_hbar",
+   "ok": true
+  },
+  {
+   "what": "oracle k1 directed_share",
+   "ok": true,
+   "e8": 0.8590163934426229,
+   "campaign": 0.8590163934426229
+  },
+  {
+   "what": "oracle k1 b_step1",
+   "ok": true,
+   "e8": -1.703592585575022,
+   "campaign": -1.703592585575022
+  },
+  {
+   "what": "oracle k1 loc_template_step1",
+   "ok": true,
+   "e8": 0.9777777777777777,
+   "campaign": 0.9777777777777777
+  }
+ ],
+ "e5_records_tolerance_0.05": [
+  {
+   "what": "E5 record, assignment 0 (nw)",
+   "ok": true,
+   "e8": 0.3196412599461117,
+   "record": 0.32421681334771507,
+   "diff": -0.004575553401603372
+  },
+  {
+   "what": "E5 record, assignment 1 (nw)",
+   "ok": true,
+   "e8": 0.17965208135019894,
+   "record": 0.22108419394287476,
+   "diff": -0.04143211259267582
+  },
+  {
+   "what": "E5 record, assignment 2 (nw)",
+   "ok": true,
+   "e8": 0.22181744391500588,
+   "record": 0.17914582905286397,
+   "diff": 0.04267161486214191
+  },
+  {
+   "what": "E5 record, assignment 3 (ne)",
+   "ok": true,
+   "e8": 0.16312825485663449,
+   "record": 0.16918131708507655,
+   "diff": -0.006053062228442069
+  },
+  {
+   "what": "E5 record, assignment 4 (ne)",
+   "ok": true,
+   "e8": 0.1546786955123037,
+   "record": 0.18539327987438617,
+   "diff": -0.030714584362082464
+  },
+  {
+   "what": "E5 record, assignment 5 (ne)",
+   "ok": true,
+   "e8": 0.18485894873153466,
+   "record": 0.18128184285522927,
+   "diff": 0.0035771058763053865
+  },
+  {
+   "what": "E5 record, assignment 6 (se)",
+   "ok": true,
+   "e8": 0.07628943496314056,
+   "record": 0.05504126221265031,
+   "diff": 0.02124817275049025
+  },
+  {
+   "what": "E5 record, assignment 7 (se)",
+   "ok": true,
+   "e8": 0.10131338922026849,
+   "record": 0.0707837596781049,
+   "diff": 0.030529629542163594
+  },
+  {
+   "what": "E5 record, assignment 8 (se)",
+   "ok": true,
+   "e8": 0.09331093151831782,
+   "record": 0.09060946426041781,
+   "diff": 0.002701467257900006
+  },
+  {
+   "what": "E5 record, assignment 9 (sw)",
+   "ok": true,
+   "e8": 0.2552426629854529,
+   "record": 0.22364575826526953,
+   "diff": 0.031596904720183366
+  },
+  {
+   "what": "E5 record, assignment 10 (sw)",
+   "ok": true,
+   "e8": 0.2715119716858514,
+   "record": 0.2519166150989382,
+   "diff": 0.019595356586913193
+  },
+  {
+   "what": "E5 record, assignment 11 (sw)",
+   "ok": true,
+   "e8": 0.32754723795570595,
+   "record": 0.311260899181949,
+   "diff": 0.01628633877375696
+  }
+ ]
+}
