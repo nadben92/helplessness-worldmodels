@@ -102,14 +102,54 @@ E6/E7 implementation report, the E4 final report and E2's `RESULTS.md`.
     against a threshold of 0.20). Several section 22 forms are partial or not held; the report gives each verdict.
 - Report for both: `experiments/E6_phenotypes_latent/IMPLEMENTATION_REPORT.md`, sections 16-22.
 
-### IV. Correcting the belief (E8, planned)
+### IV. Correcting the belief (E8)
 
-Therapy and relapse: pre-exposed agents are re-trained in a fully controllable environment and we measure how fast
-belief and behaviour recover, then test for relapse. Baselines A and B (exposed + reference) receive full exposure.
-Shuffle agents A, E, F (with reference B) receive partial therapy on the layouts where the uncontrollable theme is in
-the north-west quadrant; transfer is tested on untreated layouts. 8 runs in 2 waves, baselines first. Prediction
-from E7: therapy should succeed differently depending on the weight of cached values (heavy in shuffle A and E).
-Status: design written, not started.
+- **Question.** Can the belief be corrected by re-training the agent in a world where its old zone is controllable?
+  How fast do the belief (b) and behaviour (the directed share D) recover, does behaviour lag the belief where the
+  cached values are heavy (E7: cached-value effect 0.24 in shuffle A, 0.22 in E), and does a correction made in some
+  contexts carry over to the untreated ones (the relapse test)?
+- **Design.** Each agent restarts from its E4/E5 weights with an empty replay and fresh optimisers, beside a
+  reference re-trained the same way. Wave 1: baselines A and B, full exposure (the old zone nw controllable),
+  150,000 steps. Wave 2: shuffle A, E and F with reference B, partial therapy on the 3 layouts where the
+  uncontrollable theme T_inc is in nw, 250,000 steps; transfer is read on the 9 untreated layouts. Probes on the
+  local CPU at 14 and 16 checkpoints. Every threshold and prediction was written before the data
+  (`docs/e8/EXPECTED_FORMS.md`); the revisions are dated, and those made after wave 1 were made before any wave 2
+  data.
+- **P1 holds in all 5 agents.** b in the treated zone rises from -2.3 to -0.07 and -0.02 in the baselines (150,000
+  steps) and from -2.1 to about 0 in shuffle A, E and F (250,000 steps), with no fall back during the therapy. Its
+  half-recovery takes 2,000-3,500 steps in the baselines and 500-1,000 in the shuffle agents.
+- **Behaviour recovers first and fast.** D reaches the reference within 2,000-3,500 steps in the baselines (about
+  150-400 visits of nw) and within 500-2,000 steps in the shuffle agents (58-232 visits), although the shuffle agents
+  avoid nw at first (6-12 % of steps against 19 % for the reference).
+- **P2 fails: the cached value does not slow the correction.** Behaviour does not lag the critic's reading in
+  shuffle A or E (lag 0 at the grid's resolution); their cached-value effect (0.28 and 0.22 at the start) is gone by
+  2,000 steps, earlier than baseline B's.
+- **P3 holds in F only.** Behaviour recovers in one interval of the grid while b moves over several in F; not in A,
+  E or the baselines. The treated recovery fits within 3 intervals of the grid.
+- **P4: transfer, slower, in all 3 shuffle agents** (transfer index on D 0.98). D on the untreated layouts reaches
+  the reference after 3,500-10,000 steps in A and 40,000-100,000 in E and F, 2 to 200 times later than on the treated
+  ones. It is read on the 6 untreated layouts where nw is neutral only. It cannot be attributed to the colour alone:
+  ne, se and sw were also controllable during the therapy, with other colours, so the transfer may go through the
+  colour (T_inc treated in nw) or through the position (a quadrant already seen controllable). Exploratory: the
+  predictions improve with it (the mass on the true successor rises from 0.20-0.28 to 0.93-0.98 and never falls), a
+  transfer rather than a forgetting; in A, behaviour moves ahead of the critic's reading and of the mass.
+- **Limits.**
+  - The reference partly forgets the layouts it is not trained on: on the 3 untreated layouts where nw carries the
+    colour of the controllable theme, I_ref falls to 1.6 bits and its mass on the true successor to 0.03, and the
+    exposed model does the same. Those layouts fail the probes' validity check and are out of P4; no untreated point
+    is valid at 25,000 steps.
+  - The health check of training fails for shuffle F (mass 0.857-0.899 against a threshold of 0.90 in one treated layout, 5,000-25,000 steps); it
+    is reported and does not block F's reading.
+  - The therapy starts from an empty replay. The tabular twin, which keeps the old experience, is still at b_tab
+    -1.4 after 150,000 steps: the fast recovery is a property of this design.
+  - Shuffle A is paired with reference B, while E6/E7 paired it with reference A (cached-value effect 0.279 with B,
+    0.242 with A).
+  - t½ and lags are checkpoints of a log-spaced grid; a lag of 0 means the same checkpoint.
+- **Not done (future work).** Waves 3-5, with the therapy on ne, sw and se (configured in
+  `experiments/E8_therapy_relapse/batches.py`, not launched), which would help separate colour from position; a
+  therapy that keeps the old replay buffer (an analogue of rumination).
+- `docs/E8_therapy_relapse.md`, `docs/e8/` (decisions, expected forms), report
+  `experiments/E8_therapy_relapse/IMPLEMENTATION_REPORT.md` (in French), sections 11-13.
 
 ## Repository layout
 
@@ -122,14 +162,14 @@ src/helplessness/        the shared library (pip install -e .)
   probing/               torch-side measurement of a frozen world model (probes, walks, episodes, correction of h)
   pipeline/              world-model run pipeline (training worlds, checkpoints, frozen agents of E6/E7)
   interventions/, planning/, evaluation/, streams/, twin/, cluster/ (GPU cluster tooling), config.py, runs.py
-configs/                 YAML only: shared blocks (zones, themes, dynamics) and one directory per experiment (e3/ ... e7/)
+configs/                 YAML only: shared blocks (zones, themes, dynamics) and one directory per experiment (e3/ ... e8/)
 experiments/<EN_name>/   one directory per experiment: runners, analyses, batch tables, reports, its own README.md
-docs/                    EXPERIMENTS.md (the tracker), one file per experiment, decisions (e3/, e5/, e6/), archive/
+docs/                    EXPERIMENTS.md (the tracker), one file per experiment, decisions (e3/, e5/, e6/, e8/), archive/
 results/                 light outputs only (tables, JSON, small figures); weights and raw arrays are never versioned
 reports/                 frozen outputs of E0 and E3
 paper/                   LaTeX paper and reports, figure and number scripts
 slides/                  presentation figures: scripts (figures*/, style*/) and outputs (out*/), MANIFEST*.md
-tests/                   mirrors src/, plus tests/e3 ... tests/e6 for each experiment's orchestration
+tests/                   mirrors src/, plus tests/e3 ... tests/e8 for each experiment's orchestration
 ```
 
 E0-E3 are finished and frozen: their code, configs, seeds and defaults never change. Tags `e0-final` ... `e3-final`
@@ -161,6 +201,8 @@ The editable install points at one checkout's `src/`. When working from another 
 | CPU smoke runs of training | local CPU | e.g. `python experiments/E4_generalization_gradient/run_e4.py --config configs/e4/e4_mini.yaml --configuration p1-a-d1 --condition experimental --device cpu` (E5: `run_e5.py --config configs/e5/e5_mini.yaml`, see its README) |
 | E4, E5 analyses | local CPU, from the batch exports | `experiments/E4_generalization_gradient/final_analysis.py`, `experiments/E5_belief_training/analysis_*/` (each has its own README or usage line) |
 | E6, E7 (frozen weights) | local CPU | `python experiments/E6_phenotypes_latent/chain_all_cpu.py --runs-root <root> --logs <dir> [--workers 12]`, then `analyse_all.py` |
+| E8 therapy runs | GPU cluster | `experiments/E8_therapy_relapse/submit_kubeflow.py --batch <batch> --repo-dir <checkout> [--dry-run]` |
+| E8 probes and analyses | local CPU, from the batch exports | `experiments/E8_therapy_relapse/chain_cpu.py`, then `analyze_e8.py` and `w2_supplements.py`; commands in the report, sections 11-13 |
 
 **Weights are never in the repository.** Training writes them to the cluster's storage. A batch export
 (`export_batch.py`) or a handoff records each file with its SHA-256, and the local analyses check them. For
@@ -188,7 +230,7 @@ runs.
 | E5 | Manipulating the belief through training | finished | `e5`, `e5-robust` | `experiments/E5_belief_training/analysis_*/REPORT.md` |
 | E6 | Behavioural signature of the belief | finished | `e6` | `experiments/E6_phenotypes_latent/IMPLEMENTATION_REPORT.md` |
 | E7 | Causal tests: oracle, cached values, correcting h | finished | `e6` | same report, sections 16-22 |
-| E8 | Therapy and relapse | planned, design written, not started | -- | -- |
+| E8 | Therapy and relapse | finished | `e8` | `experiments/E8_therapy_relapse/IMPLEMENTATION_REPORT.md`, sections 11-13 |
 
 Details, decisions and key commits: `docs/EXPERIMENTS.md`.
 

@@ -1,6 +1,7 @@
 # E8 — Therapy and relapse
 
-**Status (2026-11-13): waves 1 (baselines) and 2 (shuffle A, E, F with reference B, therapy on nw) run and analysed.
+**Status (2026-11-13): finished, merged into `main`. Waves 1 (baselines) and 2 (shuffle A, E, F with reference B,
+therapy on nw) run and analysed; waves 3-5 (therapy on ne, sw, se) configured, not launched (future work).
 Wave 1 (report section 11): control forms held, P1 held, P2 not decidable on the baselines, P3 did not hold. Wave 2
 (report section 13): F0 exact (A on its exposed side, DECISIONS (26)), M held; R failed on the untreated assignments
 (partial forgetting of the untrained arrangements), H failed for F (assignment 0, 5,000-25,000 steps); P1 held, P2 failed
