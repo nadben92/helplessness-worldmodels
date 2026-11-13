@@ -3,7 +3,8 @@ training configuration (colour pair x orientation x diagonal, cfg["e4"]["configu
 probe worlds, the fixed walks of each slot and the measurement seeds. Moved verbatim from
 experiments/E4_generalization_gradient/e4_setup.py on 2026-10-19 so that E5 uses it without importing E4 (e4_setup.py
 re-exports every name, with E4's own constants and its default config path); only load_config's default path stayed
-there.
+there. apply_e5_procedure moved from experiments/E5_belief_training/run_e5.py on 2026-11-05 (docs/e8/DECISIONS.md (11)),
+body unchanged, so that E8's therapy runs use E5's procedure without importing E5 (run_e5.py imports it back).
 """
 
 from __future__ import annotations
@@ -106,3 +107,18 @@ def measurement_seed(cfg: dict, conf: dict, image_index: int, slot: str, purpose
 
 def successors(world_) -> np.ndarray:
     return world_.env.transition_tensor().argmax(axis=-1)
+
+
+def apply_e5_procedure(cfg: dict) -> dict:
+    """E5's changes to E4's training procedure, on every E5 run (docs/e5/DECISIONS.md (19), (20), (28)): the switch
+    statistic on same-background pairs, the later separation deadline and the late threshold. All leave a run with one
+    background that switches before E4's latest switch bit-identical to E4's (tested). Returns cfg, modified in place."""
+    est = cfg["train"]["latent_estimator"]
+    if cfg["e5"].get("switch_pairs", "any") != "any":
+        est["switch_pairs"] = cfg["e5"]["switch_pairs"]
+    if cfg["e5"].get("switch_max_steps") is not None:
+        est["switch_max_steps"] = int(cfg["e5"]["switch_max_steps"])
+    late = cfg["e5"].get("late_switch")
+    if late is not None:  # docs/e5/DECISIONS.md (28): a lower threshold that acts only after every switch of E4
+        est["switch_late_threshold"], est["switch_late_after_steps"] = float(late["threshold_bits"]), int(late["after_steps"])
+    return cfg

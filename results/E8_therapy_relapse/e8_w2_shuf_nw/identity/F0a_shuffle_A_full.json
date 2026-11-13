@@ -1,0 +1,304 @@
+{
+ "probes": "C:\\nrw\\e8_wave2\\probes_cpu\\E8_therapy_relapse\\probes__shuffle_B_ref__k000000__20261112T135817Z",
+ "pair": "shuffle_A",
+ "n_checks": 43,
+ "n_failed": 21,
+ "checks": [
+  {
+   "what": "e6 exposed states",
+   "ok": true
+  },
+  {
+   "what": "e6 exposed actions",
+   "ok": true
+  },
+  {
+   "what": "e6 exposed length",
+   "ok": true
+  },
+  {
+   "what": "e6 exposed terminated",
+   "ok": true
+  },
+  {
+   "what": "e6 exposed I",
+   "ok": true
+  },
+  {
+   "what": "e6 exposed loc_template",
+   "ok": true
+  },
+  {
+   "what": "e6 exposed decoded_cell",
+   "ok": true
+  },
+  {
+   "what": "e6 exposed decoded_template",
+   "ok": true
+  },
+  {
+   "what": "e6 exposed Q",
+   "ok": true
+  },
+  {
+   "what": "e6 exposed row b_step1",
+   "ok": false,
+   "e8": -1.9479165002307735,
+   "campaign": -1.732626785947132
+  },
+  {
+   "what": "e6 exposed row directed_share",
+   "ok": true,
+   "e8": 0.42392566782810687,
+   "campaign": 0.42392566782810687
+  },
+  {
+   "what": "e6 exposed row recovery_latency",
+   "ok": 1.0,
+   "e8": NaN,
+   "campaign": NaN
+  },
+  {
+   "what": "e6 exposed row zone_share",
+   "ok": true,
+   "e8": 0.40327868852459015,
+   "campaign": 0.40327868852459015
+  },
+  {
+   "what": "e6 exposed row loc_template_step1",
+   "ok": true,
+   "e8": 0.9722222222222222,
+   "campaign": 0.9722222222222222
+  },
+  {
+   "what": "e6 exposed row loc_template_zone",
+   "ok": true,
+   "e8": 0.7932636469221835,
+   "campaign": 0.7932636469221835
+  },
+  {
+   "what": "e6 exposed row b_step1_probe",
+   "ok": false,
+   "e8": -2.204107490529909,
+   "campaign": -2.1912526863335873
+  },
+  {
+   "what": "e6 exposed row valid",
+   "ok": true,
+   "e8": true,
+   "campaign": true
+  },
+  {
+   "what": "c12 exposed V_zbar",
+   "ok": true
+  },
+  {
+   "what": "c12 exposed V_zbar_mean",
+   "ok": true
+  },
+  {
+   "what": "c12 exposed Q_hbar",
+   "ok": true
+  },
+  {
+   "what": "e6 reference states",
+   "ok": false
+  },
+  {
+   "what": "e6 reference actions",
+   "ok": false
+  },
+  {
+   "what": "e6 reference length",
+   "ok": false
+  },
+  {
+   "what": "e6 reference terminated",
+   "ok": true
+  },
+  {
+   "what": "e6 reference I",
+   "ok": false
+  },
+  {
+   "what": "e6 reference loc_template",
+   "ok": false
+  },
+  {
+   "what": "e6 reference decoded_cell",
+   "ok": false
+  },
+  {
+   "what": "e6 reference decoded_template",
+   "ok": false
+  },
+  {
+   "what": "e6 reference Q",
+   "ok": false
+  },
+  {
+   "what": "e6 reference row b_step1",
+   "ok": true,
+   "e8": 0.0,
+   "campaign": 0.0
+  },
+  {
+   "what": "e6 reference row directed_share",
+   "ok": false,
+   "e8": 0.928,
+   "campaign": 0.891726251276813
+  },
+  {
+   "what": "e6 reference row recovery_latency",
+   "ok": true,
+   "e8": 1.0,
+   "campaign": 1.0
+  },
+  {
+   "what": "e6 reference row zone_share",
+   "ok": false,
+   "e8": 0.823045267489712,
+   "campaign": 0.7690494893951296
+  },
+  {
+   "what": "e6 reference row loc_template_step1",
+   "ok": true,
+   "e8": 0.9888888888888889,
+   "campaign": 0.9888888888888889
+  },
+  {
+   "what": "e6 reference row loc_template_zone",
+   "ok": false,
+   "e8": 0.998,
+   "campaign": 0.9979570990806946
+  },
+  {
+   "what": "e6 reference row b_step1_probe",
+   "ok": false,
+   "e8": -2.204107490529909,
+   "campaign": -2.1912526863335873
+  },
+  {
+   "what": "e6 reference row valid",
+   "ok": true,
+   "e8": true,
+   "campaign": true
+  },
+  {
+   "what": "c12 reference V_zbar",
+   "ok": false
+  },
+  {
+   "what": "c12 reference V_zbar_mean",
+   "ok": false
+  },
+  {
+   "what": "c12 reference Q_hbar",
+   "ok": false
+  },
+  {
+   "what": "oracle k1 directed_share",
+   "ok": true,
+   "e8": 0.6493333333333333,
+   "campaign": 0.6493333333333333
+  },
+  {
+   "what": "oracle k1 b_step1",
+   "ok": false,
+   "e8": -1.9479165002307735,
+   "campaign": -1.732626785947132
+  },
+  {
+   "what": "oracle k1 loc_template_step1",
+   "ok": true,
+   "e8": 0.9722222222222222,
+   "campaign": 0.9722222222222222
+  }
+ ],
+ "e5_records_tolerance_0.05": [
+  {
+   "what": "E5 record, assignment 0 (nw)",
+   "ok": true,
+   "e8": 0.1451028478054975,
+   "record": 0.15163733403869012,
+   "diff": -0.00653448623319261
+  },
+  {
+   "what": "E5 record, assignment 1 (nw)",
+   "ok": true,
+   "e8": 0.11444560918296244,
+   "record": 0.1210543586435193,
+   "diff": -0.006608749460556854
+  },
+  {
+   "what": "E5 record, assignment 2 (nw)",
+   "ok": false,
+   "e8": 0.18061509275772708,
+   "record": 0.09195580509242662,
+   "diff": 0.08865928766530046
+  },
+  {
+   "what": "E5 record, assignment 3 (ne)",
+   "ok": true,
+   "e8": 0.09167227532050876,
+   "record": 0.11107521882464483,
+   "diff": -0.019402943504136072
+  },
+  {
+   "what": "E5 record, assignment 4 (ne)",
+   "ok": true,
+   "e8": 0.09473116081019685,
+   "record": 0.09249264296531867,
+   "diff": 0.0022385178448781767
+  },
+  {
+   "what": "E5 record, assignment 5 (ne)",
+   "ok": true,
+   "e8": 0.09071519943062548,
+   "record": 0.09279432221455422,
+   "diff": -0.002079122783928744
+  },
+  {
+   "what": "E5 record, assignment 6 (se)",
+   "ok": true,
+   "e8": 0.2734043968061997,
+   "record": 0.24942210206672968,
+   "diff": 0.023982294739470028
+  },
+  {
+   "what": "E5 record, assignment 7 (se)",
+   "ok": true,
+   "e8": 0.2239684987549628,
+   "record": 0.18565199242272842,
+   "diff": 0.03831650633223438
+  },
+  {
+   "what": "E5 record, assignment 8 (se)",
+   "ok": false,
+   "e8": 0.19688874018623073,
+   "record": 0.1453880330128699,
+   "diff": 0.05150070717336083
+  },
+  {
+   "what": "E5 record, assignment 9 (sw)",
+   "ok": true,
+   "e8": 0.28530192085761635,
+   "record": 0.26653221106120806,
+   "diff": 0.018769709796408296
+  },
+  {
+   "what": "E5 record, assignment 10 (sw)",
+   "ok": true,
+   "e8": 0.2681744045754956,
+   "record": 0.27637268161051837,
+   "diff": -0.008198277035022794
+  },
+  {
+   "what": "E5 record, assignment 11 (sw)",
+   "ok": false,
+   "e8": 0.27723885012466243,
+   "record": 0.3524309166772872,
+   "diff": -0.07519206655262478
+  }
+ ]
+}

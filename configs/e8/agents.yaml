@@ -1,0 +1,77 @@
+# E8's start models (docs/e8/DECISIONS.md (2), (3)): exact run directories under the runs root (the cluster's layout:
+# --runs-root /scratch, or a local copy with the same layout), the checkpoint and the file's SHA-256
+# (experiments/E5_belief_training/analysis_robustness/tables/inventory.csv), checked before any use. No glob: a newer
+# run with the same prefix can never be picked up.
+models:
+  base_A_exp:
+    kind: baseline
+    role: experimental
+    configuration: p1-b-d1
+    seed: 2
+    run: helplessness-worldmodels-e4/results/E4_generalization_gradient/grid12x12__2zones-p1-b-d1__pair-experimental__worldmodel-agent-e4__seed02__20261016T144543Z
+    checkpoint: 300000
+    sha256: fc8132011811380017a997c10367280560ee28e2dc975658eb13786208dc71bd
+  base_A_ref:
+    kind: baseline
+    role: reference
+    configuration: p1-b-d1
+    seed: 2
+    run: helplessness-worldmodels-e4/results/E4_generalization_gradient/grid12x12__2zones-p1-b-d1__pair-control__worldmodel-agent-e4__seed02__20261016T144543Z
+    checkpoint: 300000
+    sha256: b738b3fec664fe6b01d808813596c94ed420b3199b7c12a80e0f459d310d9d1b
+  base_B_exp:
+    kind: baseline
+    role: experimental
+    configuration: p1-b-d1
+    seed: 102
+    run: helplessness-worldmodels-e5/results/E5_belief_training/grid12x12__2zones-p1-b-d1-base__pair-experimental__worldmodel-agent-e5__seed102__20261024T110418Z
+    checkpoint: 300000
+    sha256: d56d22ee8205228613114568d9efe7065f4baf1323df613a1781e3ebfd2df628
+  base_B_ref:
+    kind: baseline
+    role: reference
+    configuration: p1-b-d1
+    seed: 102
+    run: helplessness-worldmodels-e5/results/E5_belief_training/grid12x12__2zones-p1-b-d1-base__pair-control__worldmodel-agent-e5__seed102__20261024T110418Z
+    checkpoint: 300000
+    sha256: d1df54e6919ae5c74ad343ff3c1ff8f4bf89d6f5c6ad2b3c522c04fb72a902a5
+  shuffle_A_exp:
+    kind: shuffle
+    role: experimental
+    configuration: p1-b-d1
+    seed: 2
+    run: helplessness-worldmodels-e5/results/E5_belief_training/grid12x12__2zones-p1-b-d1-sh100__pair-experimental__worldmodel-agent-e5__seed02__20261027T094524Z
+    checkpoint: 650000
+    sha256: 86da724c2f8af8c0c43251ac6af7a8ce8cf56e1c0b9853355a5da77ffecba154
+  shuffle_E_exp:
+    kind: shuffle
+    role: experimental
+    configuration: p1-b-d1
+    seed: 402
+    run: helplessness-worldmodels-e5/results/E5_belief_training/grid12x12__2zones-p1-b-d1-sh100__pair-experimental__worldmodel-agent-e5__seed402__20261027T154746Z
+    checkpoint: 650000
+    sha256: 7653fcea6262fd4aabacc3723db4a391238fb453cb1b3933ad10c71da948a975
+  shuffle_F_exp:
+    kind: shuffle
+    role: experimental
+    configuration: p1-b-d1
+    seed: 502
+    run: helplessness-worldmodels-e5/results/E5_belief_training/grid12x12__2zones-p1-b-d1-sh100__pair-experimental__worldmodel-agent-e5__seed502__20261027T154746Z
+    checkpoint: 650000
+    sha256: eed6acff0aa4f415e1f7eb56e281ab5edab3d4e3f18f2f48a2afbd14de84a5ca
+  shuffle_B_ref:
+    kind: shuffle
+    role: reference
+    configuration: p1-b-d1
+    seed: 102
+    run: helplessness-worldmodels-e5/results/E5_belief_training/grid12x12__2zones-p1-b-d1-sh100__pair-control__worldmodel-agent-e5__seed102__20261027T154746Z
+    checkpoint: 650000
+    sha256: 7cf0578554e9a33ddd0014e225babe28147f6a74d98eb4fbd5a0e601814429ca
+# The pairs: the exposed model and its reference, both re-trained by the same therapy and measured at the same
+# therapy checkpoint. Shuffle A, E and F share reference B (one reference run; E5 (39), E6 (63)).
+pairs:
+  base_A: {exposed: base_A_exp, reference: base_A_ref}
+  base_B: {exposed: base_B_exp, reference: base_B_ref}
+  shuffle_A: {exposed: shuffle_A_exp, reference: shuffle_B_ref}
+  shuffle_E: {exposed: shuffle_E_exp, reference: shuffle_B_ref}
+  shuffle_F: {exposed: shuffle_F_exp, reference: shuffle_B_ref}

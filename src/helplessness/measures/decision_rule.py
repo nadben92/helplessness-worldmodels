@@ -10,6 +10,9 @@ reading of Q, and the binning of a quantity along b. Arrays in, arrays out (nump
                          policy's greedy branch (random tie-break in the tie set) picks a directed action.
   softmax_probs          softmax(Q / tau) per row (tau > 0), max-shifted.
   binned                 per bin of b: the count, the median and the mean of a quantity (NaN where empty).
+  critic_readouts        D7's C1, C2, C3 of zone steps from the per-step readout arrays (docs/e6/DECISIONS.md (62));
+                         moved from experiments/E7_latent_manipulation/analyse_e7_d7.py's c_measures on 2026-11-05
+                         (docs/e8/DECISIONS.md (11)), body unchanged.
 """
 
 from __future__ import annotations
@@ -77,3 +80,18 @@ def binned(b: np.ndarray, values: np.ndarray, edges: np.ndarray) -> dict[str, np
         if v.size:
             med[i], mean[i] = np.median(v), v.mean()
     return {"lo": edges[:-1], "hi": edges[1:], "n": n, "median": med, "mean": mean}
+
+
+def critic_readouts(V: np.ndarray, Qh: np.ndarray, directed: np.ndarray, succ_dist: np.ndarray, tol: float) -> dict[str, np.ndarray]:
+    """Per step: C1 = the strict argmax of V(h'_a, z_bar) is directed; C2 = Spearman's rho between V(h'_a, z_bar) and
+    minus the distance to the goal of each action's true successor (ties ranked by their mean); C3 = the greedy directed
+    share of Q with a common h (the training's tie tolerance `tol`). V, Qh: (n, A); directed: (n, A) bool, the step's
+    directed actions; succ_dist: (n, A), the distance to the goal of each action's true successor."""
+    from scipy.stats import rankdata
+
+    rv = rankdata(V, axis=1)
+    rd = rankdata(-succ_dist, axis=1)
+    rv, rd = rv - rv.mean(1, keepdims=True), rd - rd.mean(1, keepdims=True)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        rho = (rv * rd).sum(1) / np.sqrt((rv ** 2).sum(1) * (rd ** 2).sum(1))
+    return {"C1": argmax_directed(V, directed).astype(float), "C2": rho, "C3": greedy_directed_share(Qh, directed, tol)}

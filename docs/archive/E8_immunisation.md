@@ -1,3 +1,5 @@
+> **See `docs/E8_therapy_relapse.md`**: E8 is therapy and relapse; this immunisation design is outdated.
+
 > **Outdated (archived 2026-11-05).** E8 is now therapy and relapse (`docs/EXPERIMENTS.md`); the immunisation experiment described below was abandoned and never run. Its code stays in E5 (`run_e5.py --training immunisation`).
 
 # E8 — Immunisation

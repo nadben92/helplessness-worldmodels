@@ -1,0 +1,2 @@
+F0 (c), E5 records: 9 / 12 within 0.05 bit (max |diff| 0.0887)
+F0 identity, shuffle_A: 20 / 20 exact comparisons hold; FAILED: E5 record, assignment 2 (nw), E5 record, assignment 8 (se), E5 record, assignment 11 (sw)

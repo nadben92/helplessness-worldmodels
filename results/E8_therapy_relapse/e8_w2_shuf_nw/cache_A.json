@@ -1,0 +1,9 @@
+{
+ "image": "assignment01 (training image)",
+ "D_oracle1": 0.6493333333333333,
+ "D_ref_B (E8)": 0.928,
+ "D_ref_A (campaign)": 0.891726251276813,
+ "cache_effect_ref_B": 0.27866666666666673,
+ "cache_effect_ref_A": 0.24239291794347972,
+ "E7_cited": 0.24
+}

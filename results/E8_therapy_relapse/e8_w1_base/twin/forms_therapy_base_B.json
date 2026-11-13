@@ -1,0 +1,159 @@
+{
+ "pair": "base_B",
+ "decisions": "docs/e8/DECISIONS.md (20), (22)",
+ "models": {
+  "base_B_exp": {
+   "run": "grid12x12__2zones-p1-b-d1-base-thfull__pair-experimental__worldmodel-agent-e8__seed102__20261106T151313Z",
+   "TW4": {
+    "ok": true,
+    "equal_by_checkpoint": {
+     "0": true,
+     "500": true,
+     "1000": true,
+     "2000": true,
+     "3500": true,
+     "5000": true,
+     "7500": true,
+     "10000": true,
+     "15000": true,
+     "25000": true,
+     "40000": true,
+     "60000": true,
+     "100000": true,
+     "150000": true
+    },
+    "keys_without_record": []
+   },
+   "TW0": {
+    "ok": true,
+    "checks": {
+     "transitions == meta env_steps": true,
+     "transitions == last checkpoint env_step": true,
+     "stored == with_stored_successor + pending + end_observations": true,
+     "stored == last checkpoint stored_steps": true,
+     "end_observations == episodes (checkpoints.jsonl)": true,
+     "terminal == successes (checkpoints.jsonl)": true,
+     "episodes_started == episodes + pending": true
+    },
+    "accounting": {
+     "stored": 171749,
+     "transitions": 150000,
+     "with_stored_successor": 150000,
+     "pending": 0,
+     "end_observations": 21749,
+     "terminal": 21749,
+     "truncated": 0,
+     "episodes_started": 21749
+    },
+    "env_steps": 150000
+   },
+   "TW3": {
+    "ok": true,
+    "transitions_off_the_dynamics": 0
+   },
+   "TW2": {
+    "ok": true,
+    "zone_cells": 25,
+    "cells_counted_under_2plus_actions": 25,
+    "of_which_2plus_successors": 25,
+    "action_with_several_successors": [],
+    "cells_where_two_actions_share_a_successor": []
+   },
+   "pending_transition": null,
+   "n_start": 300000,
+   "mixture_equal": {
+    "0": true,
+    "500": true,
+    "1000": true,
+    "2000": true,
+    "3500": true,
+    "5000": true,
+    "7500": true,
+    "10000": true,
+    "15000": true,
+    "25000": true,
+    "40000": true,
+    "60000": true,
+    "100000": true,
+    "150000": true
+   }
+  },
+  "base_B_ref": {
+   "run": "grid12x12__2zones-p1-b-d1-base-thfull__pair-control__worldmodel-agent-e8__seed102__20261106T151313Z",
+   "TW4": {
+    "ok": true,
+    "equal_by_checkpoint": {
+     "0": true,
+     "500": true,
+     "1000": true,
+     "2000": true,
+     "3500": true,
+     "5000": true,
+     "7500": true,
+     "10000": true,
+     "15000": true,
+     "25000": true,
+     "40000": true,
+     "60000": true,
+     "100000": true,
+     "150000": true
+    },
+    "keys_without_record": []
+   },
+   "TW0": {
+    "ok": true,
+    "checks": {
+     "transitions == meta env_steps": true,
+     "transitions == last checkpoint env_step": true,
+     "stored == with_stored_successor + pending + end_observations": true,
+     "stored == last checkpoint stored_steps": true,
+     "end_observations == episodes (checkpoints.jsonl)": true,
+     "terminal == successes (checkpoints.jsonl)": true,
+     "episodes_started == episodes + pending": true
+    },
+    "accounting": {
+     "stored": 171808,
+     "transitions": 150000,
+     "with_stored_successor": 150000,
+     "pending": 0,
+     "end_observations": 21808,
+     "terminal": 21808,
+     "truncated": 0,
+     "episodes_started": 21808
+    },
+    "env_steps": 150000
+   },
+   "TW3": {
+    "ok": true,
+    "transitions_off_the_dynamics": 0
+   },
+   "TW2": {
+    "ok": true,
+    "zone_cells": 25,
+    "cells_counted_under_2plus_actions": 25,
+    "of_which_2plus_successors": 25,
+    "action_with_several_successors": [],
+    "cells_where_two_actions_share_a_successor": []
+   },
+   "pending_transition": null,
+   "n_start": 300000,
+   "mixture_equal": {
+    "0": true,
+    "500": true,
+    "1000": true,
+    "2000": true,
+    "3500": true,
+    "5000": true,
+    "7500": true,
+    "10000": true,
+    "15000": true,
+    "25000": true,
+    "40000": true,
+    "60000": true,
+    "100000": true,
+    "150000": true
+   }
+  }
+ },
+ "ok": true
+}

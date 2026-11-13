@@ -1,0 +1,20 @@
+# E8's CPU smoke configuration: configs/e5/e5_mini.yaml unchanged (E4's mini: a 3x4 latent), the e8 block scaled to it.
+# Its numbers mean nothing; it only exercises every stage (tests/e8/).
+base: configs/e5/e5_mini.yaml
+e8:
+  seed: 8008
+  agents: configs/e8/agents.yaml
+  max_env_steps: 200
+  start_in_zone_frac: 0.0
+  checkpoints: [0, 50, 100, 200]
+  health: {real_context_max_per_state: 2, real_context_draws: 4}
+  probes:
+    config: configs/e7/e7_all.yaml
+    n_walks: 3
+    purpose: checkpoint
+    e4_probe: true
+    oracle_checkpoints: [0]
+    oracle_k: 1
+    # TESTS ONLY: E4's validity probe on 10 walks instead of e6.validity.n_walks (150) -- the end-to-end test checks the
+    # plumbing, never a verdict that depends on the number of walks; configs/e8/e8.yaml must never set it (tested)
+    test_only_validity_n_walks: 10

@@ -22,6 +22,10 @@ A "step in the zone" is a transition taken FROM a state of the zone. The phenoty
   stay_share         among the steps in the zone, the share of `stay` actions.
   revisit_share      among the steps in the zone, the share whose next state is one of the k previous states
                      (s_{t+1} in {s_{t+1-k}, .., s_t}; a `stay` is a revisit).
+
+  localisation_split the zone steps judged by the decoder and from the true cell (E7's F, report section 21): moved from
+                     experiments/E6_phenotypes_latent/free_offsets_650k.py on 2026-11-05 (docs/e8/DECISIONS.md (11)),
+                     body unchanged.
 """
 
 from __future__ import annotations
@@ -203,3 +207,29 @@ def bootstrap(states: np.ndarray, actions: np.ndarray, length: np.ndarray, zone:
         res[name] = (float(np.quantile(v[ok], q)), float(np.quantile(v[ok], 1 - q))) if ok.any() else (float("nan"), float("nan"))
         res[f"{name}_nan_share"] = float(1.0 - ok.mean())
     return res
+
+
+def localisation_split(states: np.ndarray, actions: np.ndarray, decoded_cell: np.ndarray, zone: np.ndarray, dist: np.ndarray,
+                       directed: np.ndarray, n_cols: int) -> dict[str, float]:
+    """On the zone steps (a transition from a zone state): the share whose decoded agent cell is the true cell; among
+    the others, the decoded cell's distance to the goal against the true cell's (toward / same / away), the error's size
+    in cells (Manhattan on the grid's rows and columns) and the share at one cell; the directed share (the true
+    transition lowers the distance to the goal) on the localised and the mislocalised steps; and, on the mislocalised
+    steps, the share whose action is directed FROM the decoded cell, and directed both ways. decoded_cell: (n, H), the
+    decoded agent cell at each step (a float array: a measured step's value is a state); directed: (n_states, A) bool,
+    the directed actions of every state (decision_rule.directed_action_mask)."""
+    st, act = np.asarray(states), np.asarray(actions)
+    s, s1 = st[:, :-1], st[:, 1:]
+    zone_steps = (s >= 0) & (s1 >= 0) & (act >= 0) & np.asarray(zone)[np.clip(s, 0, None)]
+    sv, s1v, av, dv = s[zone_steps], s1[zone_steps], act[zone_steps], np.asarray(decoded_cell)[zone_steps].astype(int)
+    good, dir_true = dv == sv, dist[s1v] < dist[sv]
+    mis = ~good
+    dd = dist[dv[mis]] - dist[sv[mis]]
+    (r0, c0), (r1, c1) = np.divmod(sv[mis], n_cols), np.divmod(dv[mis], n_cols)
+    err = np.abs(r0 - r1) + np.abs(c0 - c1)
+    from_decoded = directed[dv[mis], av[mis]]
+    return {"n_zone_steps": int(zone_steps.sum()), "loc_cell": good.mean(),
+            "mis_toward_goal": np.mean(dd < 0), "mis_same_distance": np.mean(dd == 0), "mis_away": np.mean(dd > 0),
+            "mis_error_cells_mean": err.mean(), "mis_error_one_cell": np.mean(err == 1),
+            "directed_localised": dir_true[good].mean(), "directed_mislocalised": dir_true[mis].mean(),
+            "mis_directed_from_decoded": from_decoded.mean(), "mis_directed_both": np.mean(from_decoded & dir_true[mis])}

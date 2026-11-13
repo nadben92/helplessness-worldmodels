@@ -66,6 +66,7 @@ from helplessness.pipeline.episode_sources import (
     canonical_assignment,
 )
 from helplessness.pipeline.runtime import configure_runtime
+from helplessness.pipeline.two_zones_setup import apply_e5_procedure  # noqa: F401  (moved 2026-11-05, docs/e8/DECISIONS.md (11))
 from helplessness.pipeline.two_zones_records import make_hooks as e4_hooks
 from helplessness.runs import make_run_dir, make_run_name, write_run_meta
 from helplessness.streams.assignment import assignment_generator
@@ -84,21 +85,6 @@ def estimator_switch(state: dict) -> dict:
     env = state.get("switch_env_step")
     return {"grad_step": state.get("switch_step"), "env_step": env, "env_steps_since": None if env is None else state["env_step"] - env,
             "rule": state.get("switch_rule")}
-
-
-def apply_e5_procedure(cfg: dict) -> dict:
-    """E5's changes to E4's training procedure, on every E5 run (docs/e5/DECISIONS.md (19), (20), (28)): the switch
-    statistic on same-background pairs, the later separation deadline and the late threshold. All leave a run with one
-    background that switches before E4's latest switch bit-identical to E4's (tested). Returns cfg, modified in place."""
-    est = cfg["train"]["latent_estimator"]
-    if cfg["e5"].get("switch_pairs", "any") != "any":
-        est["switch_pairs"] = cfg["e5"]["switch_pairs"]
-    if cfg["e5"].get("switch_max_steps") is not None:
-        est["switch_max_steps"] = int(cfg["e5"]["switch_max_steps"])
-    late = cfg["e5"].get("late_switch")
-    if late is not None:  # docs/e5/DECISIONS.md (28): a lower threshold that acts only after every switch of E4
-        est["switch_late_threshold"], est["switch_late_after_steps"] = float(late["threshold_bits"]), int(late["after_steps"])
-    return cfg
 
 
 def decodability_record(state: dict, cfg: dict, world, canonical: int) -> dict | None:

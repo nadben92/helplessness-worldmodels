@@ -1,0 +1,219 @@
+{
+ "probes": "C:\\nrw\\e8_wave1\\probes_cpu\\E8_therapy_relapse\\probes__base_A_ref__k000000__20261108T171101Z",
+ "pair": "base_A",
+ "n_checks": 43,
+ "n_failed": 0,
+ "checks": [
+  {
+   "what": "e6 exposed states",
+   "ok": true
+  },
+  {
+   "what": "e6 exposed actions",
+   "ok": true
+  },
+  {
+   "what": "e6 exposed length",
+   "ok": true
+  },
+  {
+   "what": "e6 exposed terminated",
+   "ok": true
+  },
+  {
+   "what": "e6 exposed I",
+   "ok": true
+  },
+  {
+   "what": "e6 exposed loc_template",
+   "ok": true
+  },
+  {
+   "what": "e6 exposed decoded_cell",
+   "ok": true
+  },
+  {
+   "what": "e6 exposed decoded_template",
+   "ok": true
+  },
+  {
+   "what": "e6 exposed Q",
+   "ok": true
+  },
+  {
+   "what": "e6 exposed row b_step1",
+   "ok": true,
+   "e8": -2.167181842233442,
+   "campaign": -2.167181842233442
+  },
+  {
+   "what": "e6 exposed row directed_share",
+   "ok": true,
+   "e8": 0.48655913978494625,
+   "campaign": 0.48655913978494625
+  },
+  {
+   "what": "e6 exposed row recovery_latency",
+   "ok": 1.0,
+   "e8": NaN,
+   "campaign": NaN
+  },
+  {
+   "what": "e6 exposed row zone_share",
+   "ok": true,
+   "e8": 0.4600164880461665,
+   "campaign": 0.4600164880461665
+  },
+  {
+   "what": "e6 exposed row loc_template_step1",
+   "ok": true,
+   "e8": 0.9833333333333333,
+   "campaign": 0.9833333333333333
+  },
+  {
+   "what": "e6 exposed row loc_template_zone",
+   "ok": true,
+   "e8": 0.6146953405017921,
+   "campaign": 0.6146953405017921
+  },
+  {
+   "what": "e6 exposed row b_step1_probe",
+   "ok": true,
+   "e8": -2.313241984272856,
+   "campaign": -2.313241984272856
+  },
+  {
+   "what": "e6 exposed row valid",
+   "ok": true,
+   "e8": true,
+   "campaign": true
+  },
+  {
+   "what": "c12 exposed V_zbar",
+   "ok": true
+  },
+  {
+   "what": "c12 exposed V_zbar_mean",
+   "ok": true
+  },
+  {
+   "what": "c12 exposed Q_hbar",
+   "ok": true
+  },
+  {
+   "what": "e6 reference states",
+   "ok": true
+  },
+  {
+   "what": "e6 reference actions",
+   "ok": true
+  },
+  {
+   "what": "e6 reference length",
+   "ok": true
+  },
+  {
+   "what": "e6 reference terminated",
+   "ok": true
+  },
+  {
+   "what": "e6 reference I",
+   "ok": true
+  },
+  {
+   "what": "e6 reference loc_template",
+   "ok": true
+  },
+  {
+   "what": "e6 reference decoded_cell",
+   "ok": true
+  },
+  {
+   "what": "e6 reference decoded_template",
+   "ok": true
+  },
+  {
+   "what": "e6 reference Q",
+   "ok": true
+  },
+  {
+   "what": "e6 reference row b_step1",
+   "ok": true,
+   "e8": 0.0,
+   "campaign": 0.0
+  },
+  {
+   "what": "e6 reference row directed_share",
+   "ok": true,
+   "e8": 0.9396728016359919,
+   "campaign": 0.9396728016359919
+  },
+  {
+   "what": "e6 reference row recovery_latency",
+   "ok": true,
+   "e8": 1.0,
+   "campaign": 1.0
+  },
+  {
+   "what": "e6 reference row zone_share",
+   "ok": true,
+   "e8": 0.8211586901763224,
+   "campaign": 0.8211586901763224
+  },
+  {
+   "what": "e6 reference row loc_template_step1",
+   "ok": true,
+   "e8": 1.0,
+   "campaign": 1.0
+  },
+  {
+   "what": "e6 reference row loc_template_zone",
+   "ok": true,
+   "e8": 1.0,
+   "campaign": 1.0
+  },
+  {
+   "what": "e6 reference row b_step1_probe",
+   "ok": true,
+   "e8": -2.313241984272856,
+   "campaign": -2.313241984272856
+  },
+  {
+   "what": "e6 reference row valid",
+   "ok": true,
+   "e8": true,
+   "campaign": true
+  },
+  {
+   "what": "c12 reference V_zbar",
+   "ok": true
+  },
+  {
+   "what": "c12 reference V_zbar_mean",
+   "ok": true
+  },
+  {
+   "what": "c12 reference Q_hbar",
+   "ok": true
+  },
+  {
+   "what": "oracle k1 directed_share",
+   "ok": true,
+   "e8": 0.8752025931928687,
+   "campaign": 0.8752025931928687
+  },
+  {
+   "what": "oracle k1 b_step1",
+   "ok": true,
+   "e8": -2.167181842233442,
+   "campaign": -2.167181842233442
+  },
+  {
+   "what": "oracle k1 loc_template_step1",
+   "ok": true,
+   "e8": 0.9833333333333333,
+   "campaign": 0.9833333333333333
+  }
+ ],
+ "e5_records_tolerance_0.05": []
+}

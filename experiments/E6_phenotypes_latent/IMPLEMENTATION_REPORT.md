@@ -506,6 +506,8 @@ Ordre : e6 et e7-directions, puis e7-constrained, puis e7-apply (plans A et B pa
 
 ## 16. Diagnostics
 
+> **Erratum (2026-11-06).** La phase `lookahead` de `run_e7_diagnostics.py` rangeait les épisodes de l'exposé et de la référence sous une même clé de `episodes.npz` (ceux de la référence écrasaient ceux de l'exposé) ; corrigé (`docs/e8/DECISIONS.md` (19)). Aucune valeur publiée ne change : les lignes de synthèse sont calculées avant la sauvegarde.
+
 Même branche `e6`, mêmes 4 agents d'E4 sur CPU, poids gelés (hash des state dicts avant et après chaque run :
 identiques, 16 runs sur 16). Image d'entraînement, environnement de test tout contrôlable ; zone AI = l'ancienne case UD.
 Décisions (51)–(54) ; code : `probing/lookahead.py`, `measures/decision_rule.py`, options `tau` et `q_fn` de

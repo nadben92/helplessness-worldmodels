@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "E7_latent_manipula
 
 import analyse_e7_diagnostics as ad  # noqa: E402
 from helplessness.config import REPO_ROOT  # noqa: E402
+from helplessness.measures import zone_phenotypes as zp  # noqa: E402
 from helplessness.pipeline import frozen_setup as fs  # noqa: E402
 
 AGENTS = ("f1_A", "f1_E", "f1_F")
@@ -45,20 +46,8 @@ def main() -> int:
         z = np.load(found[0])
         for mode, key in (("exposed", "none__0"), ("latent fix", "stepwise__1")):
             st, act, dec = (z[f"training__{key}__{k}"] for k in ("states", "actions", "decoded_cell"))
-            s, s1 = st[:, :-1], st[:, 1:]
-            zone = (s >= 0) & (s1 >= 0) & (act >= 0) & w.in_zone[np.clip(s, 0, None)]
-            sv, s1v, av, dv = s[zone], s1[zone], act[zone], dec[zone].astype(int)
-            good, directed = dv == sv, w.dist[s1v] < w.dist[sv]
-            mis = ~good
-            dd = w.dist[dv[mis]] - w.dist[sv[mis]]
-            (r0, c0), (r1, c1) = np.divmod(sv[mis], N_COLS), np.divmod(dv[mis], N_COLS)
-            err = np.abs(r0 - r1) + np.abs(c0 - c1)
-            from_decoded = w.directed[dv[mis], av[mis]]
-            rows.append({"agent": a, "mode": mode, "n_zone_steps": int(zone.sum()), "loc_cell": good.mean(),
-                         "mis_toward_goal": np.mean(dd < 0), "mis_same_distance": np.mean(dd == 0), "mis_away": np.mean(dd > 0),
-                         "mis_error_cells_mean": err.mean(), "mis_error_one_cell": np.mean(err == 1),
-                         "directed_localised": directed[good].mean(), "directed_mislocalised": directed[mis].mean(),
-                         "mis_directed_from_decoded": from_decoded.mean(), "mis_directed_both": np.mean(from_decoded & directed[mis])})
+            # moved to measures.zone_phenotypes.localisation_split on 2026-11-05 (docs/e8/DECISIONS.md (11))
+            rows.append({"agent": a, "mode": mode, **zp.localisation_split(st, act, dec, w.in_zone, w.dist, w.directed, N_COLS)})
     with open(OUT, "w", newline="", encoding="utf-8") as f:
         wr = csv.DictWriter(f, fieldnames=list(rows[0]))
         wr.writeheader()
