@@ -12,7 +12,15 @@ and analyze_e8.py's outputs (--analysis: curves.csv, recovery.csv, forms.json); 
   visit_rates.csv      treated-zone visits per environment step between consecutive checkpoints, exposed runs and reference B
   cache_A.json         shuffle A's cache effect at checkpoint 0 (D_ref - D_oracle1) with reference B (E8) and with reference A
                        (the 650,000 campaign's pair), on the training image (assignment01) and the treated mean
-  figures/validity_drift.png, figures/dose_crossings.png
+  profile.csv          EXPLORATORY (user, 2026-11-13: transfer or forgetting?): per pair, untreated image and checkpoint, the
+                       exposed model's mass on the true successor in the image's T_inc quadrant, C3, the decoder's
+                       localisation (L_dec: decoded cell = true cell, zone steps), the directed share from the true cell on
+                       the well-localised steps, I and D, beside the reference's
+  profile_crossings.csv  EXPLORATORY: per pair and untreated image, the first valid checkpoint t > 0 at which each reaches the
+                       reference's level (g_D <= 0.05 as P4; g_C3 <= 0.05; mass >= 0.90 and |I - log2 5| <= 0.15, E4's
+                       levels; g_Ldec <= 0.05), not reached: "> T"; the mass and C3 at D's crossing; the largest fall of the
+                       mass below its checkpoint-0 value (a forgetting would show there)
+  figures/validity_drift.png, figures/dose_crossings.png, figures/transfer_profile.png
 
 Usage (from the repo root):
   python experiments/E8_therapy_relapse/w2_supplements.py --probes "<wave 2 probes>/probes__*" --runs "<wave 2 runs>/grid12x12__*" \\
@@ -37,6 +45,10 @@ REF_MODEL = "shuffle_B_ref"
 H_WINDOW_F = (5000, 25000)  # form H of shuffle_F: mass below 0.90 in assignment 0 (ne, corridor) at these checkpoints
 TOL_I, MASS = 0.15, 0.90
 COLORS = {"treated": "#2a78d6", "drifting": "#eb6834", "untreated": "#9a9a94"}  # categorical slots 1, 2; muted gray
+NW_CD = ("assignment03", "assignment06", "assignment09")  # the untreated assignments whose nw slot is CD (T_ctrl's colour)
+PROFILE = {"mass": "walks_mass_step1", "C3": "C3_loc", "L_dec": "loc_loc_cell", "dir_loc": "loc_directed_localised",
+           "I": "walks_I_step1", "D": "directed_share"}
+SERIES = {"D": "#2a78d6", "C3": "#eb6834", "L_dec": "#1baf7a", "mass": "#eda100", "I / log2 5": "#e87ba4"}  # slots 1-5, fixed
 
 
 def read_csv(path: Path) -> list[dict]:
@@ -71,6 +83,39 @@ def drift(rows: list[dict]) -> list[dict]:
         out.append({"pair": pair, "image": image, "assignment": r["assignment"], "slot": r["slot"], "checkpoint": t, "valid": r["walks_valid"],
                     "I_ref": ref["walks_I_step1"], "mass_ref": ref["walks_mass_step1"], "D_ref": ref["directed_share"],
                     "I_exp": r["walks_I_step1"], "mass_exp": r["walks_mass_step1"], "D_exp": r["directed_share"]})
+    return out
+
+
+def profile(rows: list[dict]) -> list[dict]:
+    key = {(r["pair"], r["image"], r["checkpoint"], r["role"]): r for r in rows if r["pair"] in PAIRS}
+    out = []
+    for (pair, image, t, role), r in sorted(key.items()):
+        if role != "exposed" or r["treated"]:
+            continue
+        ref = key[(pair, image, t, "reference")]
+        rec = {"pair": pair, "image": image, "nw_role": "cd" if image in NW_CD else "neutral", "checkpoint": t, "valid": r["walks_valid"]}
+        for name, field in PROFILE.items():
+            rec[f"{name}_exp"], rec[f"{name}_ref"] = float(r[field]), float(ref[field])
+        out.append(rec)
+    return out
+
+
+def profile_crossings(prof: list[dict]) -> list[dict]:
+    out = []
+    for pair in PAIRS:
+        for image in sorted({p["image"] for p in prof if p["pair"] == pair}):
+            ser = sorted((p for p in prof if p["pair"] == pair and p["image"] == image), key=lambda p: p["checkpoint"])
+            T, ok = ser[-1]["checkpoint"], [p for p in ser[1:] if p["valid"]]
+            first = lambda cond: next((p["checkpoint"] for p in ok if cond(p)), f"> {T}")
+            rec = {"pair": pair, "image": image, "nw_role": ser[0]["nw_role"], "valid_at_0_and_T": ser[0]["valid"] and ser[-1]["valid"],
+                   "D": first(lambda p: p["D_ref"] - p["D_exp"] <= 0.05), "C3": first(lambda p: p["C3_ref"] - p["C3_exp"] <= 0.05),
+                   "L_dec": first(lambda p: p["L_dec_ref"] - p["L_dec_exp"] <= 0.05), "mass": first(lambda p: p["mass_exp"] >= MASS),
+                   "I": first(lambda p: abs(p["I_exp"] - math.log2(5)) <= TOL_I)}
+            at_d = next((p for p in ok if p["checkpoint"] == rec["D"]), None)
+            rec.update({"mass_at_D": at_d["mass_exp"] if at_d else None, "mass_ref_at_D": at_d["mass_ref"] if at_d else None,
+                        "C3_gap_at_D": (at_d["C3_ref"] - at_d["C3_exp"]) if at_d else None,
+                        "mass_0": ser[0]["mass_exp"], "mass_max_fall_below_0": max(0.0, max(ser[0]["mass_exp"] - p["mass_exp"] for p in ser))})
+            out.append(rec)
     return out
 
 
@@ -183,6 +228,43 @@ def figures(val: list[dict], dr: list[dict], ds: list[dict], out: Path) -> None:
     plt.close(fig)
 
 
+def figure_profile(prof: list[dict], out: Path) -> None:
+    """Exposed model on the untreated images, means per checkpoint: top, the 6 images where nw is neutral (valid points
+    only); bottom, the 3 where nw is CD (every point, all invalid from 15,000 on: exploratory). Dotted: the reference's mean."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    fig, axes = plt.subplots(2, 3, figsize=(15, 7), sharex=True, sharey=True)
+    get = {"D": "D", "C3": "C3", "L_dec": "L_dec", "mass": "mass", "I / log2 5": "I"}
+    for col, pair in enumerate(PAIRS):
+        for row, role in enumerate(("neutral", "cd")):
+            ax = axes[row, col]
+            sel = [p for p in prof if p["pair"] == pair and p["nw_role"] == role and (p["valid"] or role == "cd")]
+            ts = sorted({p["checkpoint"] for p in sel})
+            for name, key in get.items():
+                scale = math.log2(5) if key == "I" else 1.0
+                m = [np.mean([p[f"{key}_exp"] for p in sel if p["checkpoint"] == t]) / scale for t in ts]
+                ax.plot(ts, m, marker="o", ms=3, lw=2, color=SERIES[name], label=name)
+                if key in ("D", "mass"):
+                    r = [np.mean([p[f"{key}_ref"] for p in sel if p["checkpoint"] == t]) / scale for t in ts]
+                    ax.plot(ts, r, ls=":", lw=1.2, color=SERIES[name])
+            ax.set_xscale("symlog", linthresh=500)
+            ax.set_xlim(left=0)
+            ax.grid(alpha=0.25)
+            what = "neutral (6 images, valid points)" if role == "neutral" else "CD (3 images, all points)"
+            ax.set_title(f"{pair}, nw {what}", fontsize=9)
+        axes[1, col].set_xlabel("therapy environment steps (symlog)")
+    axes[0, 0].legend(fontsize=8, frameon=False, loc="lower right")
+    for r in range(2):
+        axes[r, 0].set_ylabel("exposed (dotted: reference)")
+    fig.suptitle("EXPLORATORY: transfer or forgetting? Exposed model on the untreated images (no valid neutral point at 25,000)", fontsize=10)
+    fig.tight_layout()
+    fig.savefig(out / "figures" / "transfer_profile.png", dpi=120)
+    plt.close(fig)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--probes", nargs="+", required=True)
@@ -201,9 +283,13 @@ def main(argv: list[str] | None = None) -> int:
     analyze.write_csv(args.analysis / "drift.csv", dr)
     analyze.write_csv(args.analysis / "dose.csv", ds)
     analyze.write_csv(args.analysis / "visit_rates.csv", visit_rates(analyze.load_visits(args.runs)))
+    prof = profile(rows)
+    analyze.write_csv(args.analysis / "profile.csv", prof)
+    analyze.write_csv(args.analysis / "profile_crossings.csv", profile_crossings(prof))
     (args.analysis / "cache_A.json").write_text(json.dumps(cache_A(rows, args.campaign_e6_A), indent=1), encoding="utf-8")
     if not args.no_figures:
         figures(val, dr, ds, args.analysis)
+        figure_profile(prof, args.analysis)
     print(f"[E8 w2 supplements] {len(val)} reference points, {sum(not v['valid'] for v in val)} invalid -> {args.analysis}")
     return 0
 

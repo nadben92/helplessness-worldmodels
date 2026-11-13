@@ -22,3 +22,14 @@ def test_validity_counts():
 
 def test_F_window():
     assert sup.in_window(5000) and sup.in_window(25000) and not sup.in_window(40000) and not sup.in_window("> 250000")
+
+
+def test_profile_crossings_read_valid_points_only():
+    def pt(t, d, c3, mass, valid=True):
+        return {"pair": "shuffle_A", "image": "assignment04", "nw_role": "neutral", "checkpoint": t, "valid": valid,
+                "D_exp": d, "D_ref": 0.92, "C3_exp": c3, "C3_ref": 0.98, "L_dec_exp": 0.9, "L_dec_ref": 0.99,
+                "mass_exp": mass, "mass_ref": 0.95, "I_exp": 1.0, "I_ref": 2.3}
+    prof = [pt(0, 0.4, 0.4, 0.22), pt(5000, 0.9, 0.95, 0.95, valid=False), pt(10000, 0.9, 0.8, 0.5), pt(250000, 0.92, 0.97, 0.95)]
+    rec = next(r for r in sup.profile_crossings(prof) if r["image"] == "assignment04")
+    assert rec["D"] == 10000 and rec["C3"] == 250000 and rec["mass"] == 250000 and rec["I"] == "> 250000"
+    assert abs(rec["mass_at_D"] - 0.5) < 1e-12 and abs(rec["C3_gap_at_D"] - 0.18) < 1e-12 and rec["mass_max_fall_below_0"] == 0.0
