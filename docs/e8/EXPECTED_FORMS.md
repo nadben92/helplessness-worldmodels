@@ -31,6 +31,10 @@ A failure points to an implementation or measurement problem, is reported, and s
   share at k = 1 (`oracle_<agent>`). **Exact equality** (values equal as floats; arrays `np.array_equal`).
   For the shuffle agents the campaign's reference was reference B at 650,000 (A, E, F alike): the pair at checkpoint 0
   is the campaign's pair.
+  **Erratum 2026-11-13 (DECISIONS (26)):** the sentence above is wrong for shuffle A. The campaign paired shuffle A with
+  reference A (`pair-control`, seed02; `e6__f1_A`'s `meta.yaml`), and E and F with reference B. E8 pairs all three with
+  reference B (the design, kept). For shuffle A, F0 (a) is the exact comparison of the quantities that depend on the
+  exposed model only; reference B is checked by E's and F's comparisons.
 - (b) Where a campaign value does not exist (the 11 non-canonical assignment images, E5's 12-assignment walks on CPU):
   a direct call of the existing code (E5's `walks_by_assignment`, E6's `run_model`) on the start files, same seeds, gives
   the same values exactly.

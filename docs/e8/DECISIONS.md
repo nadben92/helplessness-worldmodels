@@ -407,3 +407,22 @@ still be compared with the other light agents.
 - No light agent left: (b) is not decidable.
 - A or E with nothing to recover: (b) is not decidable (the prediction concerns them).
 - The light agents removed are reported with (b).
+
+## 2026-11-13 (26) -- F0 on wave 2: shuffle A's reference, and F0 (c) as a device gap (user, after F0 was computed)
+
+F0 was computed on wave 2's checkpoint 0 (CPU probes against the 650,000 campaign) before R, H, M and any prediction.
+Outcome: shuffle F 43 / 43 exact, 12 / 12 within 0.05 bit of E5's records; shuffle E 43 / 43 exact, 10 / 12; shuffle A
+22 / 43 exact, 9 / 12. Nothing is rerun.
+
+- **Shuffle A's reference.** Every comparison of A that failed involves the reference or b (which is measured against
+  it); every quantity of the exposed model alone was exact. The campaign paired A with reference A (seed02), not with
+  reference B as EXPECTED_FORMS section 1 said (erratum there). E8's design (A paired with reference B) is kept.
+  F0 (a) for A is the exact comparison of the quantities that depend on the exposed model only (`check_identity.py
+  --exposed-only`: the exposed episodes, rows and readouts, and the oracle's directed share and localisation; b, b of
+  E4's probe and the oracle's b are left out, reported beside); reference B is checked by E's and F's comparisons.
+- **E7's numbers for A** (cache effect 0.24 at 650,000) were computed with reference A. P2 is unchanged; A's cache effect
+  at checkpoint 0 with reference B is reported beside the 0.24.
+- **F0 (c)** (I at step 1 of the exposed model, CPU against E5's records computed on the cluster's GPU): the gaps above
+  0.05 bit (A: assignments 2, 8, 11, up to 0.089; E: 6, 7, up to 0.113) are classed as a CPU / GPU device gap, reported
+  with their values, no verdict. Reasons: E is exact (43 / 43) against the campaign on the CPU, and wave 1 already
+  showed gaps up to 0.08 bit between the GPU and the CPU (form X).
